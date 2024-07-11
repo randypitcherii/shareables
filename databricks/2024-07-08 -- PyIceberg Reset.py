@@ -14,7 +14,6 @@ import pyarrow as pa
 from pyiceberg.catalog import load_catalog
 
 # You'll need a tabular credential. Member credential or service account will work fine
-# TABULAR_CREDENTIAL       = dbutils.secrets.get(scope="lsports", key="lsports_tabular_credential")
 TABULAR_CREDENTIAL       = dbutils.secrets.get(scope="randy_pitcher_workspace_tabular", key="tabular_credential")
 TABULAR_TARGET_WAREHOUSE = 'rpw_aws_us_east_1' # replace this with your tabular warehouse name
 TABULAR_CATALOG_URI      = 'https://api.tabular.io/ws' # unless you're a single tenant user, you don't need to change this
