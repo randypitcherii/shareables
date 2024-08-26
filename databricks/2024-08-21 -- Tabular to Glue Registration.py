@@ -32,22 +32,22 @@ def disarm_tabular_services_on_table(pyiceberg_table):
       'fileloader.enabled':                 'false',     # Turn off the file loader
       'dependent-tables':                   '',          # Disable CDC by destroying dependent-table references
     })
-    tx.commit()
   
-def migrate_tabular_namespace_to_glue(tabular_namespace, tabular_catalog, glue_catalog, should_disarm_tabular_tables=False):
-  glue_catalog.create_namespace_if_not_exists(TABULAR_TARGET_WAREHOUSE)
+def migrate_tabular_namespace_to_glue(tabular_namespace, tabular_catalog, glue_namespace, glue_catalog, should_disarm_tabular_tables=False):
+  tabular_namespace_properties = tabular_catalog.load_namespace_properties(tabular_namespace)
+  glue_catalog.create_namespace_if_not_exists(glue_namespace, {'location': tabular_namespace_properties['location']})
 
-  print(f"Found namespace to register: {namespace}")
-  tables_to_register = [table[1] for table in tabular_catalog.list_tables(namespace)]
+  print(f"Found namespace to register: {tabular_namespace}")
+  tables_to_register = [table[1] for table in tabular_catalog.list_tables(tabular_namespace)]
   for table in tables_to_register:
     try:
-      tabular_table_name = f"{namespace}.{table}"
+      tabular_table_name = f"{tabular_namespace}.{table}"
       tabular_table = tabular_catalog.load_table(f"{tabular_table_name}")
 
       # 
       disarm_tabular_services_on_table(tabular_table)
 
-      glue_table_name =  f"{TABULAR_TARGET_WAREHOUSE}.{namespace}__{table}"  
+      glue_table_name =  f"{glue_namespace}.{tabular_namespace}__{table}"  
       print(f"  - Registering tabular table {tabular_table_name} -> {glue_table_name}")
       glue_catalog.register_table(glue_table_name, tabular_table.metadata_location)
       print(f"  - ✅ Successfully registered {tabular_table_name} -> {glue_table_name}")
@@ -55,12 +55,12 @@ def migrate_tabular_namespace_to_glue(tabular_namespace, tabular_catalog, glue_c
       print(f"\t❌ Failure while processing {tabular_table_name} - {e}")
 
 
-def migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, glue_catalog):
+def migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, glue_catalog, should_disarm_tabular_tables=False):
   namespaces_to_register = [namespace[0] for namespace in tabular_catalog.list_namespaces() if namespace[0] not in ['system', 'examples']]
 
   for namespace in namespaces_to_register:
-    migrate_tabular_namespace_to_glue(namespace, tabular_catalog, glue_catalog)
-    print('\n\n')
+    migrate_tabular_namespace_to_glue(namespace, tabular_catalog, tabular_warehouse_name, glue_catalog, should_disarm_tabular_tables)
+    print('\n')
 
 # COMMAND ----------
 
