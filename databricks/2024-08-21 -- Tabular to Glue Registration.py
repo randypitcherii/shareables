@@ -44,15 +44,16 @@ def migrate_tabular_namespace_to_glue(tabular_namespace, tabular_catalog, glue_n
       tabular_table_name = f"{tabular_namespace}.{table}"
       tabular_table = tabular_catalog.load_table(f"{tabular_table_name}")
 
-      # 
-      disarm_tabular_services_on_table(tabular_table)
+      # optionally turn off tabular features
+      if should_disarm_tabular_tables:
+        disarm_tabular_services_on_table(tabular_table)
 
       glue_table_name =  f"{glue_namespace}.{tabular_namespace}__{table}"  
       print(f"  - Registering tabular table {tabular_table_name} -> {glue_table_name}")
       glue_catalog.register_table(glue_table_name, tabular_table.metadata_location)
-      print(f"  - ✅ Successfully registered {tabular_table_name} -> {glue_table_name}")
+      print(f"      ✅ Successfully registered {tabular_table_name} -> {glue_table_name}")
     except Exception as e:
-      print(f"\t❌ Failure while processing {tabular_table_name} - {e}")
+      print(f"      ❌ Failure while processing {tabular_table_name} - {e}")
 
 
 def migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, glue_catalog, should_disarm_tabular_tables=False):
