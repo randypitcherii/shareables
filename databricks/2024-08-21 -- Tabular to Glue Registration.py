@@ -65,7 +65,7 @@ def migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, g
 
 # COMMAND ----------
 
-def main():
+def main(should_disarm_tabular_services=False):
   tabular_warehouse_name = 'rpw_aws_us_east_1' # replace this with your tabular warehouse name
   # load tabular catalog
   tabular_catalog_properties = {
@@ -84,9 +84,9 @@ def main():
   }
   glue_catalog = load_catalog(**glue_catalog_properties)
 
-  migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, glue_catalog)
+  migrate_tabular_warehouse_to_glue(tabular_warehouse_name, tabular_catalog, glue_catalog, should_disarm_tabular_services)
 
 
 # COMMAND ----------
 
-main()
+main(should_disarm_tabular_services=True)
