@@ -136,9 +136,9 @@ def main():
   tables_to_mirror = tables_to_mirror = [
     {
       'table_name': table_name, 
-      'metadata_location': get_iceberg_metadata_location(sf, table_name)
+      'metadata_location': get_iceberg_metadata_location(snowflake_client, table_name)
     } 
-    for table_name in get_iceberg_tables_to_mirror(sf)
+    for table_name in get_iceberg_tables_to_mirror(snowflake_client)
   ]
 
   
