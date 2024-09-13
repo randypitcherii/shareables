@@ -72,9 +72,9 @@ def get_tabular_catalog():
       'credential': TABULAR_CREDENTIAL,
       'warehouse':  TABULAR_TARGET_WAREHOUSE
   }
-  
+
   catalog = load_catalog(**catalog_properties)
-  
+
   return catalog
 
 
