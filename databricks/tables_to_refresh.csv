@@ -1,0 +1,4 @@
+analytics_dev.dbt_randy_pitcher.space_stuff
+analytics_dev.dbt_randy_pitcher.dim_hubspot_companies
+analytics_dev.dbt_randy_pitcher.dim_tabular_warehouses
+analytics_dev.dbt_randy_pitcher.fct_tabular_usage_by_region
