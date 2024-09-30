@@ -133,7 +133,7 @@ def main():
   spark.sql(f'create catalog if not exists {UNITY_CATALOG_TARGET}')
   snowflake_client = get_snowflake_client()
 
-  tables_to_mirror = tables_to_mirror = [
+  tables_to_mirror = [
     {
       'table_name': table_name, 
       'metadata_location': get_iceberg_metadata_location(snowflake_client, table_name)

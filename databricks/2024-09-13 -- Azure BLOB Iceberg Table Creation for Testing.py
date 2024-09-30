@@ -10,7 +10,6 @@ from pyiceberg.types import (
     StringType,
     NestedField,
 )
-import pyarrow as pa
 import os
 
 # Azure Blob Storage details
