@@ -102,6 +102,13 @@ main()
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Query Polaris!
+# MAGIC - let's check that this all worked
+# MAGIC - 🚧 WARNING -- this part won't work on serverless compute. Databricks has it locked down from talking to s3 for some reason, so you'll want to use a single node tiny node if you want to see results : )
+
+# COMMAND ----------
+
 polaris_properties = {
   'type':           'rest',
   'uri':            REST_CATALOG_URI,
