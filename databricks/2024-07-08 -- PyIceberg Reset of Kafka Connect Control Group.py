@@ -1,9 +1,6 @@
 # Databricks notebook source
 # MAGIC %pip install pyarrow "git+https://github.com/apache/iceberg-python.git#egg=pyiceberg" 
 # MAGIC %pip install --upgrade pyparsing 
-
-# COMMAND ----------
-
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -71,7 +68,8 @@ table = catalog.load_table(table_name)
 
 # modify the snapshot props
 snapshot_props = table.current_snapshot().dict()['summary']
-new_props = {'kafka-offset-to-reset': "{'0': '123', '1': '123'}"}
+print(f'\n\n{snapshot_props}\n\n')
+new_props = {'kafka-offset-to-reset': '{"0": 0, "1": 0, "2": 0}'}
 
 # get a schema-compliant but empty arrow DF to append with. Thanks, @Fokko!!
 arrow_schema = table.schema().as_arrow()
