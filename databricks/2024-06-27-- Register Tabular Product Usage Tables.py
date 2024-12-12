@@ -31,6 +31,15 @@
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## 🔮 Now for some spark configs to enable the magic 
+
+# COMMAND ----------
+
+spark.conf.set("spark.databricks.delta.uniform.readIcebergEnabled", "true")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ### ⚙️ Next, provide your configs below
 
 # COMMAND ----------
@@ -47,7 +56,7 @@ TABULAR_DATABASES_TO_MIRROR = [ # will list the contents of these db's and mirro
 ]
 
 TABULAR_TABLES_TO_EXCLUDE = { x.lower() for x in [ # exclude these tables. Must provide '{database}.{table}'. Case is ignored
-  'finance.billing_usage_metrics',
+  # 'finance.billing_usage_metrics',
 ]}
 
 # which unity catalog catalog do you want this to live in (it has to already exist)
@@ -142,6 +151,11 @@ def main():
   if exception_messages:
     msg = '\n\t'.join(exception_messages)
     raise Exception(f"Registration encountered {len(exception_messages)} errors.\n {msg} ")
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC drop table tabular_product_raw.finance.tabular_bytes_read;
 
 # COMMAND ----------
 
