@@ -6,6 +6,11 @@ import os
 from typing import Dict, Tuple, Optional
 from databricks.connect import DatabricksSession
 from severance_data import SEVERANCE_CHARACTERS
+from constants import (
+    SCHEMA_NAME,
+    TABLE_NAME_DELTA,
+    TABLE_NAME_ICEBERG
+)
 
 def get_spark_session() -> Tuple[Optional[object], Optional[str]]:
     """
@@ -60,19 +65,22 @@ def create_iceberg_compatible_tables(spark, catalog_name: str, schema_name: str)
     """
     try:
         # Drop existing table if it exists (create or replace semantics)
-        spark.sql(f"DROP TABLE IF EXISTS {catalog_name}.{schema_name}.severance_delta")
+        spark.sql(f"DROP TABLE IF EXISTS {catalog_name}.{schema_name}.{TABLE_NAME_DELTA}")
         
         # Create the main characters table as Delta with Iceberg compatibility
         spark.sql(f"""
-        CREATE TABLE {catalog_name}.{schema_name}.severance_delta (
+        CREATE OR REPLACE TABLE {catalog_name}.{schema_name}.{TABLE_NAME_DELTA} (
             name STRING,
             department STRING,
             position STRING,
             is_management BOOLEAN
         ) 
         USING DELTA
-        TBLPROPERTIES (
-            'delta.enableIcebergCompatV2' = 'true'
+        
+        TBLPROPERTIES (   
+            'delta.columnMapping.mode' = 'name',  
+            'delta.enableIcebergCompatV2' = 'true',  
+            'delta.universalFormat.enabledFormats' = 'iceberg' 
         )
         """)
         
@@ -83,7 +91,7 @@ def create_iceberg_compatible_tables(spark, catalog_name: str, schema_name: str)
         ])
         
         spark.sql(f"""
-        INSERT INTO {catalog_name}.{schema_name}.severance_delta
+        INSERT INTO {catalog_name}.{schema_name}.{TABLE_NAME_DELTA}
         VALUES {values}
         """)
         

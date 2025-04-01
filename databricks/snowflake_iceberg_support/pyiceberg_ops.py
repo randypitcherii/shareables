@@ -7,6 +7,13 @@ from typing import Dict, Tuple, Optional
 import pyarrow as pa
 from pyiceberg.catalog import load_catalog
 from severance_data import SEVERANCE_CHARACTERS
+from constants import (
+    DATABRICKS_WORKSPACE_URL,
+    DATABRICKS_SP_CLIENT_ID,
+    DATABRICKS_SP_CLIENT_SECRET,
+    SCHEMA_NAME,
+    TABLE_NAME_ICEBERG,
+)
 
 def get_pyiceberg_catalog(catalog_name: str) -> Tuple[Optional[object], Optional[str]]:
     """
@@ -16,17 +23,10 @@ def get_pyiceberg_catalog(catalog_name: str) -> Tuple[Optional[object], Optional
         Tuple of (catalog, error_message)
     """
     try:
-        workspace_url = os.environ.get('DATABRICKS_WORKSPACE_URL', '')
-        client_id = os.environ.get('DATABRICKS_SP_CLIENT_ID', '')
-        client_secret = os.environ.get('DATABRICKS_SP_CLIENT_SECRET', '')
-        
-        if not all([workspace_url, client_id, client_secret]):
-            return None, "Missing required environment variables for Databricks authentication"
-        
         # Configure PyIceberg catalog using REST catalog specification with OAuth
-        catalog_uri = f'{workspace_url}/api/2.1/unity-catalog/iceberg-rest'
-        oauth_uri = f'{workspace_url}/oidc/v1/token'
-        oauth_credential = f'{client_id}:{client_secret}'  # standard Iceberg REST API formatting
+        catalog_uri = f'{DATABRICKS_WORKSPACE_URL}/api/2.1/unity-catalog/iceberg-rest'
+        oauth_uri = f'{DATABRICKS_WORKSPACE_URL}/oidc/v1/token'
+        oauth_credential = f'{DATABRICKS_SP_CLIENT_ID}:{DATABRICKS_SP_CLIENT_SECRET}'  # standard Iceberg REST API formatting
         
         catalog_props = {
             'type': 'rest',
@@ -92,7 +92,7 @@ def create_files_iceberg_table(catalog_name: str, schema_name: str) -> Tuple[boo
             pass  # Namespace likely exists
         
         # Create the table
-        identifier = f"{schema_name}.severance_iceberg"
+        identifier = f"{schema_name}.{TABLE_NAME_ICEBERG}"
         
         # Drop existing table if it exists
         try:
