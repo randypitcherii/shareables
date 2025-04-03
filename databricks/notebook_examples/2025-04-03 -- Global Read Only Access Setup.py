@@ -3,7 +3,29 @@
 
 # # Global Read Only Access Setup
 # 
-# This script creates a global read only group that is granted read-only access to all workspace and Unity Catalog objects.
+# This script creates a specified group (if it doesn't exist) and grants it read-only/view/run/attach permissions
+# on various Databricks Workspace and Unity Catalog objects.
+#
+# Workspace Permissions Applied via Permissions API:
+# - Clusters: CAN_ATTACH_TO
+# - Jobs: CAN_VIEW
+# - SQL Warehouses: CAN_VIEW
+# - Instance Pools: CAN_ATTACH_TO
+# - Dashboards (Lakeview): CAN_RUN
+# - Alerts: CAN_RUN
+# - Pipelines (DLT): CAN_VIEW
+#
+# Workspace Permissions Applied via SQL GRANT:
+# - SQL Queries: CAN_VIEW
+#
+# Unity Catalog Permissions Applied via SQL GRANT:
+# - CATALOG: USE CATALOG, USE SCHEMA, SELECT, READ VOLUME, BROWSE
+#
+# Intentionally Skipped Objects:
+# - Root Directory ('/'): Permissions API does not support.
+# - Experiments, Registered Models, Serving Endpoints: Permissions API incompatible or not supported.
+# - Secrets, Vector Search Endpoints: Skipped by choice.
+# - Individual Files/Folders/Notebooks: Skipped for performance; rely on future folder permissions or manual grants.
 
 import time
 import pandas as pd
@@ -14,7 +36,7 @@ from databricks.sdk.service import iam
 # Parameters - Adjust these as needed
 GROUP_NAME = "GLOBAL_READ_ONLY_GROUP"
 DRY_RUN = False  # Set to False to apply changes
-VERBOSE = False  # Set to True for detailed logging of each permission grant/failure
+VERBOSE = False  # True = log each grant/failure; False = log per-type summaries.
 
 # Initialize the Databricks workspace client
 w = WorkspaceClient()
@@ -137,22 +159,13 @@ def process_workspace_permissions():
         queries = workspace_objects["sql/queries"]
         num_queries = len(queries)
         if num_queries > 0:
-            print(f"Processing {num_queries} sql/queries via GRANT statements...")
             query_success_count = 0
             query_failed_count = 0
 
             # Get a warehouse for execution
             warehouses = list(w.warehouses.list())
             if not warehouses:
-                print("    ❌ No warehouse available for SQL execution - skipping query grants.")
-                # Log all as failed if needed, or just skip
-                for q in queries:
-                     permission_results.append({
-                         "type": "sql_query_grant", "name": q.name or f"Query {q.id}",
-                         "permission": "CAN_VIEW", "status": "failed",
-                         "error": "No warehouse available for SQL execution",
-                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                     })
+                print(f"🔎 SQL Queries:\n    ❌ Skipped {num_queries} grants: No SQL warehouse available for execution.")
             else:
                 warehouse_id = warehouses[0].id
                 for q in queries:
@@ -194,18 +207,22 @@ def process_workspace_permissions():
 
             if not VERBOSE and num_queries > 0:
                 status_icon = "✅" if query_failed_count == 0 else "❌"
-                dry_run_msg = " (DRY RUN)" if DRY_RUN else ""
+                dry_run_msg = " (DRY RUN)" if DRY_RUN and query_success_count > 0 else ""
                 if not warehouses:
-                     print(f"  ❌ sql/queries: Skipped {num_queries} grants due to no available warehouse.")
+                    print(f"🔎 SQL Queries:\n    ❌ Skipped {num_queries} grants: No SQL warehouse available for execution.")
                 elif query_failed_count == 0:
-                     print(f"  {status_icon} sql/queries: Applied CAN_VIEW via GRANT to {query_success_count}/{num_queries} queries successfully{dry_run_msg}.")
+                    print(f"🔎 SQL Queries:\n    {status_icon} Applied CAN_VIEW via GRANT to {query_success_count}/{num_queries} queries successfully{dry_run_msg}.")
                 else:
-                     print(f"  {status_icon} sql/queries: Applied CAN_VIEW via GRANT to {query_success_count}/{num_queries} queries.{dry_run_msg} {query_failed_count} failed.")
+                    print(f"🔎 SQL Queries:\n    {status_icon} Applied CAN_VIEW via GRANT to {query_success_count}/{num_queries} queries.{dry_run_msg} {query_failed_count} failed.")
+                print() # Add whitespace after summary
         else:
              if not VERBOSE:
-                 print(f"  sql/queries: ✅ No objects found.")
+                 print(f"🔎 SQL Queries:\n    ✅ No objects found.")
+                 print() # Add whitespace after summary
     except Exception as e:
-        print(f"  ⚠️ Error listing queries, skipping: {str(e)}")
+        # Log error if listing itself failed, only in non-verbose mode
+        if not VERBOSE:
+             print(f"🔎 SQL Queries:\n    ⚠️ Error listing queries, skipping: {str(e)}")
 
     # Add pipelines separately due to potential listing errors
     try:
@@ -216,11 +233,18 @@ def process_workspace_permissions():
 
     # Populate workspace_objects for other types
     for obj_type, config in object_types_to_process.items():
-        if config["list_func"]: # Only call list_func if defined (not for queries/pipelines handled above)
+        # Skip listing for types handled separately (queries, pipelines)
+        if obj_type in ["sql/queries", "pipelines"]:
+            continue
+
+        if config.get("list_func"): # Check if list_func exists
             try:
                 workspace_objects[obj_type] = list(config["list_func"]())
             except Exception as e:
-                print(f"  ⚠️ Error listing {obj_type}, skipping: {str(e)}")
+                if not VERBOSE:
+                     # Capitalize obj_type for display
+                     obj_type_display = ' '.join(word.capitalize() for word in obj_type.replace("sql/", "SQL ").split('_'))
+                     print(f"🔎 {obj_type_display}:\n    ⚠️ Error listing objects, skipping: {str(e)}")
                 # Remove from processing if listing failed
                 if obj_type in workspace_objects: del workspace_objects[obj_type]
                 if obj_type in object_types_to_process: del object_types_to_process[obj_type]
@@ -237,7 +261,10 @@ def process_workspace_permissions():
         objects = workspace_objects.get(obj_type, [])
         if not objects:
             if not VERBOSE: # Only print summary if not verbose and objects were expected but not found/listed
-                 print(f"  {obj_type}: ✅ No objects found or listing failed.")
+                 # Capitalize obj_type for display
+                 obj_type_display = ' '.join(word.capitalize() for word in obj_type.replace("sql/", "SQL ").split('_'))
+                 print(f"🔎 {obj_type_display}:\n    ✅ No objects found or listing failed.")
+                 print() # Add whitespace after summary
             continue # Skip if no objects or listing failed previously
 
         type_success_count = 0
@@ -245,7 +272,7 @@ def process_workspace_permissions():
         permission = config["permission"]
 
         if not VERBOSE:
-            print(f"  Processing {len(objects)} {obj_type}...")
+            pass # Removed intermediate print statement
 
         for obj in objects:
             # Handle potential nested attributes for name_attr (like job.settings.name)
@@ -255,6 +282,7 @@ def process_workspace_permissions():
 
             obj_id = str(getattr(obj, config["id_attr"]))
 
+            # Verbose logging happens inside apply_permission
             if apply_permission(obj_type, obj_id, permission, name):
                 type_success_count += 1
             else:
@@ -262,16 +290,23 @@ def process_workspace_permissions():
 
         if not VERBOSE:
             status_icon = "✅" if type_failed_count == 0 else "❌"
-            dry_run_msg = " (DRY RUN)" if DRY_RUN else ""
+            dry_run_msg = " (DRY RUN)" if DRY_RUN and (type_success_count > 0 or type_failed_count > 0) else "" # Show dry run if any attempt was made
+            # Capitalize obj_type for display
+            obj_type_display = ' '.join(word.capitalize() for word in obj_type.replace("sql/", "SQL ").split('_'))
             if type_failed_count == 0:
-                print(f"  {status_icon} {obj_type}: Applied {permission} to {type_success_count}/{len(objects)} objects successfully{dry_run_msg}.")
+                # Handle case where len(objects) might be 0 if listing failed but wasn't caught above
+                total_objects = len(objects) if objects else type_success_count + type_failed_count
+                print(f"🔎 {obj_type_display}:\n    {status_icon} Applied {permission} to {type_success_count}/{total_objects} objects successfully{dry_run_msg}.")
             else:
-                print(f"  {status_icon} {obj_type}: Applied {permission} to {type_success_count}/{len(objects)} objects.{dry_run_msg} {type_failed_count} failed.")
+                # Handle case where len(objects) might be 0 if listing failed but wasn't caught above
+                total_objects = len(objects) if objects else type_success_count + type_failed_count
+                print(f"🔎 {obj_type_display}:\n    {status_icon} Applied {permission} to {type_success_count}/{total_objects} objects.{dry_run_msg} {type_failed_count} failed.")
+            print() # Add whitespace after summary
 
         total_success_count += type_success_count
         total_failed_count += type_failed_count
 
-    print(f"Finished processing workspace permissions: {total_success_count} successful, {total_failed_count} failed.")
+    # Final summary print moved to display_summary
     # Return values are not strictly needed as results are in permission_results
     # return total_success_count, total_failed_count # Keep for compatibility if needed elsewhere
 
@@ -284,7 +319,9 @@ def process_unity_catalog_permissions():
         catalogs = list(w.catalogs.list())
         num_catalogs = len(catalogs)
         if len(catalogs) == 0:
-            print("  No catalogs found in Unity Catalog")
+            if not VERBOSE:
+                print(f"🔎 Unity Catalog (All Catalogs):\n    ✅ No catalogs found.")
+                print() # Add whitespace after summary
             return # Nothing to do
 
         print(f"  Found {num_catalogs} catalogs.")
@@ -382,7 +419,7 @@ def process_unity_catalog_permissions():
 
     # Print non-verbose summary if VERBOSE is False
     if not VERBOSE:
-        print("  Unity Catalog Permission Summary:")
+        print(f"🔎 Unity Catalog (All Catalogs):")
         if uc_overall_failed_listing:
              print("    ❌ Failed to list catalogs.")
         elif num_catalogs == 0:
@@ -390,12 +427,12 @@ def process_unity_catalog_permissions():
         else:
             for permission, counts in uc_summary.items():
                 status_icon = "✅" if counts["failed"] == 0 else "❌"
-                dry_run_msg = " (DRY RUN)" if DRY_RUN else ""
-                total_processed = counts["success"] + counts["failed"] # Should ideally equal num_catalogs unless inner errors occurred
+                dry_run_msg = " (DRY RUN)" if DRY_RUN and (counts["success"] > 0 or counts["failed"] > 0) else ""
                 if counts["failed"] == 0:
                      print(f"    {status_icon} {permission}: Applied to {counts['success']}/{num_catalogs} catalogs successfully{dry_run_msg}.")
                 else:
                      print(f"    {status_icon} {permission}: Applied to {counts['success']}/{num_catalogs} catalogs.{dry_run_msg} {counts['failed']} failed.")
+                print() # Add whitespace after summary
 
     # No return needed, results stored in permission_results
     # return uc_summary # Or return nothing
@@ -446,6 +483,7 @@ def display_summary():
     # Display the summary table
     print(summary.to_string(index=False))
     print()
+    print("Note: For workspace objects, '0 found' might indicate no objects exist or the script runner lacks list permissions.")
     
     # Calculate totals directly from the permission_results DataFrame
     df = pd.DataFrame(permission_results)
