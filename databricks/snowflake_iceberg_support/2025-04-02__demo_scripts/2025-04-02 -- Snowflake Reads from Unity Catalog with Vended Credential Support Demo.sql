@@ -6,6 +6,7 @@
 -- -----------------------------------------------------------------------------
 -- STEP 1: CREATE AND SETUP THE DATABASE
 -- -----------------------------------------------------------------------------
+USE ROLE ACCOUNTADMIN;
 
 -- Set the warehouse to use
 USE WAREHOUSE INTERACTIVE_WH;
@@ -26,15 +27,15 @@ CREATE OR REPLACE CATALOG INTEGRATION databricks_unity_catalog
     CATALOG_SOURCE = ICEBERG_REST
     TABLE_FORMAT = ICEBERG
     REST_CONFIG = (
-        CATALOG_URI = 'https://your-databricks-workspace.cloud.databricks.com/api/2.1/unity-catalog/iceberg-rest'
-        CATALOG_NAME = 'your_overlay_workspace'
+        CATALOG_URI = 'https://your-workspace.databricks.com/api/2.1/unity-catalog/iceberg-rest'
+        CATALOG_NAME = 'randy_pitcher_overlay_workspace'
         ACCESS_DELEGATION_MODE = VENDED_CREDENTIALS
     )
     REST_AUTHENTICATION = (
         TYPE = OAUTH
-        OAUTH_TOKEN_URI = 'https://your-databricks-workspace.cloud.databricks.com/oidc/v1/token'
-        OAUTH_CLIENT_ID = '🤫 shhhh, secrets go here'
-        OAUTH_CLIENT_SECRET = '🤫 shhhh, secrets go here'
+        OAUTH_TOKEN_URI = 'https://your-workspace.databricks.com/oidc/v1/token'
+        OAUTH_CLIENT_ID = '🤫 shhhh'
+        OAUTH_CLIENT_SECRET = '🤫 shhhh'
         OAUTH_ALLOWED_SCOPES = ('all-apis')
     )
     ENABLED = TRUE;
@@ -44,7 +45,9 @@ CREATE OR REPLACE CATALOG INTEGRATION databricks_unity_catalog
 -- -----------------------------------------------------------------------------
 
 -- Verify the catalog integration is working
-SELECT SYSTEM$VERIFY_CATALOG_INTEGRATION('databricks_unity_catalog');
+SELECT 
+    parse_json(SYSTEM$VERIFY_CATALOG_INTEGRATION('databricks_unity_catalog')) as verification, 
+    iff(verification:"errorCode" = '', '✅ Success!', '❌ Error: \n' || verification:"errorMessage") as status_message;
 
 -- -----------------------------------------------------------------------------
 -- STEP 4: EXPLORE AVAILABLE SCHEMAS AND TABLES
@@ -91,20 +94,7 @@ SELECT * FROM unity_catalog_iceberg_db.databricks_unity_catalog.severance_delta
 LIMIT 10;
 
 -- -----------------------------------------------------------------------------
--- STEP 7: RUN ANALYTICS ON THE DATA
--- -----------------------------------------------------------------------------
-
--- Get aggregate statistics from the severance_iceberg table
-SELECT 
-    COUNT(*) as record_count,
-    MIN(salary) as min_salary,
-    MAX(salary) as max_salary,
-    AVG(salary) as avg_salary,
-    APPROX_PERCENTILE(salary, 0.5) as median_salary
-FROM unity_catalog_iceberg_db.databricks_unity_catalog.severance_iceberg;
-
--- -----------------------------------------------------------------------------
--- STEP 8: CLEANUP (OPTIONAL)
+-- STEP 7: CLEANUP (OPTIONAL)
 -- -----------------------------------------------------------------------------
 
 -- Drop the database (this will cascade to all schemas and tables)
