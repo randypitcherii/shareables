@@ -11,25 +11,20 @@
 # MAGIC
 # MAGIC **NOTE:** No worries if you already have some of these enabled. The code will just skip schemas that are already turned on 🧠
 # MAGIC
-# MAGIC ## Auth setup
-# MAGIC 1. Get yourself a PAT. Click your user icon in the top right of this page > settings > developer (NOT development) > access tokens > create a new one > copy it and come back here
-# MAGIC 2. you can paste it directly below if you're lazy. 
-# MAGIC `PAT_TOKEN = 'my_pat'`
-# MAGIC 3. if you're trying to do this by the book though, you should store this as a databricks secret.
-# MAGIC - to do this, install and configure the databricks CLI (it is insane to me there is no UI for adding secrets 🤯)
-# MAGIC - run `databricks secrets create-scope randy_pitcher_workspace` to create your secret scope
-# MAGIC - run `databricks secrets put-secret randy_pitcher_workspace databricks_pat --string-value your_pat_here` to save the secret
-# MAGIC - update the `PAT_TOKEN` variable below to access your specific scope and key 💪
-# MAGIC
-# MAGIC
 # MAGIC 🚀 With that out of the way, feel free to run the whole workbook! Serverless notebook compute works great for this. 🔥
 
 # COMMAND ----------
 
 import requests
 
-# 🔥 Replace with your actual value 💽
-PAT_TOKEN = dbutils.secrets.get(scope="randy_pitcher_workspace", key="databricks_pat")
+# 🔥 This grabs a token from your current databricks notebook session 💽
+PAT_TOKEN = (
+  dbutils.notebook.entry_point.getDbutils()
+    .notebook()
+    .getContext()
+    .apiToken()
+    .getOrElse(None)
+)
 
 def enable_system_schemas():
     # get workspace and metastore ids
