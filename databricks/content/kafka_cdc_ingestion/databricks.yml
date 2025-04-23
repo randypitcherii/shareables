@@ -1,0 +1,45 @@
+bundle:
+  name: kafka_cdc_ingestion
+
+include:
+  - dabs_resources/*.yml
+
+variables:
+  default_catalog:
+    description: The default catalog to use for deployments. This changes by target
+  default_schema:
+    description: The default schema to use for deployments. This changes by target.
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+    variables:
+      default_catalog: randy_pitcher_overlay_workspace
+      default_schema: dabs_${workspace.current_user.short_name} 
+    
+    presets:
+      name_prefix: '[${bundle.name}:${bundle.target} - ${workspace.current_user.short_name}] '
+      tags:
+        project: ${bundle.name}
+        environment: ${bundle.target}
+        owner: ${workspace.current_user.userName}
+
+
+  prod:
+    mode: production
+
+    variables:
+      default_catalog: randy_pitcher_overlay_workspace
+      default_schema: ${bundle.name} 
+
+    workspace:
+      root_path: /deployments/${bundle.name}/production
+    
+    presets:
+      name_prefix: '[${bundle.name}:${bundle.target}] '
+      tags:
+        project: ${bundle.name}
+        environment: ${bundle.target}
+        owner: ${workspace.current_user.userName}
