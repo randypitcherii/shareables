@@ -1,3 +1,51 @@
+# dbt for Databricks - Why should you care?
+
+## The Problem
+Tired of this data engineering chaos?
+- SQL spaghetti scattered across unversioned notebooks?
+- Zero confidence because you can't test your data transformations?
+- Endless copy-pasting leading to a fragile, unmaintainable mess?
+- Undocumented data models that nobody understands?
+- Manual, error-prone deployments slowing you down?
+
+## The Solution: dbt
+dbt is your secret weapon. It supercharges your Databricks workflows:
+- **Leverages Databricks Compute, Saves Money**: dbt pushes all transformation logic directly into Databricks, efficiently using its parallel compute capabilities to reduce costs.
+- **Version-Controlled & Modular SQL**: All your SQL lives in git. Build reusable, maintainable data models with macros and `ref()` functions.
+- **Rich Ecosystem of Packages**: Tap into a vast library of pre-built dbt packages for data quality, transformations, migrations, and more, accelerating your development.
+- **Testing & Validation**: Ensure your data meets expectations with built-in testing frameworks.
+- **Automatic Documentation**: Generate comprehensive, up-to-date documentation for your entire data landscape.
+- **CI/CD Ready**: Automate your deployments and move code seamlessly between environments.
+- **Widely Adopted & Easy to Learn**: dbt is a popular, well-documented tool with a gentle learning curve. Plus, LLMs are surprisingly good at generating dbt code and answering your questions!
+
+## What dbt is NOT
+- dbt is NOT the same as dbt Cloud (the paid SaaS product)
+  - `pip install dbt-databricks` and you're done
+  - in fact, `dbt-databricks` is ENTIRELY built by DATABRICKS! Using `dbt-databricks` is like using `dbutils`, `databricks-sdk`, or `databricks-connect`
+- dbt is NOT an ETL/ELT tool like Fivetran (it's the T in ELT)
+- dbt is NOT a data warehouse or legacy ETL tool
+  - dbt can not do compute. It must use Databricks to do any data processing.
+- dbt is NOT taking compute away from Databricks - it USES Databricks compute
+
+## What dbt IS
+
+dbt is a command-line tool that:
+1. Takes simple SQL select statements
+2. Builds parellel deployments by default
+3. Scams people into using version control, CICD, and testing
+4. Manages your dev/test/prod/etc.. isolation automatically
+5. Tests your data AND your transformations
+6. Generates lineage documentation (and pushes it into databricks UC)
+
+It's a complete workflow for managing data transformations in your warehouse.
+
+It is the paved path that databricks users are desperate for.
+
+## Fine, now what?
+- follow the setup below and see for yourself
+- it takes so little time you can even do it in a github codespace and not download anything
+
+
 # dbt Project Setup
 
 This guide provides instructions for setting up your [dbt](https://docs.getdbt.com/) environment to work with this project, focusing on connecting to Databricks.
