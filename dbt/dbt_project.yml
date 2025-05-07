@@ -11,12 +11,14 @@ vars:
 
 models:
   randy_pitcher_workspace:
+    # These configurations apply to all models in the project
     +materialized: view
     +auto_liquid_cluster: true
     +persist_docs:
       relation: true
       columns: true
 
+    # Configurations for specific subdirectories
     staging:
       +tags: staging
       +schema: staging
@@ -26,7 +28,7 @@ models:
       +tags: modeled
       +schema: modeled
 
-    mart:
+    marts:
       +materialized: table
       +tags: mart
       +schema: mart
