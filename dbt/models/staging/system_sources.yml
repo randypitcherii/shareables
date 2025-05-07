@@ -1,0 +1,111 @@
+version: 2
+
+sources:
+  - name: system_billing
+    description: "Source for Databricks system billing tables."
+    database: system
+    schema: billing
+    tables:
+      - name: list_prices
+        description: "System table for billing list prices."
+        columns:
+          - name: sku_name
+            description: "The name of the SKU."
+          - name: currency_code
+            description: "The currency code for the pricing."
+          - name: pricing
+            description: "Struct containing pricing details."
+          - name: price_start_time
+            description: "Timestamp when the price becomes effective."
+          - name: price_end_time
+            description: "Timestamp when the price is no longer effective."
+
+      - name: usage
+        loaded_at_field: usage_date # Or another relevant timestamp for freshness
+        description: "System table for detailed billing usage."
+        columns:
+          - name: workspace_id
+            description: "ID of the workspace."
+          - name: sku_name
+            description: "Name of the SKU."
+          - name: usage_quantity
+            description: "Quantity of usage."
+          - name: usage_date
+            description: "Date of usage."
+          - name: billing_origin_product
+            description: "Origin product for billing (e.g., MODEL_SERVING)."
+          - name: usage_metadata
+            description: "Struct containing metadata about the usage."
+          - name: custom_tags
+            description: "Custom tags associated with the usage record."
+          - name: identity_metadata
+            description: "Metadata about the identity that incurred the usage."
+          - name: usage_unit
+            description: "The unit of usage (e.g., DBU, TOKENS)."
+          - name: usage_start_time
+            description: "Timestamp for the start of the usage period."
+          - name: usage_end_time
+            description: "Timestamp for the end of the usage period."
+
+  - name: system_serving
+    description: "Source for Databricks system serving tables."
+    database: system
+    schema: serving
+    tables:
+      - name: served_entities
+        description: "System table for model serving endpoints and served entities."
+        columns:
+          - name: endpoint_id
+            description: "Unique ID for the serving endpoint."
+            tests:
+              # - unique # REMOVED due to non-unique values in source
+              - not_null
+          - name: endpoint_name
+            description: "Name of the serving endpoint."
+          - name: endpoint_config_version
+            description: "Version of the endpoint configuration."
+          - name: created_by
+            description: "User who created the endpoint."
+          - name: workspace_id
+            description: "ID of the workspace where the endpoint resides."
+          - name: change_time
+            description: "Timestamp of the last change."
+          - name: endpoint_delete_time
+            description: "Timestamp when the endpoint was deleted, if applicable."
+
+  - name: system_access
+    description: "Source for Databricks system access audit logs."
+    database: system
+    schema: access
+    tables:
+      - name: audit
+        loaded_at_field: event_time
+        description: "System table for audit logs."
+        columns:
+          - name: event_time
+            description: "Timestamp of the audit event."
+          - name: user_identity
+            description: "Struct containing user identity information."
+          - name: response
+            description: "Struct containing response information."
+          - name: service_name
+            description: "Name of the Databricks service generating the event."
+          - name: action_name
+            description: "Name of the action performed."
+          - name: request_params
+            description: "Parameters of the request."
+          - name: source_ip_address
+            description: "Source IP address of the request."
+          - name: workspace_id # This one appears in audit log too
+            description: "Workspace ID related to the event."
+          - name: audit_level
+            description: "Level of the audit log."
+          - name: identity_metadata # This one appears in audit log too
+            description: "Identity metadata related to the event."
+          - name: user_agent
+            description: "User agent of the client making the request."
+          - name: event_id
+            description: "Unique ID for the audit event."
+            tests:
+              - unique
+              - not_null 
