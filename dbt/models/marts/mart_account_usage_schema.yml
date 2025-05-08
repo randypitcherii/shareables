@@ -1,0 +1,93 @@
+version: 2
+
+models:
+  - name: mart_account_usage_total
+    description: "Calculates and formats total account usage in USD. Derived from the 'usage_total' dataset in the Account Usage dashboard."
+    columns:
+      - name: total_usage_usd_display
+        description: "Total usage USD, formatted as a string with B/M/K for billions/millions/thousands."
+
+  - name: mart_account_usage_overview
+    description: "Provides a base for an overview of account usage, with various time and group keys for flexible aggregation in a BI tool. Derived from the 'usage_overview' dataset."
+    columns:
+      - name: time_key_day
+        description: "Usage date (daily granularity)."
+      - name: time_key_week
+        description: "Truncated week of usage."
+      - name: time_key_month
+        description: "Truncated month of usage."
+      - name: group_key_workspace
+        description: "Workspace display name for grouping."
+      - name: group_key_sku
+        description: "SKU name for grouping."
+      - name: group_key_billing_origin_product
+        description: "Billing origin product for grouping."
+      - name: usage_usd
+        description: "Usage amount in USD for the specific granularity."
+
+  - name: mart_account_usage_overview_overtime
+    description: "Provides data for period-over-period analysis of account usage, with an example PoP calculation for a default time and group key. Derived from 'usage_overview_overtime' dataset. BI tool should handle dynamic pivots."
+    columns:
+      - name: period_key
+        description: "The time period for aggregation (e.g., week)."
+      - name: group_key
+        description: "The key used for grouping (e.g., billing_origin_product or 'ALL_GROUPS_TOTAL')."
+      - name: usage_usd_sum
+        description: "Sum of USD usage for the period and group."
+      - name: prev_period_usage_usd_sum
+        description: "Sum of USD usage for the previous period for the same group."
+      - name: usage_change_percentage
+        description: "Percentage change from the previous period."
+
+  - name: mart_account_usage_analyze_tags_match
+    description: "Calculates total usage and usage with any custom tags, providing a percentage. Simplified from the 'usage_analyze_tags_match' dataset which had complex parameterization."
+    columns:
+      - name: total_usage_usd
+        description: "Total usage in USD across the dataset."
+      - name: usage_with_any_tags_usd
+        description: "Total usage in USD for records that have at least one custom tag."
+      - name: percentage_usage_with_any_tags
+        description: "Percentage of usage that has at least one custom tag."
+
+  - name: mart_account_usage_analyze_tags
+    description: "Aggregates usage by a string representation of custom tag key-value pairs and time dimensions. Simplified from the 'usage_analyze_tags' dataset."
+    columns:
+      - name: custom_tag_key_value_pairs_string
+        description: "A string representation of all custom tags for grouping (e.g., 'key1=val1;key2=val2' or '<NO_TAGS>')."
+      - name: time_key_day
+      - name: time_key_week
+      - name: time_key_month
+      - name: usage_usd_sum
+        description: "Sum of USD usage for the given tags and time period."
+
+  - name: mart_account_usage_analyze_tags_overtime
+    description: "Provides data for period-over-period analysis of tag-based usage, with an example PoP calculation. Derived from 'usage_analyze_tags_overtime'. BI tool should handle dynamic pivots."
+    columns:
+      - name: period_key
+      - name: group_key # Here, this will be the custom_tag_key_value_pairs_string or 'ALL_TAGS_TOTAL'
+      - name: usage_usd_sum
+      - name: prev_period_usage_usd_sum
+      - name: usage_change_percentage
+
+  - name: mart_account_usage_analyze_top_spending
+    description: "Provides usage data with several potential keys for ranking (workspace, user, job, sku, etc.). BI tools can use this for dynamic top-N analysis. Derived from 'usage_analyze_top_spending'."
+    columns:
+      - name: time_key_day
+      - name: time_key_week
+      - name: time_key_month
+      - name: workspace_display_name
+      - name: run_as_user
+      - name: job_id
+      - name: notebook_id
+      - name: sku_name
+      - name: billing_origin_product
+      - name: usage_usd
+
+  - name: mart_account_usage_analyze_top_spending_overtime
+    description: "Provides data for PoP analysis of top spending categories, with an example PoP calculation. Derived from 'usage_analyze_top_spending_overtime'. BI tool handles dynamic rank key selection and pivots."
+    columns:
+      - name: period_key
+      - name: group_key # Example: billing_origin_product or 'ALL_RANK_KEYS_TOTAL'
+      - name: usage_usd_sum
+      - name: prev_period_usage_usd_sum
+      - name: usage_change_percentage 
