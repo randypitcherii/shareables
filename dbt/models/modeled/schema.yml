@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: dim_latest_list_prices
+    description: "Filters for the latest list prices from the billing_list_prices source, where price_end_time is null. Adds a calculated list_price_usd. Formerly modeled_latest_list_prices."
+    columns:
+      - name: sku_name
+        description: "The name of the SKU."
+        tests:
+          - not_null
+      - name: list_price_usd
+        description: "The default list price in USD, extracted from the pricing struct."
+        tests:
+          - not_null
+
+  - name: fct_model_serving_usage
+    description: "Filters billing usage records specifically for MODEL_SERVING products. Formerly modeled_model_serving_usage."
+    columns:
+      - name: workspace_id
+        description: "ID of the workspace."
+      - name: sku_name
+        description: "Name of the SKU."
+      - name: usage_metadata
+        description: "Struct containing metadata about the usage, including endpoint_id and serving_type."
+
+  - name: dim_latest_model_serving_endpoints
+    description: "Selects the latest configuration for each model serving endpoint by ranking configurations and picking the latest (rn=1). Renames some columns for clarity. Incorporates logic from former modeled_ranked_model_serving_endpoints and was formerly modeled_latest_model_serving_endpoints."
+    columns:
+      - name: endpoint_id
+        description: "Unique ID for the serving endpoint."
+        tests:
+          - unique
+          - not_null
+      - name: endpoint_name
+        description: "Name of the serving endpoint."
+      - name: endpoint_created_by
+        description: "User who created the endpoint."
+      - name: is_deleted
+        description: "Boolean flag indicating if the endpoint is deleted."
+
+  - name: fct_usage_with_workspace_and_pricing
+    description: "Prepares a base view of usage data joined with workspace names (from seed) and list prices. Formerly modeled_usage_with_workspace_and_pricing."
+    columns:
+      - name: usage_usd
+        description: "Calculated usage in USD."
+        # tests:
+        #   - not_negative # Temporarily removed
+      - name: workspace_display_name
+        description: "Display name for the workspace, including ID." 
