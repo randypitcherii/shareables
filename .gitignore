@@ -50,7 +50,6 @@ logs/
 *.ipynb
 
 # Data files
-*.csv
 *.parquet
 *.xlsx
 *.xls
