@@ -6,20 +6,28 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 import time
 from dotenv import load_dotenv
+import requests
+from databricks.sdk import WorkspaceClient
+import uuid
 
 load_dotenv()
 
 # --- Database Connection ---
 def get_db_connection():
-    """Establishes a connection to the PostgreSQL database using credentials from environment variables."""
+    """Establishes a connection to the PostgreSQL database using Databricks SDK credentials."""
     try:
-        db_user = os.environ["DB_USER"]
-        db_password = os.environ["DB_PASSWORD"]
+        db_user = os.environ.get("DB_USER") or os.environ.get("DATABRICKS_CLIENT_ID")
         db_host = os.environ["DB_HOST"]
-        db_port = os.environ["DB_PORT"]
+        db_port = os.environ.get("DB_PORT", "5432")
         db_name = os.environ["DB_NAME"]
-        
-        connection_string = f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        instance_name = os.environ.get("DB_INSTANCE_NAME", "randy-pitcher-workspace-pg")
+
+        w = WorkspaceClient()
+        instance = w.database.get_database_instance(name=instance_name)
+        cred = w.database.generate_database_credential(request_id=str(uuid.uuid4()), instance_names=[instance_name])
+        password = cred.token
+
+        connection_string = f"postgresql+psycopg2://{db_user}:{password}@{db_host}:{db_port}/{db_name}?sslmode=require"
         engine = create_engine(connection_string)
         return engine
     except KeyError as e:
