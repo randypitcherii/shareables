@@ -3,7 +3,7 @@ name = "notebook-examples"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "databricks-connect>=16.1.3",
     "databricks-sdk>=0.49.0",
