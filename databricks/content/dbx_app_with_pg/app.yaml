@@ -1,0 +1,8 @@
+command: ['streamlit', 'run', 'app.py']
+env:
+  - name: 'DB_HOST'
+    value: 'instance-0258c2a1-8bd7-4dec-95e3-309149f7567d.database.cloud.databricks.com'
+  - name: 'DB_NAME'
+    value: 'databricks_postgres'
+  - name: 'DB_INSTANCE_NAME'
+    value: 'randy-pitcher-workspace-pg' 

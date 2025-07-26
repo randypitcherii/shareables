@@ -1,0 +1,30 @@
+bundle:
+  name: dbx_app_with_pg
+
+resources:
+  apps:
+    postgres_app:
+      name: 'dbx-app-with-pg'
+      source_code_path: .
+      description: 'A Databricks app to read/write to Postgres'
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-daae04e5-a828.cloud.databricks.com
+    presets:
+      tags:
+        env: dev
+        owner: ${workspace.current_user.userName}
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-daae04e5-a828.cloud.databricks.com
+      root_path: /Workspace/Users/randy.pitcher@databricks.com/.bundle/${bundle.name}/${bundle.target}
+    presets:
+      tags:
+        env: prod
+        owner: ${workspace.current_user.userName}

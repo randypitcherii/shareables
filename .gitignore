@@ -47,7 +47,6 @@ logs/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb
 
 # Data files
 *.parquet
