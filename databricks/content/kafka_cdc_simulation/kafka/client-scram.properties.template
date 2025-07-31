@@ -1,0 +1,16 @@
+# TEMPLATE: Kafka SCRAM client properties
+#
+# Copy this file to client-scram.properties and replace the placeholders below.
+#
+# For security, do NOT commit the real client-scram.properties file to version control.
+#
+# You can use a tool like envsubst to generate the real file from environment variables:
+#   export KAFKA_USERNAME=your_user
+#   export KAFKA_PASSWORD=your_pass
+#   envsubst < client-scram.properties.template > client-scram.properties
+#
+# Or, manually edit this file and fill in your credentials.
+
+security.protocol=SASL_SSL
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}"; 
