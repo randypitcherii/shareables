@@ -1,0 +1,29 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+.terraform.lock.hcl
+
+# Ignore all JAR files
+*.jar
+
+# Ignore all .env files
+.env*
+license.env
+*.env
+
+# Ignore Python cache
+__pycache__/
+
+# Ignore Python virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Ignore sensitive Kafka client config
+client-scram.properties
+
+*.zip
