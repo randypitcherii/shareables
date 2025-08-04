@@ -1,6 +1,6 @@
 akhq:
   connections:
-    docker-kafka-cluster:
+    msk-cluster:
       properties:
         bootstrap.servers: "${KAFKA_BROKERS}"
         security.protocol: "SASL_SSL"

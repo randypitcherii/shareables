@@ -1,10 +1,29 @@
 {
   "generators": [
     {
+      "name": "initial_load_inserts",
+      "topic": { "_gen": "env", "var": "KAFKA_TOPIC" },
+      "value": {
+        "record_id": { "_gen": "uuid" },
+        "record_type": "INSERT",
+        "record_sequence": { "_gen": "now", "format": "unix_ms" },
+        "source": "ShadowTraffic",
+        "run_started_at": { "_gen": "env", "var": "RUN_STARTED_AT" },
+        "record_payload": {
+          "payload_string": { "_gen": "env", "var": "PAYLOAD_STRING" },
+          "updated_at": { "_gen": "now", "format": "iso" },
+          "value": { "_gen": "oneOf", "choices": ["😀","😊","😄","😁","😆","😅","😂","🤣","🥲","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥸","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🤭","🤫","🤥","😶","😐","😑","😬","🙄","😯","😦","😧","😮","😲","🥱","😴","🤤","😪","😵","🤐","🥴","🤢","🤮","🤧","😷","🤒","🤕","🤑","🤠","😈","👿","👹","👺","🤡","💩","👻","💀","☠️","👽","👾","🤖","🎃","😺","😸","😹","😻","😼","😽","🙀","😿","😾"] }
+        }
+      },
+      "localConfigs": { "throttleMs": 0, "maxEvents": 100, "threads": 8, "throughput": 5000 }
+    },
+
+
+    {
       "name": "cdc_events",
       "topic": { "_gen": "env", "var": "KAFKA_TOPIC" },
       "value": {
-        "record_id": { "_gen": "lookup", "topic": { "_gen": "env", "var": "KAFKA_TOPIC" }, "path": ["value", "record_id"] },
+        "record_id": { "_gen": "lookup", "name": "initial_load_inserts", "path": ["value", "record_id"], "strategy": "random" },
         "record_type": "UPDATE",
         "record_sequence": { "_gen": "now", "format": "unix_ms" },
         "source": "ShadowTraffic",
@@ -28,13 +47,14 @@
         "sasl.jaas.config": { "_gen": "env", "var": "KAFKA_SASL_JAAS_CONFIG" },
         "key.serializer": "io.shadowtraffic.kafka.serdes.JsonSerializer",
         "value.serializer": "io.shadowtraffic.kafka.serdes.JsonSerializer",
-        "linger.ms": "100",
-        "batch.size": "262144",
+        "batch.size": "2097152",
+        "linger.ms": "200",
+        "compression.type": "lz4",
+        "acks": "0",
         "buffer.memory": "67108864",
-        "max.in.flight.requests.per.connection": "5",
-        "compression.type": "snappy",
-        "acks": "1"
+        "retries": "0",
+        "max.in.flight.requests.per.connection": "5"
       }
     }
   }
-} 
+}
