@@ -64,6 +64,7 @@ resource "aws_iam_instance_profile" "bastion_profile" {
 resource "aws_instance" "bastion" {
   ami           = "ami-0c7217cdde317cfec" # Ubuntu 22.04 in us-east-1
   instance_type = "t3.micro"
+  key_name      = "msk-bastion-key"
 
   vpc_security_group_ids = [aws_security_group.bastion_sg.id]
   subnet_id              = local.public_subnet_ids[0]
