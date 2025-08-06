@@ -40,7 +40,7 @@ The deployment will move this to a reliable EC2 instance for continuous producti
 - Use Terraform to manage infrastructure, extending existing MSK setup.
 - Secure SSH access with reused key and wide-open (but policy-compliant) security group.
 - Automate Docker startup with hybrid secrets handling and auto-restart.
-- Minimize costs with t3.2xlarge instance (32GB RAM, burstable performance).
+- Minimize costs with m5.2xlarge instance (32GB RAM, consistent performance).
 
 ## High-Level Architecture
 
@@ -68,11 +68,11 @@ graph TD
 
 ## Terraform Resources Needed
 
-Extend `kafka/terraform-msk-instance/` or create a new module with these resources. Key changes: File provisioner for license.env, --env-file and --restart in docker run.
+Extend or create a new Terraform module in `kafka_producers/shadowtraffic/terraform/` with these resources. Key changes: File provisioner for license.env, --env-file and --restart in docker run.
 
 1. **EC2 Instance** (`aws_instance`):
    - AMI: Latest Amazon Linux 2.
-   - Instance Type: t3.2xlarge (8 vCPU, 32GB RAM - cheapest burstable option for 32GB).
+   - Instance Type: m5.2xlarge (8 vCPU, 32GB RAM - general purpose with consistent performance).
    - Subnet: Hardcoded public subnet (e.g., subnet-07480b8fbbb9501bd).
    - Key Name: `msk-bastion-key` (reused).
    - User Data: Install Docker.
@@ -89,12 +89,15 @@ Sample Terraform snippet (add to existing main.tf or new file; add vars to varia
 
 ```terraform
 # In variables.tf
-variable "username" { sensitive = true }
+variable "username" { 
+  sensitive = true 
+  default   = "silky_airplane"  # Consistent with MSK docs
+}
 variable "password" { sensitive = true }
 variable "kafka_brokers" { sensitive = true }
 
 # Hardcoded values from MSK setup
-variable "vpc_id" { default = "vpc-0f3f3f3f3f3f3f3f" }  # Replace with actual default VPC ID if needed
+variable "vpc_id" { default = "vpc-0f3f3f3f3f3f3f3f" }  # Replace with actual default VPC ID (lookup via: aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId")
 variable "subnets" { default = ["subnet-07480b8fbbb9501bd", "subnet-0a04badfd09d050b0"] }
 
 resource "aws_security_group" "shadowtraffic_sg" {
@@ -119,7 +122,7 @@ resource "aws_security_group" "shadowtraffic_sg" {
 
 resource "aws_instance" "shadowtraffic_producer" {
   ami           = data.aws_ami.amazon_linux.id
-  instance_type = "t3.2xlarge"
+  instance_type = "m5.2xlarge"
   subnet_id     = var.subnets[0]  # Use first public subnet
   key_name      = "msk-bastion-key"  # Reused from MSK bastion
 
@@ -186,22 +189,23 @@ data "aws_ami" "amazon_linux" {
 
 **Notes**:
 - **license.env**: Copied during apply; not in git/TF state. Can manually delete after via SSH if desired.
-- **Auto-Restart**: --restart=unless-stopped ensures container restarts on crash/exit (unless stopped with docker stop).
+- **Auto-Restart**: --restart=unless-stopped ensures container restarts on crash/exit (unless stopped with docker stop). Chosen for simplicity; use Docker Compose alternative for more features like health checks.
 - **Alternative: Docker Compose**: For more robust management, add user_data to install docker-compose, copy a docker-compose.yml, and run `docker-compose up -d` in remote-exec. This allows restart: always in YAML.
-- **PAYLOAD_STRING**: Set to 7680 🪐 (30KB assuming 4 bytes/char for 🪐, 1024 bites / kb; adjust count if needed).
+- **PAYLOAD_STRING**: Set to 7680 🪐 (30KB assuming 4 bytes/char for 🪐, 1024 bytes / kb; adjust count if needed).
 - **Sensitive Vars**: Prompted during apply or set via TF_VAR_*.
 - **VPC ID**: Confirm and hardcode the actual default VPC ID.
-- **Instance Type**: t3.2xlarge provides 32GB RAM at ~$0.33/hour (us-east-1); burstable, so monitor CPU credits if sustained load is high. Switch to m5.2xlarge (~$0.384/hour) if needing consistent performance.
+- **Instance Type**: m5.2xlarge provides 32GB RAM at ~$0.384/hour (us-east-1); general purpose with consistent performance.
 
 ## Deployment Steps
 
 1. **Prepare Terraform**:
-   - Add the code to `kafka/terraform-msk-instance/main.tf` (or new) and variables.tf for sensitive vars.
+   - Create a new directory: `kafka_producers/shadowtraffic/terraform/` and add the code to main.tf and variables.tf there.
    - Ensure `~/.ssh/msk-bastion-key.pem` exists locally.
 
 2. **Apply Terraform**:
    - Use this bash command to source .env and auto-inject vars (assumes .env in project root; license.env is copied directly):
      ```bash
+     cd /Users/randy.pitcher/projects/shareables/databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/terraform/
      source /Users/randy.pitcher/projects/shareables/databricks/kafka_cdc_simulation/.env
      export TF_VAR_username="$USERNAME"
      export TF_VAR_password="$PASSWORD"
@@ -220,7 +224,7 @@ data "aws_ami" "amazon_linux" {
 ## Potential Challenges & Mitigations
 - **Secret Handling**: license.env copied at runtime; delete manually if concerned (e.g., add to remote-exec: rm /home/ec2-user/license.env after start).
 - **Provisioner Failures**: If SSH issues, fall back to manual SSH: copy files and run docker command.
-- **Costs/Security**: t3.2xlarge ~$0.33/hour; wide SSH open but you can tighten CIDRs later.
+- **Costs/Security**: m5.2xlarge ~$0.384/hour; wide SSH open but you can tighten CIDRs later.
 - **Updates**: For config changes, re-run the bash command (sources fresh vars).
 
 This final version balances security, automation, and reliability—ready to deploy! 
