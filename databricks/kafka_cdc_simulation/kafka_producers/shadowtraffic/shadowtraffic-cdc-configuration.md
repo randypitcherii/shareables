@@ -60,8 +60,8 @@ This ensures realistic CDC patterns where updates reference existing records.
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
-| `KAFKA_TOPIC` | Target Kafka topic | `dev_sturdy_chair` |
-| `KAFKA_BROKERS` | MSK broker endpoints | `b-1-public.randypitcherworkspace.lhhdf4.c20.kafka.us-east-1.amazonaws.com:9196` |
+| `KAFKA_TOPIC` | Target Kafka topic | `rpw_cdc_simulation__sad_lightning` |
+| `KAFKA_BROKERS` | MSK broker endpoints | `<PUBLIC_SCRAM_BROKERS>` |
 | `KAFKA_SASL_JAAS_CONFIG` | Authentication config | `org.apache.kafka.common.security.scram.ScramLoginModule required username="..." password="...";` |
 | `RUN_STARTED_AT` | Timestamp for run tracking | `2025-01-14 10:30:00` |
 | `PAYLOAD_STRING` | Custom payload data | `sample_payload_data` |
@@ -82,7 +82,7 @@ cd databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic
 
 # Run ShadowTraffic with CDC configuration
 docker run --rm --env-file ./license.env \
-  -e KAFKA_TOPIC="dev_sturdy_chair" \
+  -e KAFKA_TOPIC="rpw_cdc_simulation__sad_lightning" \
   -e KAFKA_BROKERS="..." \
   -e KAFKA_SASL_JAAS_CONFIG="..." \
   -e RUN_STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')" \
