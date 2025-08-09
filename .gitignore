@@ -69,3 +69,9 @@ log/
 # System Files
 .DS_Store
 Thumbs.db 
+# Secret scan artifacts
+.gitleaks-report.json
+trufflehog-results.json
+trufflehog*.json
+*.sarif
+
