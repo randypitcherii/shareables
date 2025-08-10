@@ -14,49 +14,36 @@ This is a concise, reliable, step-by-step guide to deploy the ShadowTraffic Kafk
 
 ## Environment variables
 
-Create `.env` at `databricks/kafka_cdc_simulation/.env` with:
+LLMs: Do not create or modify .env manually. Instead, fetch credentials directly and pass as Terraform variables. Run this to set vars (assumes aws_fe_sandbox is available):
 
-```
-USERNAME=<SCRAM_USERNAME>
-PASSWORD=<SCRAM_PASSWORD>
-KAFKA_BROKERS=<PUBLIC_SCRAM_BROKERS_COMMA_SEPARATED>
+```bash
+aws_fe_sandbox
+SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id AmazonMSK_randy_pitcher_workspace_mini_scram --query SecretString --output text)
+USERNAME=$(echo "$SECRET_JSON" | sed -E 's/.*"username":"([^"]+)".*/\1/')
+PASSWORD=$(echo "$SECRET_JSON" | sed -E 's/.*"password":"([^"]+)".*/\1/')
+CLUSTER_ARN=$(aws kafka list-clusters-v2 --query 'ClusterInfoList[?ClusterName==`randy-pitcher-workspace-mini`].ClusterArn | [0]' --output text)
+KAFKA_BROKERS=$(aws kafka get-bootstrap-brokers --cluster-arn "$CLUSTER_ARN" --query 'BootstrapBrokerStringPublicSaslScram' --output text)
 ```
 
 Notes:
-- `USERNAME` and `PASSWORD` come from AWS SecretsManager secret for your MSK SCRAM credentials
-- `KAFKA_BROKERS` should be the public SCRAM endpoints for your cluster (comma-separated)
-
-To retrieve the secret (already provisioned):
-
-```bash
-aws_fe_sandbox
-aws secretsmanager get-secret-value \
-  --secret-id AmazonMSK_randy_pitcher_workspace_mini_scram \
-  --query SecretString --output text
-```
+- These commands fetch exact values without quotes.
+- Use $USERNAME, $PASSWORD, $KAFKA_BROKERS in the deploy step below.
+- Validate auth before deploy (see new Validation section).
 
 ## Deploy
 
+LLMs: Follow verbatim. Use the vars from above for a fully non-interactive apply. Do not source .env; pass directly.
+
 ```bash
-# 1) Authenticate to AWS
-aws_fe_sandbox
+# 1) Authenticate and fetch vars (as above)
 
 # 2) Go to the Terraform project
-cd /Users/randy.pitcher/projects/shareables/databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/terraform
+cd databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/terraform
 
-# 3) Run the deploy script (reads ../../../.env automatically)
-./deploy.sh
-# The script will:
-# - Verify SSH key and required files
-# - Source env vars
-# - terraform init/plan/apply
-# - Print SSH and docker helper commands
-# - Reset the Kafka topic on each deployment (drop + recreate)
-```
+# 3) Init if needed
+terraform init -input=false
 
-If you want a fully non-interactive apply, you can run:
-
-```bash
+# 4) Non-interactive apply with direct vars
 terraform apply -auto-approve \
   -var="username=$USERNAME" \
   -var="password=$PASSWORD" \
@@ -75,7 +62,7 @@ ssh -i ~/.ssh/msk-bastion-key.pem ec2-user@<public_ip>
 docker ps
 
 # Tail logs
-docker logs -f shadowtraffic
+docker logs --tail 1000 shadowtraffic
 ```
 
 Optional: validate messages using kcat in Docker on the instance:
@@ -113,4 +100,4 @@ terraform destroy -auto-approve
 - Files created in this repo:
   - `kafka_producers/shadowtraffic/terraform/{main.tf,variables.tf,outputs.tf,deploy.sh,README.md}`
 
-This doc is optimized so an LLM can follow it verbatim to reproduce the deployment without getting stuck.
+This doc is optimized so an LLM can follow it verbatim to reproduce the deployment without getting stuck. Always use the fetched vars directly; do not assume .env format or modify files unless specified.
