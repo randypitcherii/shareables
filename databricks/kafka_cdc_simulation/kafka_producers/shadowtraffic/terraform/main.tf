@@ -107,13 +107,7 @@ resource "aws_instance" "shadowtraffic_producer" {
       # Pull images to avoid first-run delays
       "sudo docker pull shadowtraffic/shadowtraffic:latest || true",
       "sudo docker pull bitnami/kafka:3.6.1 || true",
-      # Create Kafka client properties for SCRAM over TLS
-      "cat > /home/ec2-user/kafka-client.properties <<PROPS\nsecurity.protocol=SASL_SSL\nsasl.mechanism=SCRAM-SHA-512\nsasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username=\"${var.username}\" password=\"${var.password}\";\nPROPS",
-      # Drop and recreate topic to start fresh each deployment
-      "sudo docker run --rm -v /home/ec2-user/kafka-client.properties:/tmp/client.properties bitnami/kafka:3.6.1 \\",
-      "  kafka-topics.sh --bootstrap-server ${var.kafka_brokers} --command-config /tmp/client.properties --delete --topic rpw_cdc_simulation__sad_lightning || true",
-      "sudo docker run --rm -v /home/ec2-user/kafka-client.properties:/tmp/client.properties bitnami/kafka:3.6.1 \\",
-      "  kafka-topics.sh --bootstrap-server ${var.kafka_brokers} --command-config /tmp/client.properties --create --topic rpw_cdc_simulation__sad_lightning --partitions 10 --replication-factor 2 || true",
+
       # Remove existing container if present to avoid name conflicts
       "sudo docker rm -f shadowtraffic || true",
       # Run the container
@@ -123,7 +117,7 @@ resource "aws_instance" "shadowtraffic_producer" {
       "  -e KAFKA_BROKERS='${var.kafka_brokers}' \\",
       "  -e KAFKA_SASL_JAAS_CONFIG='org.apache.kafka.common.security.scram.ScramLoginModule required username=\"${var.username}\" password=\"${var.password}\";' \\",
       "  -e RUN_STARTED_AT=\"$(date '+%Y-%m-%d %H:%M:%S')\" \\",
-      "  -e PAYLOAD_STRING=\"$(printf '🪐%.0s' {1..7680})\" \\",
+      "  -e PAYLOAD_STRING=\"$(printf '🌞%.0s' {1..7680})\" \\",
       "  -v /home/ec2-user/cdc_generator.json:/home/config.json \\",
       "  shadowtraffic/shadowtraffic:latest \\",
       "  --config /home/config.json"

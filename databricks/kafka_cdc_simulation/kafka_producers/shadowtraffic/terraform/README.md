@@ -108,7 +108,7 @@ The container receives these environment variables:
 | `KAFKA_BROKERS` | TF Variable | MSK broker endpoints |
 | `KAFKA_SASL_JAAS_CONFIG` | TF Variables | SCRAM authentication |
 | `RUN_STARTED_AT` | Generated | Deployment timestamp |
-| `PAYLOAD_STRING` | Generated | 30KB payload (7680 🪐 characters) |
+| `PAYLOAD_STRING` | Generated | 30KB payload (7680 🌞 characters) |
 
 ## Troubleshooting
 
@@ -175,3 +175,7 @@ To update the deployment:
 3. **Terraform Changes**: Modify Terraform files and run `terraform apply`
 
 The container will automatically restart with new configuration. 
+
+## 2025-08-10 – Update
+
+ShadowTraffic now manages its own Kafka topic lifecycle.  The remote-exec block **no longer** deletes or recreates the topic.  If you need to wipe data, drop the topic manually or let ShadowTraffic write to a fresh topic name via `KAFKA_TOPIC`. 

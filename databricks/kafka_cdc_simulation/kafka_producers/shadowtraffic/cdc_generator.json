@@ -4,26 +4,39 @@
       "name": "cdc_events",
       "topic": { "_gen": "env", "var": "KAFKA_TOPIC" },
       "vars": {
+        "shadow_traffic_stage": null,
         "event_type": {
-          "_gen": "oneOf",
+          "_gen": "weightedOneOf",
           "choices": [
             {
-              "record_type": "INSERT",
-              "record_id": { "_gen": "uuid" }
+              "weight": 1.2,
+              "value": {
+                "record_type": "INSERT",
+                "record_id": { "_gen": "uuid" }
+              }
             },
             {
-              "record_type": "UPDATE",
-              "record_id": { 
-                "_gen": "lookup", 
-                "name": "cdc_events", 
-                "path": ["value", "record_id"], 
-                "strategy": "random" 
+              "weight": 98.8,
+              "value": {
+                "record_type": "UPDATE",
+                "record_id": { 
+                  "_gen": "lookup", 
+                  "name": "cdc_events", 
+                  "path": ["value", "record_id"], 
+                  "strategy": "random" 
+                }
               }
             }
-          ],
-          "weights": [1.2, 98.8]
+          ]
         }
       },
+
+      "key": { 
+        "_gen": "var", 
+        "var": "event_type", 
+        "path": ["record_id"] 
+      },
+      
       "value": {
         "record_id": { "_gen": "var", "var": "event_type", "path": ["record_id"] },
         "record_type": { "_gen": "var", "var": "event_type", "path": ["record_type"] },
@@ -47,8 +60,7 @@
             "🎰","🎯","🧩","🧸","🪁","🪀","🧵","🧶","🪡","🪢","🧿","🪬","🪄","🪅","🪆"
           ] }
         }
-      },
-      "localConfigs": { "throughput": 231 }
+      }
     }
   ],
 
@@ -56,17 +68,37 @@
   "schedule": {
     "stages": [
       {
-        // Initial high-throughput load of insert records
         "generators": ["cdc_events"],
         "overrides": {
           "cdc_events": {
-            "value": {
+            "vars": {
+              "shadow_traffic_stage": "initial_inserts",
               "event_type": {
-                "weights": [100, 0] // override to 100% inserts
+                "_gen": "weightedOneOf",
+                "choices": [
+                  {
+                    "weight": 100,
+                    "value": {
+                      "record_type": "INSERT",
+                      "record_id": { "_gen": "uuid" }
+                    }
+                  },
+                  {
+                    "weight": 0,
+                    "value": {
+                      "record_type": "UPDATE",
+                      "record_id": { 
+                        "_gen": "lookup", 
+                        "name": "cdc_events", 
+                        "path": ["value", "record_id"], 
+                        "strategy": "random" 
+                      }
+                    }
+                  }
+                ]
               }
             },
             "localConfigs": {
-              "throughput": 5000,
               "events": { "exactly": 190000 }
             }
           }
@@ -74,8 +106,16 @@
       },
 
       {
-        // Ongoing cdc events, using the default weighting and throughput
-        "generators": ["cdc_events"] 
+        "generators": ["cdc_events"],
+        "overrides": {
+          "cdc_events": {
+            "vars": {
+              "shadow_traffic_stage": "cdc_ongoing_simulation",
+            "localConfigs": {
+              "throughput": 231
+            }
+          }
+        }
       }
     ]
   },
@@ -84,6 +124,13 @@
   "connections": {
     "kafka": {
       "kind": "kafka",
+
+      "topicPolicy": {
+        "policy": "dropAndCreate",
+        "partitions": 5,
+        "replicationFactor": 1
+      },
+
       "producerConfigs": {
         "bootstrap.servers": { "_gen": "env", "var": "KAFKA_BROKERS" },
         "security.protocol": "SASL_SSL",
