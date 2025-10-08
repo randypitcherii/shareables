@@ -54,7 +54,7 @@ This guide provides instructions for setting up your [dbt](https://docs.getdbt.c
 
 You'll need Python installed. Then, you can use either `uv` (preferred) or `poetry` to manage your dbt installation and dependencies.
 
-### Using `uv` (Preferred)
+### Using `uv`
 
 `uv` is a fast Python package installer and resolver.
 
@@ -81,31 +81,6 @@ This project uses `uv` and includes a `pyproject.toml` and `uv.lock` file in the
     # .venv\Scripts\activate   # On Windows
     ```
     After activation, your prompt should change, and you can proceed to use `dbt` commands.
-
-### Using `poetry`
-
-Poetry is another popular tool for dependency management in Python.
-
-1.  **Install `poetry`**:
-    If you don't have Poetry, refer to the official Poetry installation guide: [https://python-poetry.org/docs/#installation](https://python-poetry.org/docs/#installation)
-
-2.  **Initialize Poetry and Add Dependencies (if starting fresh in this directory)**:
-    If there isn't a `pyproject.toml` file in the `dbt/` directory configured for this dbt project, you might want to initialize Poetry.
-    ```bash
-    cd path/to/your/shareables/dbt
-    poetry init  # Follow the prompts
-    ```
-    Then add the necessary packages:
-    ```bash
-    poetry add dbt-core dbt-databricks
-    ```
-    This will add the latest versions to your `pyproject.toml` and install them.
-
-3.  **Activate Poetry Shell**:
-    To activate the environment managed by Poetry:
-    ```bash
-    poetry shell
-    ```
 
 ## 2. Configure Your dbt Profile for Databricks
 
