@@ -20,9 +20,11 @@ The deployment provisions:
 2. **SSH Key**: The `msk-bastion-key.pem` should exist in `~/.ssh/`
 
 3. **Environment Variables**: Set the following variables (via `.env` file or environment):
-   - `USERNAME`: Kafka SCRAM username (defaults to "silky_airplane")
-   - `PASSWORD`: Kafka SCRAM password
+   - `USERNAME`: Kafka SCRAM username (use "silky_airplane" from client-scram.properties)
+   - `PASSWORD`: Kafka SCRAM password (use password from client-scram.properties)
    - `KAFKA_BROKERS`: MSK broker endpoints
+
+   **⚠️ IMPORTANT**: Get credentials from `databricks/kafka_cdc_simulation/kafka/client-scram.properties`, NOT from AWS Secrets Manager.
 
 4. **Files**: Ensure these files exist in the parent directory:
    - `license.env`: ShadowTraffic license file
@@ -51,10 +53,11 @@ The script will:
 ```bash
 cd databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/terraform
 
-# Set environment variables
-export TF_VAR_username="your_username"
-export TF_VAR_password="your_password"
-export TF_VAR_kafka_brokers="your_brokers"
+# Extract credentials from client-scram.properties
+PROPS_FILE="../../../kafka/client-scram.properties"
+export TF_VAR_username=$(grep '^username=' "$PROPS_FILE" | cut -d= -f2)
+export TF_VAR_password=$(grep '^password=' "$PROPS_FILE" | cut -d= -f2)
+export TF_VAR_kafka_brokers=$(grep '^bootstrap.servers=' "$PROPS_FILE" | cut -d= -f2)
 
 # Deploy
 terraform init
@@ -171,8 +174,46 @@ To minimize costs:
 To update the deployment:
 
 1. **Configuration Changes**: Modify `cdc_generator.json` and redeploy
-2. **Environment Variables**: Update `.env` file and redeploy
+2. **Environment Variables**: Update variables and redeploy
 3. **Terraform Changes**: Modify Terraform files and run `terraform apply`
+
+### Manual Container Restart (Alternative to Terraform redeploy)
+
+If you just need to restart the container with updated configs:
+
+```bash
+# Copy updated config to instance
+scp -i ~/.ssh/msk-bastion-key.pem \
+    databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/cdc_generator.json \
+    ec2-user@<public_ip>:/home/ec2-user/cdc_generator.json
+
+# Extract credentials locally first
+PROPS_FILE="databricks/kafka_cdc_simulation/kafka/client-scram.properties"
+CREDS_USERNAME=$(grep '^username=' "$PROPS_FILE" | cut -d= -f2)
+CREDS_PASSWORD=$(grep '^password=' "$PROPS_FILE" | cut -d= -f2)
+CREDS_BROKERS=$(grep '^bootstrap.servers=' "$PROPS_FILE" | cut -d= -f2)
+
+# Restart container with correct credentials
+ssh -i ~/.ssh/msk-bastion-key.pem ec2-user@<public_ip> <<EOF
+  export USERNAME="$CREDS_USERNAME"
+  export PASSWORD="$CREDS_PASSWORD"
+  export KAFKA_BROKERS="$CREDS_BROKERS"
+  PAYLOAD_STRING="\$(printf '🌞%.0s' {1..7680})"
+  
+  sudo docker stop shadowtraffic || true
+  sudo docker rm shadowtraffic || true
+  sudo docker run -d --name shadowtraffic --restart=unless-stopped \
+    --env-file /home/ec2-user/license.env \
+    -e KAFKA_TOPIC='rpw_cdc_simulation__sad_lightning' \
+    -e KAFKA_BROKERS="$KAFKA_BROKERS" \
+    -e KAFKA_SASL_JAAS_CONFIG="org.apache.kafka.common.security.scram.ScramLoginModule required username=\"$USERNAME\" password=\"$PASSWORD\";" \
+    -e RUN_STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')" \
+    -e PAYLOAD_STRING="$PAYLOAD_STRING" \
+    -v /home/ec2-user/cdc_generator.json:/home/config.json \
+    shadowtraffic/shadowtraffic:latest \
+    --config /home/config.json
+EOF
+```
 
 The container will automatically restart with new configuration. 
 

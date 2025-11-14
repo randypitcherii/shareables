@@ -75,3 +75,6 @@ trufflehog-results.json
 trufflehog*.json
 *.sarif
 
+# claude
+CLAUDE.md
+.claude

@@ -4,7 +4,7 @@
       "name": "cdc_events",
       "topic": { "_gen": "env", "var": "KAFKA_TOPIC" },
       "vars": {
-        "shadow_traffic_stage": null,
+        "shadowtraffic_stage": null,
         "event_type": {
           "_gen": "weightedOneOf",
           "choices": [
@@ -38,6 +38,7 @@
       },
       
       "value": {
+        "shadow_traffic_stage": { "_gen": "var", "var": "shadowtraffic_stage"},
         "record_id": { "_gen": "var", "var": "event_type", "path": ["record_id"] },
         "record_type": { "_gen": "var", "var": "event_type", "path": ["record_type"] },
         "record_sequence": { "_gen": "now", "format": "unix_ms" },
@@ -72,7 +73,7 @@
         "overrides": {
           "cdc_events": {
             "vars": {
-              "shadow_traffic_stage": "initial_inserts",
+              "shadowtraffic_stage": "initial_inserts",
               "event_type": {
                 "_gen": "weightedOneOf",
                 "choices": [
@@ -110,7 +111,8 @@
         "overrides": {
           "cdc_events": {
             "vars": {
-              "shadow_traffic_stage": "cdc_ongoing_simulation",
+              "shadowtraffic_stage": "cdc_ongoing_simulation"
+            },
             "localConfigs": {
               "throughput": 231
             }

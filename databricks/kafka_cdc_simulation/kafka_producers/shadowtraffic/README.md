@@ -13,18 +13,26 @@ This directory houses the **ShadowTraffic** configuration and deployment assets 
    • Phase 2 falls back to 1.2 % INSERT / 98.8 % UPDATE.
 
 3. **Large payload string**  
-   • `PAYLOAD_STRING` is a 30 KB test payload built from 7 680 🪐 emojis.  
+   • `PAYLOAD_STRING` is a 30 KB test payload built from 7 680 🌞 emojis.  
    • ShadowTraffic passes it unchanged; downstream consumers can validate large-message handling.
 
 4. **Manual restart cheat-sheet**
 
+**⚠️ IMPORTANT**: Use credentials from `databricks/kafka_cdc_simulation/kafka/client-scram.properties`, NOT from AWS Secrets Manager.
+
 ```bash
-# From project root
-export $(grep -v '^#' .env | xargs)               # load KAFKA_* + creds
+# From project root - extract credentials from client-scram.properties
+PROPS_FILE="databricks/kafka_cdc_simulation/kafka/client-scram.properties"
+USERNAME=$(grep '^username=' "$PROPS_FILE" | cut -d= -f2)
+PASSWORD=$(grep '^password=' "$PROPS_FILE" | cut -d= -f2)
+KAFKA_BROKERS=$(grep '^bootstrap.servers=' "$PROPS_FILE" | cut -d= -f2)
+
+# Copy updated config
 scp -i ~/.ssh/msk-bastion-key.pem \
     databricks/kafka_cdc_simulation/kafka_producers/shadowtraffic/cdc_generator.json \
     ec2-user@<EC2_PUBLIC_IP>:/home/ec2-user/cdc_generator.json
 
+# Restart container with correct credentials
 ssh -i ~/.ssh/msk-bastion-key.pem ec2-user@<EC2_PUBLIC_IP> <<'EOF'
   PAYLOAD_STRING="$(printf '🌞%.0s' {1..7680})"
   sudo docker stop shadowtraffic || true
@@ -33,7 +41,7 @@ ssh -i ~/.ssh/msk-bastion-key.pem ec2-user@<EC2_PUBLIC_IP> <<'EOF'
     --env-file /home/ec2-user/license.env \
     -e KAFKA_TOPIC='rpw_cdc_simulation__sad_lightning' \
     -e KAFKA_BROKERS="$KAFKA_BROKERS" \
-    -e KAFKA_SASL_JAAS_CONFIG="org.apache.kafka.common.security.scram.ScramLoginModule required username=\"$KAFKA_USERNAME\" password=\"$KAFKA_PASSWORD\";" \
+    -e KAFKA_SASL_JAAS_CONFIG="org.apache.kafka.common.security.scram.ScramLoginModule required username=\"$USERNAME\" password=\"$PASSWORD\";" \
     -e RUN_STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')" \
     -e PAYLOAD_STRING="$PAYLOAD_STRING" \
     -v /home/ec2-user/cdc_generator.json:/home/config.json \
@@ -51,5 +59,5 @@ sudo docker logs -f --tail 50 shadowtraffic
 ```
 
 ---
-*Last updated: 2025-08-10 by automation.*
+*Last updated: 2025-08-12 - Fixed credential source documentation and emoji consistency.*
 

@@ -14,20 +14,33 @@ This is a concise, reliable, step-by-step guide to deploy the ShadowTraffic Kafk
 
 ## Environment variables
 
-LLMs: Do not create or modify .env manually. Instead, fetch credentials directly and pass as Terraform variables. Run this to set vars (assumes aws_fe_sandbox is available):
+**⚠️ IMPORTANT**: Use credentials from `databricks/kafka_cdc_simulation/kafka/client-scram.properties`, NOT from AWS Secrets Manager.
+
+**Correct credentials** (from client-scram.properties):
 
 ```bash
-aws_fe_sandbox
-SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id AmazonMSK_randy_pitcher_workspace_mini_scram --query SecretString --output text)
-USERNAME=$(echo "$SECRET_JSON" | sed -E 's/.*"username":"([^"]+)".*/\1/')
-PASSWORD=$(echo "$SECRET_JSON" | sed -E 's/.*"password":"([^"]+)".*/\1/')
+# Extract credentials from client-scram.properties
+PROPS_FILE="databricks/kafka_cdc_simulation/kafka/client-scram.properties"
+USERNAME=$(grep '^username=' "$PROPS_FILE" | cut -d= -f2)
+PASSWORD=$(grep '^password=' "$PROPS_FILE" | cut -d= -f2)
+KAFKA_BROKERS=$(grep '^bootstrap.servers=' "$PROPS_FILE" | cut -d= -f2)
+```
+
+**Alternative** (fetch brokers dynamically, but extract credentials from file):
+```bash
+aws_fe_sandbox  # Only needed for broker lookup
 CLUSTER_ARN=$(aws kafka list-clusters-v2 --query 'ClusterInfoList[?ClusterName==`randy-pitcher-workspace-mini`].ClusterArn | [0]' --output text)
 KAFKA_BROKERS=$(aws kafka get-bootstrap-brokers --cluster-arn "$CLUSTER_ARN" --query 'BootstrapBrokerStringPublicSaslScram' --output text)
+
+# Extract credentials from client-scram.properties
+PROPS_FILE="databricks/kafka_cdc_simulation/kafka/client-scram.properties"
+USERNAME=$(grep '^username=' "$PROPS_FILE" | cut -d= -f2)
+PASSWORD=$(grep '^password=' "$PROPS_FILE" | cut -d= -f2)
 ```
 
 Notes:
-- These commands fetch exact values without quotes.
-- Use $USERNAME, $PASSWORD, $KAFKA_BROKERS in the deploy step below.
+- **DO NOT** use AWS Secrets Manager credentials - they are incorrect for ShadowTraffic
+- Use the exact username/password from `kafka/client-scram.properties`
 - Validate auth before deploy (see new Validation section).
 
 ## Deploy
