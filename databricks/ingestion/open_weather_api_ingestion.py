@@ -2,10 +2,20 @@ import json
 import requests
 from datetime import datetime
 import uuid
+from databricks.connect import DatabricksSession
+from databricks.sdk import WorkspaceClient
+
+spark = DatabricksSession.builder.getOrCreate()
+
+# Again, this is using your local databricks config file AND it'll work just fine in databricks notebooks too.
+w = WorkspaceClient()
+dbutils = w.dbutils
+
 
 # Config
-TARGET_VOLUME = 'randy_pitcher_workspace.raw.weather_json'
-OPEN_WEATHER_API_KEY = dbutils.secrets.get(scope="randy_pitcher_workspace", key="open_weather_api_key")
+TARGET_VOLUME = 'randy_pitcher_overlay_workspace.raw.weather_json'
+spark.sql(f'create schema if not exists randy_pitcher_overlay_workspace.raw')
+OPEN_WEATHER_API_KEY = 'api_key' #dbutils.secrets.get(scope="randy_pitcher_workspace", key="open_weather_api_key")
 CITIES = [
     "Indianapolis", 
     "Nashville", 
@@ -56,4 +66,5 @@ def main():
             dbutils.fs.put(f"/Volumes/{TARGET_VOLUME.replace('.', '/')}/{file_name}", json.dumps(weather_data), overwrite=True)
 
 # Run the main function
-main()
+if __name__ == "__main__":
+    main()

@@ -8,8 +8,14 @@
 from pyiceberg.catalog import load_catalog
 
 # get UC iceberg catalog details
-UC_CATALOG = 'analytics_dev'
-UC_CREDENTIAL  = dbutils.secrets.get(scope="randy_pitcher_workspace", key="databricks_pat")
+UC_CATALOG = 'randy_pitcher_workspace'
+UC_CREDENTIAL  = (
+  dbutils.notebook.entry_point.getDbutils()
+    .notebook()
+    .getContext()
+    .apiToken()
+    .getOrElse(None)
+)
 UC_DATABRICKS_URL = dbutils.notebook.entry_point.getDbutils().notebook().getContext().browserHostName().get()
 UC_CATALOG_URI = f'https://{UC_DATABRICKS_URL}/api/2.1/unity-catalog/iceberg-rest'
 
@@ -28,9 +34,10 @@ uc_catalog = load_catalog(**uc_catalog_properties)
 import time
 
 for ns in uc_catalog.list_namespaces():
-  time.sleep(1)
+  print(f'Found schema: {ns[0]}')
+  # time.sleep(1)
   for table in uc_catalog.list_tables(ns[0]):
-    print(f'{table[0]}.{table[1]}')
+    print(f'\t{table[0]}.{table[1]}')
   print('\n')
   time.sleep(1)
 
@@ -59,5 +66,27 @@ uc_table.append(pa_table)
 
 # COMMAND ----------
 
-df = spark.table('analytics_dev.iceberg_3p_writes.planets')
+df = spark.table(f'{UC_CATALOG}.iceberg_3p_writes_macbook.planets')
 display(df)
+
+# COMMAND ----------
+
+# MAGIC %%sql
+# MAGIC drop schema randy_pitcher_overlay_workspace.iceberg_3p_writes_macbook cascade;
+
+# COMMAND ----------
+
+# DBTITLE 1,Modify a managed iceberg table that dbsql created
+import pyarrow as pa
+import pyarrow.dataset as ds
+
+uc_table = uc_catalog.load_table("iceberg_test_snowflake_consumption.space_stuff")
+
+
+# COMMAND ----------
+
+tbl = uc_table.scan().to_arrow()
+
+# COMMAND ----------
+
+uc_table.append(tbl)

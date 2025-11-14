@@ -154,9 +154,4 @@ def main():
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC drop table tabular_product_raw.finance.tabular_bytes_read;
-
-# COMMAND ----------
-
 main()
