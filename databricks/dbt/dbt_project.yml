@@ -1,0 +1,42 @@
+name: 'randy_pitcher_workspace'
+version: '1.0.0'
+
+profile: 'fe_randy_pitcher_workspace'
+
+flags:
+  use_managed_iceberg: true
+
+vars:
+  deployment_environment: "{{target.name}}"
+
+models:
+  randy_pitcher_workspace:
+    # These configurations apply to all models in the project
+    +materialized: view
+    +auto_liquid_cluster: true
+    +persist_docs:
+      relation: true
+      columns: true
+
+    # Configurations for specific subdirectories
+    staging:
+      +tags: staging
+      +schema: staging
+
+    modeled:
+      +materialized: table
+      +tags: modeled
+      +schema: modeled
+
+    marts:
+      +materialized: table
+      +tags: mart
+      +schema: mart
+
+    managed_iceberg_examples:
+      +materialized: table
+      +table_format: iceberg
+      +auto_liquid_cluster: false
+      +tblproperties:
+        'format-version': 3
+      +schema: managed_iceberg_examples
