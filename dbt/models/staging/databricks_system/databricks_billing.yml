@@ -1,8 +1,0 @@
-sources:
-  - name: databricks_billing
-    database: system
-    schema: billing
-
-    tables:
-      - name: usage
-        

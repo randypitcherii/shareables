@@ -1,3 +1,0 @@
-models:
-  - name: daily_total_databricks_usage
-    description: "The 'daily_total_databricks_usage' model is a summary of the total usage of Databricks on a daily basis. It aggregates the usage quantity from the 'usage' table in the 'billing' schema of the 'system' database. The model has two columns: 'usage_day' and 'total_amount'. The 'usage_day' column represents the date of usage, and the 'total_amount' column represents the total usage quantity for that day."
