@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hive-table-experiments"
+version = "0.1.0"
+description = "Databricks Hive/Glue catalog compatibility validation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "databricks-connect>=15.1.0",
+    "databricks-sdk>=0.40.0",
+    "pytest>=8.0.0",
+    "boto3>=1.35.0",
+    "pyarrow>=18.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-xdist>=3.5.0",  # Parallel test execution
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "standard: Standard table layout tests",
+    "recursive: Recursive subfolder tests",
+    "scattered: Scattered partition tests",
+    "cross_bucket: Cross-bucket partition tests",
+    "cross_region: Cross-region partition tests",
+    "shared: Shared partition tests",
+    "delta_conversion: Delta conversion tests",
+    "uc_registration: Unity Catalog registration tests",
+    "partitions_under_table_root: Partitions under table root tests",
+    "partitions_outside_table_root: Partitions outside table root tests",
+    "partitions_in_nested_subdirectories: Nested subdirectory partition tests",
+    "partitions_across_s3_buckets: Cross-bucket partition tests",
+    "partitions_across_aws_regions: Cross-region partition tests",
+    "partitions_shared_between_tables: Shared partition tests",
+    "write_operations: Write operation tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []

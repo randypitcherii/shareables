@@ -1,0 +1,57 @@
+bundle:
+  name: hive-table-experiments
+
+workspace:
+  profile: DEFAULT
+
+variables:
+  # These will be populated from Terraform outputs
+  role_arn:
+    description: "IAM role ARN for storage credential"
+
+  bucket_east_1a:
+    description: "S3 bucket name for us-east-1 primary"
+
+  bucket_east_1b:
+    description: "S3 bucket name for us-east-1 secondary"
+
+  bucket_west_2:
+    description: "S3 bucket name for us-west-2"
+
+resources:
+  # Storage credential mapping to IAM role
+  storage_credentials:
+    project_storage_credential:
+      name: your-project-credential
+      comment: "Storage credential for project S3 access"
+      aws_iam_role:
+        role_arn: ${var.role_arn}
+
+  # External locations for S3 buckets
+  external_locations:
+    bucket_east_1a:
+      name: your_project_east_1a
+      comment: "Primary S3 bucket in us-east-1"
+      url: s3://${var.bucket_east_1a}/
+      credential_name: ${resources.storage_credentials.project_storage_credential.name}
+      skip_validation: false
+
+    bucket_east_1b:
+      name: your_project_east_1b
+      comment: "Secondary S3 bucket in us-east-1"
+      url: s3://${var.bucket_east_1b}/
+      credential_name: ${resources.storage_credentials.project_storage_credential.name}
+      skip_validation: false
+
+    bucket_west_2:
+      name: your_project_west_2
+      comment: "S3 bucket in us-west-2 for cross-region tests"
+      url: s3://${var.bucket_west_2}/
+      credential_name: ${resources.storage_credentials.project_storage_credential.name}
+      skip_validation: false
+
+targets:
+  dev:
+    mode: development
+    workspace:
+      profile: DEFAULT

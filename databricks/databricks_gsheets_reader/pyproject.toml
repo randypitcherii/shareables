@@ -1,0 +1,32 @@
+[project]
+name = "databricks-gsheets-reader"
+version = "0.1.0"
+description = "Create typed Databricks views from Google Sheets"
+requires-python = ">=3.10"
+dependencies = [
+    "databricks-sdk>=0.73.0",
+    "databricks-connect>=16.1.0",
+    "google-auth>=2.43.0",
+    "google-api-python-client>=2.100.0",
+    "pip>=25.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/databricks_gsheets_reader"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

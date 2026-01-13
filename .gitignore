@@ -66,6 +66,16 @@ log/
 .env.test.local
 .env.production.local
 
+# Terraform
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+.terraform/
+.terraform.lock.hcl
+
+# Databricks
+.databricks/
+
 # System Files
 .DS_Store
 Thumbs.db 
