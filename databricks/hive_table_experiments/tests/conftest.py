@@ -6,6 +6,14 @@ Provides fixtures for testing three Glue access methods:
 3. uc_external_tables - Manual UC external tables (Parquet or Delta)
 """
 
+# Load .env file BEFORE importing hive_table_experiments modules
+# This ensures environment variables are set before module-level os.getenv() calls
+from pathlib import Path
+from dotenv import load_dotenv
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
 import pytest
 from databricks.connect import DatabricksSession
 
