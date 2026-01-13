@@ -1,0 +1,20 @@
+# Example Terraform variables
+# Copy this to terraform.tfvars and fill in your values
+
+# AWS CLI profile (your configured AWS CLI profile name)
+aws_profile = "your-aws-profile"
+
+# AWS regions
+aws_region_primary   = "us-east-1"
+aws_region_secondary = "us-west-2"
+
+# Project naming (used as prefix for all created resources)
+project_prefix = "my-hive-eval"
+
+# Databricks account ID
+# Find at: https://accounts.cloud.databricks.com/ (in the URL or account settings)
+databricks_account_id = "your-databricks-account-id"
+
+# Databricks workspace ID (optional for Glue-only setup)
+# Extract from workspace URL: https://dbc-XXXXXXXX-XXXX.cloud.databricks.com
+databricks_workspace_id = ""
