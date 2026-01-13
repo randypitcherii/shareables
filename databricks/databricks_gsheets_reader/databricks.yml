@@ -1,0 +1,85 @@
+bundle:
+  name: databricks_gsheets_reader
+
+workspace:
+  profile: DEFAULT 
+
+variables:
+  base_catalog:
+    description: Catalog base that _dev, _test, _prod can be appended to for catalog-level env isolation
+    default: your_catalog
+  base_schema:
+    description: >
+      Schema base name.
+      - In dev, a per user short name will be appended to the base schema name.
+      - In test, a PR number will be appended to the base schema name.
+      - In prod, the base schema name will be used unchanged.
+    default: google_sheets
+  default_catalog: 
+    description: default catalog to deploy to
+  default_schema:
+    description: default schema to deploy to
+
+artifacts:
+  gsheets_reader_wheel:
+    type: whl
+    build: uv build
+    path: .
+
+sync:
+  include:
+    - "Sync_GSheets_to_Views.ipynb"
+
+resources:
+  jobs:
+    daily_gsheets_sync:
+      name: "GSheets Reader Daily Sync"
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: "UTC"
+      tasks:
+        - task_key: run_sync
+          notebook_task:
+            notebook_path: ./Sync_GSheets_to_Views.ipynb
+            base_parameters:
+              catalog: "${var.default_catalog}"
+              schema: "${var.default_schema}"
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: 3
+            dependencies:
+              - ./dist/*.whl
+
+targets:
+  dev:
+    default: true
+    mode: development
+    variables:
+      default_catalog: "${var.base_catalog}"
+      default_schema: "${var.base_schema}_${workspace.current_user.short_name}"
+    workspace:
+      root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}
+    presets:
+      name_prefix: '[DEV - ${workspace.current_user.userName}] ' # prefix all resource names to avoid collisions
+
+  test:
+    mode: development # I know, its weird to use dev mode in test. Development mode mostly means schedules are off, but prod mode leaves em on
+    variables:
+      default_catalog: "${var.base_catalog}"
+      default_schema: "${var.base_schema}_${var.pr_number}" # you can lookup the syntax for this in your CI tool. I believe in you
+    workspace:
+      root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}/${}
+    presets:
+      name_prefix: '[TEST - ${workspace.current_user.userName}] ' # prefix all resource names to avoid collisions
+
+  prod:
+    mode: production
+    variables:
+      default_catalog: "${var.base_catalog}"
+      default_schema: "${var.base_schema}"
+    workspace:
+      root_path: /Workspace/deployments/${bundle.name}
+    presets:
+      name_prefix: '[PROD 🏋️] '

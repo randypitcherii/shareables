@@ -1,0 +1,26 @@
+bundle:
+  name: dynamic-python-deps
+
+# PyDABs configuration - load Python job definitions
+python:
+  venv_path: .venv
+  resources:
+    - "resources:load_resources"
+
+# Sync local files to workspace
+sync:
+  include:
+    - "src/**"
+  exclude:
+    - ".venv/**"
+    - "__pycache__/**"
+    - "test_artifacts/**"
+    - "*.pyc"
+    - ".databricks/**"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://YOUR_WORKSPACE.cloud.databricks.com
