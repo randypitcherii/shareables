@@ -39,17 +39,6 @@ When external locations are properly configured, Delta tables can reference file
 
 ## What Doesn't Work
 
-### CONVERT TO DELTA with External Partitions
-
-CONVERT TO DELTA only scans files under the specified table root path. It silently ignores partitions stored at external locations.
-
-```
-# This LOSES the us-west partition if it's at an external S3 path
-CONVERT TO DELTA parquet.`s3://bucket/table/` PARTITIONED BY (region STRING)
-```
-
-**Result:** Table converts successfully but external partition data is missing. No error is raised.
-
 ### VACUUM on External Files
 
 **VACUUM cannot delete files at absolute S3 paths outside the table root.**
@@ -80,39 +69,7 @@ print(f"Would delete {len(result.orphaned_files)} files")
 result = vacuum_external_files_pure_python(..., dry_run=False)
 ```
 
----
-
-## Migration Decision Tree
-
-```
-Is table partitioned?
-├── No → CONVERT TO DELTA
-└── Yes → Are ALL partitions under the table root?
-    ├── Yes → CONVERT TO DELTA
-    └── No → Manual Delta Log
-              1. Create external locations for all S3 buckets
-              2. Generate Delta log with absolute paths
-              3. Register table in UC
-```
-
----
-
 ## Migration Workflow
-
-### Standard Tables (CONVERT TO DELTA)
-
-```sql
--- 1. Convert in place
-CONVERT TO DELTA parquet.`s3://bucket/table/` PARTITIONED BY (col STRING);
-
--- 2. Register in UC
-CREATE TABLE catalog.schema.table USING DELTA LOCATION 's3://bucket/table/';
-
--- 3. Verify row count matches original
-SELECT COUNT(*) FROM catalog.schema.table;
-```
-
-### Exotic Tables (Manual Delta Log)
 
 ```python
 from hive_table_experiments import convert_hive_to_delta_uc
@@ -151,10 +108,21 @@ WITH (STORAGE CREDENTIAL hive_migration_cred);
 
 | Client | Read After Migration | Write After Migration |
 |--------|---------------------|----------------------|
-| Delta/UC | ✅ Full access | ✅ Full access |
-| Hive/Glue | ⚠️ Works (ignores `_delta_log`) | ❌ Corrupts Delta table |
+| Delta/UC | ✅ Full access | ‼️ Full access, BUT likely to corrupt Hive reads |
+| Hive/Glue | ✅ Works (ignores `_delta_log`) | ⚠️ Works, but likely to corrupt delta metadata (until you regenerate it, so not a huge deal) |
 
-**Recommendation:** Migrate all writers to Delta/UC. Readers can transition gradually.
+**Recommendation:** 
+- Feel free to register hive tables as delta tables without worrying about breaking hive readers or writers
+- Direct writes to the delta table will be a 1 way door, so do not do this until you are certain you will no longer be reading or writing with hive table connections
+- Hive reads and writes are safe, but you may need to regenerate delta metadata based on the nature of changes
+    - Hive appends won't corrupt the delta metadata, but the delta table won't show the new records until metadata is regenerated
+    - Any other Hive write operation besides append will corrupt the delta metadata.
+    - Delta metadata corruption in this case sounds scarier than it is - it just means the delta metadata will point to data files that either don't exist anymore or are no longer part of the hive table due to dynamic partition changes.
+    - Delta metadata is reliable and simple to regenerate. It may be expensive to do constantly, but you'll have to run the library for yourself to determine that. There's no reason other than time and cost that you couldn't just schedule metadata refreshes after your hive writers are finished though 💪
+- ✨ In a VERY cool twist, you can shallow clone the registered delta tables you convert!
+      - this is extremely powerful as it allows you to "branch" your hive tables safely.
+      - for migrations, you may want to shallow clone your delta tables and use those shallow clones to accept full read/write operations safely without impacting your hive table processes.
+      - this let's you do pre-production validation of your migrated transformation pipelines and actually compare your outputs against live data with formal tests, like with dbt for example ✅
 
 ### Storage Cleanup
 
@@ -163,11 +131,13 @@ For tables with external partitions that receive UPDATE/DELETE operations:
 - Old external files become orphaned over time
 - Run `external_vacuum` periodically to clean up
 
-For read-only or INSERT-only tables, no cleanup needed.
+For read-only or INSERT-only tables, no cleanup needed unless you perform any OPTIMIZE operations. OPTIMIZE often rewrites smaller files into a larger single file, which will look like deletes of the smaller files. Those smaller files are candidates for vacuum cleanup just like any traditional delete operation.
 
 ### Cold Storage (Glacier)
 
 Manual Delta Log approach is safe for cold storage - it reads only Glue metadata, not data files.
+
+‼️ You should still think twice before registering these tables. Do NOT register these tables until you have a rock solid access control pattern to guarantee no accidental reads against these cold storage data files are possible by accident. Your costs will skyrocket faster than you can say "cold storage object retrieval fees".
 
 ---
 
@@ -188,9 +158,12 @@ Validated scenarios with fresh test data:
 | Scenario | Partitions | Conversion | All Ops via Serverless |
 |----------|------------|------------|------------------------|
 | standard | 2 (under root) | ✅ | ✅ |
-| scattered | 2 (1 external path) | ✅ | ✅ |
+| scattered | 2 (1 partition in the same bucket but outside the table root) | ✅ | ✅ |
 | cross_bucket | 2 (different buckets) | ✅ | ✅ |
 | cross_region | 2 (us-east-1, us-west-2) | ✅ | ✅ |
-| recursive | 3 (nested dirs) | ✅ | ✅ |
+| recursive | 3 (with non-hive-partitioned nested dirs) | ✅ | ✅ |
 
 All operations tested: SELECT, UPDATE, DELETE, OPTIMIZE, VACUUM, external_vacuum.
+
+‼️ Note - VACUUM calls will complete without error even when they fail to actually vacuum files outside of the table root. 
+🧠 Tip - S3 Asset Inventory datasets can help a TON with monitoring and auditing this process. It is well worth enabling and applying a few simple charts on top of this data set during your migration.
