@@ -28,6 +28,7 @@ from botocore.config import Config
 # Import from hive_to_delta package
 from hive_to_delta import convert_tables
 from hive_to_delta.converter import convert_single_table
+from hive_to_delta.delta_log import build_delta_schema
 from hive_to_delta.models import ConversionResult
 
 # Import SQL warehouse query helper for cross-bucket/cross-region verification
@@ -568,3 +569,75 @@ class TestCrossRegionScenario:
 
             assert result.success, f"Conversion of {table_name} failed: {result.error}"
             print(f"  Converted {table_name}: {result.file_count} files")
+
+
+# =============================================================================
+# Schema Validation Tests
+# =============================================================================
+
+
+class TestSchemaValidation:
+    """Tests for schema validation in build_delta_schema."""
+
+    def test_empty_column_list_raises_error(self):
+        """Test that empty column list raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid Glue schema: no columns provided"):
+            build_delta_schema([])
+
+    def test_column_with_empty_name_raises_error(self):
+        """Test that column with empty name raises ValueError."""
+        columns = [
+            {"Name": "valid_column", "Type": "string"},
+            {"Name": "", "Type": "string"},
+        ]
+        with pytest.raises(ValueError, match="Invalid Glue schema: column without name found"):
+            build_delta_schema(columns)
+
+    def test_column_with_whitespace_name_raises_error(self):
+        """Test that column with only whitespace name raises ValueError."""
+        columns = [
+            {"Name": "valid_column", "Type": "string"},
+            {"Name": "   ", "Type": "string"},
+        ]
+        with pytest.raises(ValueError, match="Invalid Glue schema: column without name found"):
+            build_delta_schema(columns)
+
+    def test_column_with_missing_name_key_raises_error(self):
+        """Test that column without Name key (and no name fallback) raises ValueError."""
+        columns = [
+            {"Name": "valid_column", "Type": "string"},
+            {"Type": "string"},  # Missing Name key
+        ]
+        with pytest.raises(ValueError, match="Invalid Glue schema: column without name found"):
+            build_delta_schema(columns)
+
+    def test_valid_schema_with_multiple_columns(self):
+        """Test that valid schema with multiple columns works correctly."""
+        columns = [
+            {"Name": "id", "Type": "bigint"},
+            {"Name": "name", "Type": "string"},
+            {"Name": "created_at", "Type": "timestamp"},
+        ]
+        schema = build_delta_schema(columns)
+
+        assert schema["type"] == "struct"
+        assert len(schema["fields"]) == 3
+        assert schema["fields"][0]["name"] == "id"
+        assert schema["fields"][0]["type"] == "long"
+        assert schema["fields"][1]["name"] == "name"
+        assert schema["fields"][1]["type"] == "string"
+        assert schema["fields"][2]["name"] == "created_at"
+        assert schema["fields"][2]["type"] == "timestamp"
+
+    def test_valid_schema_with_lowercase_keys(self):
+        """Test that schema with lowercase 'name' and 'type' keys works."""
+        columns = [
+            {"name": "id", "type": "bigint"},
+            {"name": "value", "type": "double"},
+        ]
+        schema = build_delta_schema(columns)
+
+        assert schema["type"] == "struct"
+        assert len(schema["fields"]) == 2
+        assert schema["fields"][0]["name"] == "id"
+        assert schema["fields"][1]["name"] == "value"

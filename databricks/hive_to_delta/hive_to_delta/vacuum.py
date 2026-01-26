@@ -14,12 +14,15 @@ the table root. Standard VACUUM handles files under the table root.
 """
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
 from urllib.parse import unquote
 
 from hive_to_delta.models import VacuumResult
 from hive_to_delta.s3 import get_s3_client, parse_s3_path
+
+logger = logging.getLogger(__name__)
 
 
 def get_delta_log_entries(
@@ -77,7 +80,7 @@ def get_delta_log_entries(
                     entry["_version"] = version
                     entries.append(entry)
         except Exception as e:
-            print(f"Warning: Failed to read {key}: {e}")
+            logger.warning(f"Failed to read {key}: {e}")
 
     return entries
 
@@ -248,7 +251,7 @@ def delete_s3_files(
                 bucket_to_keys[bucket] = []
             bucket_to_keys[bucket].append(key)
         except ValueError as e:
-            print(f"Warning: Invalid S3 path {path}: {e}")
+            logger.warning(f"Invalid S3 path {path}: {e}")
 
     # Delete from each bucket (S3 delete_objects handles up to 1000 keys)
     for bucket, keys in bucket_to_keys.items():
@@ -268,13 +271,13 @@ def delete_s3_files(
 
                 # Log failures
                 for error in response.get("Errors", []):
-                    print(
-                        f"Warning: Failed to delete s3://{bucket}/{error['Key']}: "
+                    logger.error(
+                        f"Failed to delete s3://{bucket}/{error['Key']}: "
                         f"{error.get('Message', 'Unknown error')}"
                     )
 
             except Exception as e:
-                print(f"Warning: Batch delete failed for bucket {bucket}: {e}")
+                logger.error(f"Batch delete failed for bucket {bucket}: {e}")
 
     return deleted
 
