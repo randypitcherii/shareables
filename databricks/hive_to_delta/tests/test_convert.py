@@ -31,9 +31,6 @@ from hive_to_delta.converter import convert_single_table
 from hive_to_delta.delta_log import build_delta_schema
 from hive_to_delta.models import ConversionResult
 
-# Import SQL warehouse query helper for cross-bucket/cross-region verification
-from tests.conftest import query_via_sql_warehouse
-
 
 # =============================================================================
 # Configuration
@@ -64,8 +61,8 @@ TEST_TABLES = {
 # Fixtures
 # =============================================================================
 
-# Note: spark, target_catalog, target_schema, glue_database, and aws_region
-# fixtures are provided by conftest.py
+# Note: spark, target_catalog, target_schema, glue_database, aws_region,
+# and sql_warehouse_connection fixtures are provided by conftest.py
 
 
 @pytest.fixture(scope="session")
@@ -180,31 +177,31 @@ class TestConversion:
     @pytest.mark.standard
     @pytest.mark.parametrize("scenario", ["standard"])
     def test_convert_single_table_standard(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
     ):
         """Convert a single standard table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, None, scenario
         )
 
     @pytest.mark.cross_bucket
     @pytest.mark.parametrize("scenario", ["cross_bucket"])
     def test_convert_single_table_cross_bucket(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_connection, scenario
     ):
         """Convert a single cross-bucket table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_connection, scenario
         )
 
     @pytest.mark.cross_region
     @pytest.mark.parametrize("scenario", ["cross_region"])
     def test_convert_single_table_cross_region(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_connection, scenario
     ):
         """Convert a single cross-region table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_connection, scenario
         )
 
     def _run_single_table_conversion_test(
@@ -215,7 +212,7 @@ class TestConversion:
         target_schema: str,
         glue_database: str,
         aws_region: str,
-        sql_warehouse_id: str,
+        sql_warehouse_connection,
         scenario: str,
     ):
         """Convert one table and verify:
@@ -230,7 +227,7 @@ class TestConversion:
             target_schema: Unity Catalog schema name
             glue_database: AWS Glue database name
             aws_region: AWS region
-            sql_warehouse_id: SQL Warehouse ID for cross-bucket/cross-region verification
+            sql_warehouse_connection: SqlWarehouseConnection for cross-bucket/cross-region verification
             scenario: Test scenario key from TEST_TABLES
         """
         config = TEST_TABLES[scenario]
@@ -290,28 +287,20 @@ class TestConversion:
         if scenario in ("cross_bucket", "cross_region"):
             # Cross-bucket/cross-region tables require SQL Warehouse with instance profile + fallback
             # Databricks Connect doesn't support this credential resolution
-            if not sql_warehouse_id:
+            if not sql_warehouse_connection:
                 pytest.skip("SQL warehouse required for cross-bucket/cross-region query verification")
 
             print(f"\nVerifying {scenario} table via SQL Warehouse (instance profile + fallback)")
-            print(f"  Warehouse ID: {sql_warehouse_id}")
 
-            # Query via SQL Warehouse API
-            count_result = query_via_sql_warehouse(
-                sql_warehouse_id,
-                f"SELECT COUNT(*) as cnt FROM {target_table}",
-            )
-            row_count = int(count_result["data"][0][0])
+            # Query via SQL Warehouse connection
+            row_count = sql_warehouse_connection.get_count(target_table)
             print(f"  Row count: {row_count}")
 
             assert row_count > 0, f"Table {target_table} should have at least one row"
 
             # Verify sample data is readable
-            sample_result = query_via_sql_warehouse(
-                sql_warehouse_id,
-                f"SELECT * FROM {target_table} LIMIT 5",
-            )
-            sample_count = len(sample_result["data"])
+            sample_rows = sql_warehouse_connection.get_sample(target_table, limit=5)
+            sample_count = len(sample_rows)
             print(f"  Sample rows retrieved: {sample_count}")
 
             assert sample_count > 0, "Should be able to read sample data from table"

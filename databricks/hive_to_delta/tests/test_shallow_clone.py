@@ -133,13 +133,17 @@ class TestShallowCloneCrossBucket:
 
     @pytest.mark.cross_bucket
     def test_shallow_clone_cross_bucket_creates_clone(
-        self, spark, target_catalog, target_schema
+        self, spark, target_catalog, target_schema, sql_warehouse_connection
     ):
         """Create shallow clone of table with data in external bucket.
 
         Note: This test requires a pre-existing table with cross-bucket data files.
         The shallow clone should reference the same external file locations.
+        Cross-bucket tables require SQL Warehouse for querying.
         """
+        if not sql_warehouse_connection:
+            pytest.skip("SQL Warehouse connection not available for cross-bucket queries")
+
         # This test documents expected behavior for cross-bucket scenarios
         # In production, the source table would have files in multiple buckets
 
@@ -148,7 +152,7 @@ class TestShallowCloneCrossBucket:
 
         # Skip if test table doesn't exist (requires special setup)
         try:
-            spark.sql(f"SELECT 1 FROM {source_table} LIMIT 1").collect()
+            sql_warehouse_connection.get_count(source_table)
         except Exception:
             pytest.skip(f"Cross-bucket test table {source_table} not available")
 
@@ -160,9 +164,9 @@ class TestShallowCloneCrossBucket:
             SHALLOW CLONE {source_table}
         """)
 
-        # Verify clone is queryable
-        source_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {source_table}").collect()[0]["cnt"]
-        target_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {target_table}").collect()[0]["cnt"]
+        # Verify clone is queryable via SQL Warehouse (required for cross-bucket)
+        source_count = sql_warehouse_connection.get_count(source_table)
+        target_count = sql_warehouse_connection.get_count(target_table)
 
         assert source_count == target_count
 
