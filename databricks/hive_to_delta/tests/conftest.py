@@ -196,11 +196,19 @@ class SqlWarehouseConnection:
     def _get_connection(self):
         """Get or create the SQL Warehouse connection."""
         if self._connection is None:
-            self._connection = dbsql.connect(
-                server_hostname=self._hostname,
-                http_path=self._http_path,
-                access_token=self._ws.config.token,
-            )
+            # Use token if available, otherwise use databricks-cli auth
+            if self._ws.config.token:
+                self._connection = dbsql.connect(
+                    server_hostname=self._hostname,
+                    http_path=self._http_path,
+                    access_token=self._ws.config.token,
+                )
+            else:
+                # Use CLI-based authentication (default profile)
+                self._connection = dbsql.connect(
+                    server_hostname=self._hostname,
+                    http_path=self._http_path,
+                )
         return self._connection
 
     def execute(self, sql: str) -> List[Any]:
