@@ -23,7 +23,7 @@ from hive_to_delta.delta_log import (
     generate_delta_log,
     write_delta_log,
 )
-from hive_to_delta.parallel import run_parallel
+from hive_to_delta.parallel import run_parallel, create_summary, ConversionSummary
 
 
 def convert_single_table(
@@ -177,6 +177,7 @@ def convert_tables(
     target_schema: str,
     aws_region: str = "us-east-1",
     max_workers: int = 4,
+    print_summary: bool = True,
 ) -> list[ConversionResult]:
     """Convert multiple Hive tables to Delta in parallel.
 
@@ -193,6 +194,7 @@ def convert_tables(
         target_schema: Unity Catalog schema for the target tables.
         aws_region: AWS region for Glue/S3 operations.
         max_workers: Maximum number of concurrent conversion workers.
+        print_summary: If True, print a summary of results after completion.
 
     Returns:
         List of ConversionResult for each table (in completion order).
@@ -266,5 +268,10 @@ def convert_tables(
             )
         else:
             final_results.append(result)
+
+    # Print summary if requested
+    if print_summary:
+        summary = create_summary(final_results)
+        print(summary)
 
     return final_results

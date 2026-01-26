@@ -18,6 +18,14 @@ Usage:
 from hive_to_delta.converter import convert_single_table, convert_tables
 from hive_to_delta.glue import list_glue_tables
 from hive_to_delta.vacuum import vacuum_external_files
+from hive_to_delta.parallel import ConversionSummary, create_summary
 
-__all__ = ["convert_single_table", "convert_tables", "vacuum_external_files", "list_glue_tables"]
+__all__ = [
+    "convert_single_table",
+    "convert_tables",
+    "vacuum_external_files",
+    "list_glue_tables",
+    "ConversionSummary",
+    "create_summary",
+]
 __version__ = "0.1.0"

@@ -365,3 +365,20 @@ class TestVacuumRespectsRetention:
 
         # Internal paths should be skipped
         assert len(orphaned) == 0
+
+    @pytest.mark.standard
+    def test_vacuum_enforces_minimum_retention_period(self):
+        """Verify vacuum rejects retention periods less than 7 days."""
+        mock_spark = MagicMock()
+
+        result = vacuum_external_files(
+            spark=mock_spark,
+            table_name="catalog.schema.table",
+            retention_hours=24,  # Less than minimum 168 hours
+            dry_run=True,
+        )
+
+        assert not result.success
+        assert result.error is not None
+        assert "168" in result.error  # Should mention minimum hours
+        assert "7 days" in result.error.lower()
