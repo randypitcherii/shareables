@@ -304,6 +304,17 @@ def vacuum_external_files(
     Returns:
         VacuumResult with details of the operation.
     """
+    # Validate retention period (minimum 7 days for safety)
+    MIN_RETENTION_HOURS = 168  # 7 days
+    if retention_hours < MIN_RETENTION_HOURS:
+        return VacuumResult(
+            table_name=table_name,
+            orphaned_files=[],
+            deleted_files=[],
+            dry_run=dry_run,
+            error=f"Retention period must be at least {MIN_RETENTION_HOURS} hours (7 days), got {retention_hours}",
+        )
+
     # Get table location from Spark
     try:
         df = spark.sql(f"DESCRIBE DETAIL {table_name}")

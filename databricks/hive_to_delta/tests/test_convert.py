@@ -10,6 +10,12 @@ Scenarios tested:
 - standard: Tables in a single S3 location
 - cross_bucket: Tables with partitions in different S3 buckets
 - cross_region: Tables with partitions in different AWS regions
+
+NOTE: Cross-bucket and cross-region tables require special credential configuration.
+These tables are queryable via SQL Warehouse (with workspace instance profile + fallback
+enabled on external locations), but NOT via Databricks Connect due to credential
+resolution limitations. The tests verify conversion succeeds and Delta log is valid;
+query verification is skipped for cross-bucket/cross-region when using Databricks Connect.
 """
 
 from typing import Dict
@@ -23,6 +29,9 @@ from botocore.config import Config
 from hive_to_delta import convert_tables
 from hive_to_delta.converter import convert_single_table
 from hive_to_delta.models import ConversionResult
+
+# Import SQL warehouse query helper for cross-bucket/cross-region verification
+from tests.conftest import query_via_sql_warehouse
 
 
 # =============================================================================
@@ -170,31 +179,31 @@ class TestConversion:
     @pytest.mark.standard
     @pytest.mark.parametrize("scenario", ["standard"])
     def test_convert_single_table_standard(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
     ):
         """Convert a single standard table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
         )
 
     @pytest.mark.cross_bucket
     @pytest.mark.parametrize("scenario", ["cross_bucket"])
     def test_convert_single_table_cross_bucket(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
     ):
         """Convert a single cross-bucket table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
         )
 
     @pytest.mark.cross_region
     @pytest.mark.parametrize("scenario", ["cross_region"])
     def test_convert_single_table_cross_region(
-        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+        self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
     ):
         """Convert a single cross-region table and verify results."""
         self._run_single_table_conversion_test(
-            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, scenario
+            spark, s3_clients, target_catalog, target_schema, glue_database, aws_region, sql_warehouse_id, scenario
         )
 
     def _run_single_table_conversion_test(
@@ -205,12 +214,13 @@ class TestConversion:
         target_schema: str,
         glue_database: str,
         aws_region: str,
+        sql_warehouse_id: str,
         scenario: str,
     ):
         """Convert one table and verify:
         - ConversionResult.success is True
         - Delta log was written to S3
-        - Table is queryable via spark.sql
+        - Table is queryable (via spark.sql for standard, via SQL Warehouse for cross-bucket/cross-region)
 
         Args:
             spark: Active Spark session
@@ -219,6 +229,7 @@ class TestConversion:
             target_schema: Unity Catalog schema name
             glue_database: AWS Glue database name
             aws_region: AWS region
+            sql_warehouse_id: SQL Warehouse ID for cross-bucket/cross-region verification
             scenario: Test scenario key from TEST_TABLES
         """
         config = TEST_TABLES[scenario]
@@ -270,22 +281,54 @@ class TestConversion:
         ), "Initial commit (version 0) should exist"
 
         # Assertion 3: Table is queryable via spark.sql
+        # NOTE: Cross-bucket/cross-region tables may fail query via Databricks Connect
+        # due to credential resolution limitations. These tables ARE queryable via SQL Warehouse
+        # with workspace instance profile + fallback enabled on external locations.
         target_table = f"{target_catalog}.{target_schema}.{table_name}"
 
-        row_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {target_table}").collect()[
-            0
-        ]["cnt"]
-        print(f"\nTable query result: {row_count} rows")
+        if scenario in ("cross_bucket", "cross_region"):
+            # Cross-bucket/cross-region tables require SQL Warehouse with instance profile + fallback
+            # Databricks Connect doesn't support this credential resolution
+            if not sql_warehouse_id:
+                pytest.skip("SQL warehouse required for cross-bucket/cross-region query verification")
 
-        assert row_count > 0, f"Table {target_table} should have at least one row"
+            print(f"\nVerifying {scenario} table via SQL Warehouse (instance profile + fallback)")
+            print(f"  Warehouse ID: {sql_warehouse_id}")
 
-        # Verify sample data is readable
-        sample = spark.sql(f"SELECT * FROM {target_table} LIMIT 5").collect()
-        print(f"Sample rows retrieved: {len(sample)}")
-        for row in sample:
-            print(f"  {row}")
+            # Query via SQL Warehouse API
+            count_result = query_via_sql_warehouse(
+                sql_warehouse_id,
+                f"SELECT COUNT(*) as cnt FROM {target_table}",
+            )
+            row_count = int(count_result["data"][0][0])
+            print(f"  Row count: {row_count}")
 
-        assert len(sample) > 0, "Should be able to read sample data from table"
+            assert row_count > 0, f"Table {target_table} should have at least one row"
+
+            # Verify sample data is readable
+            sample_result = query_via_sql_warehouse(
+                sql_warehouse_id,
+                f"SELECT * FROM {target_table} LIMIT 5",
+            )
+            sample_count = len(sample_result["data"])
+            print(f"  Sample rows retrieved: {sample_count}")
+
+            assert sample_count > 0, "Should be able to read sample data from table"
+        else:
+            row_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {target_table}").collect()[
+                0
+            ]["cnt"]
+            print(f"\nTable query result: {row_count} rows")
+
+            assert row_count > 0, f"Table {target_table} should have at least one row"
+
+            # Verify sample data is readable
+            sample = spark.sql(f"SELECT * FROM {target_table} LIMIT 5").collect()
+            print(f"Sample rows retrieved: {len(sample)}")
+            for row in sample:
+                print(f"  {row}")
+
+            assert len(sample) > 0, "Should be able to read sample data from table"
 
         # Verify file count matches expected
         assert result.file_count > 0, "Should have converted at least one file"
