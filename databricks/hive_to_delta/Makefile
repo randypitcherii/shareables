@@ -1,5 +1,13 @@
 .PHONY: help install test test-standard test-cross-bucket test-cross-region \
-	lint format clean setup-tables tf-init tf-plan tf-apply tf-destroy
+	test-verbose test-parallel test-collect lint format clean setup-tables \
+	tf-init tf-plan tf-apply tf-destroy
+
+# Default environment variables for tests
+export AWS_PROFILE ?= aws-sandbox-field-eng_databricks-sandbox-admin
+export AWS_REGION ?= us-east-1
+export HIVE_TO_DELTA_TEST_GLUE_DATABASE ?= hive_to_delta_test
+export HIVE_TO_DELTA_TEST_CATALOG ?= fe_randy_pitcher_workspace_catalog
+export HIVE_TO_DELTA_TEST_SCHEMA ?= hive_to_delta_tests
 
 # Default target
 help:
@@ -7,47 +15,72 @@ help:
 	@echo "=================================="
 	@echo ""
 	@echo "Development:"
-	@echo "  make install          - Install package in editable mode with dev dependencies"
-	@echo "  make test             - Run all pytest tests"
-	@echo "  make test-standard    - Run standard partition layout tests"
+	@echo "  make install           - Install package in editable mode with dev dependencies"
+	@echo "  make test              - Run all pytest tests with verbose output"
+	@echo "  make test-standard     - Run standard partition layout tests"
 	@echo "  make test-cross-bucket - Run cross-bucket partition tests"
 	@echo "  make test-cross-region - Run cross-region partition tests"
-	@echo "  make lint             - Run ruff linter"
-	@echo "  make format           - Format code with ruff"
-	@echo "  make clean            - Remove build artifacts and caches"
-	@echo "  make setup-tables     - Create Glue test tables in AWS"
+	@echo "  make test-verbose      - Run tests with extra verbose output"
+	@echo "  make test-parallel     - Run tests in parallel (4 workers)"
+	@echo "  make test-collect      - Show test collection without running"
+	@echo "  make lint              - Run ruff linter"
+	@echo "  make format            - Format code with ruff"
+	@echo "  make clean             - Remove build artifacts and caches"
+	@echo "  make setup-tables      - Create Glue test tables in AWS"
 	@echo ""
 	@echo "Terraform:"
-	@echo "  make tf-init          - Initialize Terraform"
-	@echo "  make tf-plan          - Plan Terraform changes"
-	@echo "  make tf-apply         - Apply Terraform changes"
-	@echo "  make tf-destroy       - Destroy Terraform resources"
+	@echo "  make tf-init           - Initialize Terraform"
+	@echo "  make tf-plan           - Plan Terraform changes"
+	@echo "  make tf-apply          - Apply Terraform changes"
+	@echo "  make tf-destroy        - Destroy Terraform resources"
 	@echo ""
-	@echo "Environment Variables (for Terraform):"
-	@echo "  AWS_PROFILE           - AWS CLI profile to use"
-	@echo "  AWS_REGION            - AWS region (defaults to us-east-1)"
+	@echo "Environment Variables:"
+	@echo "  AWS_PROFILE                      - AWS CLI profile (default: aws-sandbox-field-eng_databricks-sandbox-admin)"
+	@echo "  AWS_REGION                       - AWS region (default: us-east-1)"
+	@echo "  HIVE_TO_DELTA_TEST_GLUE_DATABASE - Glue database name (default: hive_to_delta_test)"
+	@echo "  HIVE_TO_DELTA_TEST_CATALOG       - Unity Catalog name (default: fe_randy_pitcher_workspace_catalog)"
+	@echo "  HIVE_TO_DELTA_TEST_SCHEMA        - Unity Catalog schema (default: hive_to_delta_tests)"
+	@echo "  HIVE_TO_DELTA_TEST_WAREHOUSE_ID  - SQL Warehouse ID (auto-detected if not set)"
 	@echo ""
 
 # Install package in editable mode with dev dependencies
 install:
 	pip install -e .[dev]
 
-# Run all tests
-# AWS_PROFILE and AWS_REGION are passed through for S3/Glue access
+# Run all tests with verbose output
 test:
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) uv run pytest tests/
+	@echo "=== Running hive_to_delta integration tests ==="
+	@echo "AWS Profile: $(AWS_PROFILE)"
+	@echo "AWS Region: $(AWS_REGION)"
+	@echo "Glue Database: $(HIVE_TO_DELTA_TEST_GLUE_DATABASE)"
+	@echo "Target Catalog: $(HIVE_TO_DELTA_TEST_CATALOG)"
+	@echo "Target Schema: $(HIVE_TO_DELTA_TEST_SCHEMA)"
+	@echo ""
+	uv run pytest tests/ -v
 
 # Run standard partition layout tests
 test-standard:
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) uv run pytest tests/ -m standard
+	uv run pytest tests/ -v -m standard
 
 # Run cross-bucket partition tests
 test-cross-bucket:
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) uv run pytest tests/ -m cross_bucket
+	uv run pytest tests/ -v -m cross_bucket
 
 # Run cross-region partition tests
 test-cross-region:
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) uv run pytest tests/ -m cross_region
+	uv run pytest tests/ -v -m cross_region
+
+# Run tests with extra verbose output
+test-verbose:
+	uv run pytest tests/ -vv
+
+# Run tests in parallel (4 workers)
+test-parallel:
+	uv run pytest tests/ -v -n 4
+
+# Show test collection without running
+test-collect:
+	uv run pytest tests/ --collect-only
 
 # Run ruff linter
 lint:
