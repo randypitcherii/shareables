@@ -3,11 +3,13 @@
 import os
 import subprocess
 import json
-from typing import Dict, Generator, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 import boto3
 import pytest
 from botocore.config import Config
+from databricks import sql as dbsql
+from databricks.sdk import WorkspaceClient
 
 
 @pytest.fixture(scope="session")
@@ -169,80 +171,93 @@ def sql_warehouse_id() -> Optional[str]:
     return None
 
 
-def query_via_sql_warehouse(warehouse_id: str, statement: str, timeout: int = 60) -> dict:
-    """Execute SQL via SQL Warehouse statement API.
+class SqlWarehouseConnection:
+    """SQL Warehouse connection using databricks-sql-connector.
 
-    Used for cross-bucket/cross-region tables that can't be queried via Databricks Connect
-    due to credential resolution limitations. SQL Warehouse with instance profile + fallback
-    CAN query these tables.
+    This provides a reliable way to query cross-bucket/cross-region external tables
+    that Databricks Connect cannot handle due to credential resolution limitations.
+    SQL Warehouse with instance profile + fallback CAN query these tables.
 
-    Args:
-        warehouse_id: SQL warehouse ID
-        statement: SQL statement to execute
-        timeout: Timeout in seconds
-
-    Returns:
-        Dict with 'state', 'row_count', and 'data' keys
-
-    Raises:
-        RuntimeError: If query fails or times out
+    The connection is lazily initialized and reused across queries.
     """
-    import requests
 
-    # Get auth token
-    token_result = subprocess.run(
-        ["databricks", "auth", "token", "-p", "DEFAULT"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    if token_result.returncode != 0:
-        raise RuntimeError(f"Failed to get auth token: {token_result.stderr}")
+    def __init__(self, warehouse_id: str):
+        """Initialize SQL Warehouse connection.
 
-    token_data = json.loads(token_result.stdout)
-    access_token = token_data.get("access_token")
+        Args:
+            warehouse_id: SQL warehouse ID to connect to
+        """
+        self._ws = WorkspaceClient()
+        warehouse = self._ws.warehouses.get(warehouse_id)
+        self._hostname = warehouse.odbc_params.hostname
+        self._http_path = warehouse.odbc_params.path
+        self._connection = None
 
-    # Get host from config
-    host = None
-    try:
-        with open(os.path.expanduser("~/.databrickscfg")) as f:
-            for line in f:
-                if line.strip().startswith("host"):
-                    host = line.split("=")[1].strip()
-                    break
-    except Exception:
-        pass
+    def _get_connection(self):
+        """Get or create the SQL Warehouse connection."""
+        if self._connection is None:
+            self._connection = dbsql.connect(
+                server_hostname=self._hostname,
+                http_path=self._http_path,
+                access_token=self._ws.config.token,
+            )
+        return self._connection
 
-    if not host:
-        raise RuntimeError("Could not determine Databricks host")
+    def execute(self, sql: str) -> List[Any]:
+        """Execute SQL and return all rows.
 
-    # Execute statement
-    url = f"{host}/api/2.0/sql/statements/"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "warehouse_id": warehouse_id,
-        "statement": statement,
-        "wait_timeout": f"{timeout}s",
-    }
+        Args:
+            sql: SQL statement to execute
 
-    response = requests.post(url, headers=headers, json=payload, timeout=timeout + 10)
-    response.raise_for_status()
+        Returns:
+            List of result rows (tuples)
+        """
+        conn = self._get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(sql)
+            return cursor.fetchall() if cursor.description else []
 
-    result = response.json()
-    state = result.get("status", {}).get("state")
+    def get_count(self, table_name: str) -> int:
+        """Get row count for a table.
 
-    if state == "FAILED":
-        error = result.get("status", {}).get("error", {}).get("message", "Unknown error")
-        raise RuntimeError(f"SQL statement failed: {error}")
+        Args:
+            table_name: Fully-qualified table name
 
-    if state != "SUCCEEDED":
-        raise RuntimeError(f"SQL statement did not succeed: {state}")
+        Returns:
+            Row count
+        """
+        result = self.execute(f"SELECT COUNT(*) FROM {table_name}")
+        return result[0][0] if result else 0
 
-    return {
-        "state": state,
-        "row_count": result.get("manifest", {}).get("total_row_count", 0),
-        "data": result.get("result", {}).get("data_array", []),
-    }
+    def get_sample(self, table_name: str, limit: int = 5) -> List[Any]:
+        """Get sample rows from a table.
+
+        Args:
+            table_name: Fully-qualified table name
+            limit: Number of rows to return
+
+        Returns:
+            List of sample rows
+        """
+        return self.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+
+    def close(self):
+        """Close the connection."""
+        if self._connection:
+            self._connection.close()
+
+
+@pytest.fixture(scope="session")
+def sql_warehouse_connection(sql_warehouse_id) -> Optional[SqlWarehouseConnection]:
+    """Create SQL Warehouse connection for cross-bucket/cross-region queries.
+
+    Yields:
+        SqlWarehouseConnection if warehouse is available, None otherwise
+    """
+    if not sql_warehouse_id:
+        yield None
+        return
+
+    conn = SqlWarehouseConnection(sql_warehouse_id)
+    yield conn
+    conn.close()

@@ -46,10 +46,15 @@ SCENARIOS = list(SCENARIO_TABLE_MAP.keys())
 
 @pytest.fixture(scope="module")
 def converted_tables(spark, target_catalog, target_schema, glue_database, aws_region, cleanup_tables):
-    """Convert tables once per module, return mapping of scenario -> UC table name.
+    """Convert tables once per module, return mapping of scenario -> table info.
 
     Converts the Glue tables to Delta format and registers them in Unity Catalog.
     Tables are cleaned up after the test module completes.
+
+    Returns:
+        Dict mapping scenario -> dict with keys:
+            - table: Fully-qualified UC table name
+            - needs_sql_warehouse: True if SELECT queries need SQL Warehouse
     """
     tables = {}
 
@@ -74,9 +79,14 @@ def converted_tables(spark, target_catalog, target_schema, glue_database, aws_re
         )
 
         if result.success:
-            tables[scenario] = uc_table_name
+            # Track which scenarios need SQL Warehouse for SELECT queries
+            needs_sql_warehouse = scenario in ["cross_bucket", "cross_region"]
+            tables[scenario] = {
+                "table": uc_table_name,
+                "needs_sql_warehouse": needs_sql_warehouse,
+            }
             cleanup_tables.append(uc_table_name)
-            print(f"Converted {scenario}: {uc_table_name}")
+            print(f"Converted {scenario}: {uc_table_name} (needs_sql_warehouse={needs_sql_warehouse})")
         else:
             print(f"Failed to convert {scenario}: {result.error}")
 
@@ -165,34 +175,59 @@ class TestDeltaOperations:
     # -------------------------------------------------------------------------
 
     @pytest.mark.parametrize("scenario", SCENARIOS)
-    def test_select(self, spark, converted_tables, scenario):
+    def test_select(self, spark, sql_warehouse_connection, converted_tables, scenario):
         """Verify SELECT reads return expected data from converted table.
 
         Confirms the table is readable and contains data.
+        For cross-bucket/cross-region scenarios, uses SQL Warehouse connection
+        to avoid Databricks Connect credential resolution issues.
         """
         if scenario not in converted_tables:
             pytest.skip(f"Table for scenario {scenario} was not converted successfully")
 
-        table = converted_tables[scenario]
+        table_info = converted_tables[scenario]
+        table = table_info["table"]
+        needs_sql_warehouse = table_info["needs_sql_warehouse"]
 
         print(f"\n{'='*60}")
         print(f"Testing SELECT on: {table}")
         print(f"Scenario: {scenario}")
+        print(f"Uses SQL Warehouse: {needs_sql_warehouse}")
         print(f"{'='*60}")
 
-        # Basic count query
-        count = spark.sql(f"SELECT COUNT(*) as cnt FROM {table}").collect()[0]["cnt"]
-        print(f"Row count: {count}")
+        # Use SQL Warehouse for cross-bucket/cross-region scenarios
+        if needs_sql_warehouse:
+            if not sql_warehouse_connection:
+                pytest.skip("SQL Warehouse connection not available for cross-bucket/cross-region testing")
 
-        assert count > 0, f"Table {table} has no rows - expected data in converted table"
+            # Basic count query via SQL Warehouse
+            count = sql_warehouse_connection.get_count(table)
+            print(f"Row count: {count}")
 
-        # Sample query to verify data structure
-        sample = spark.sql(f"SELECT * FROM {table} LIMIT 5").collect()
-        print(f"Sample rows retrieved: {len(sample)}")
-        for row in sample:
-            print(f"  {row}")
+            assert count > 0, f"Table {table} has no rows - expected data in converted table"
 
-        assert len(sample) > 0, "Sample query returned no rows"
+            # Sample query to verify data structure
+            sample = sql_warehouse_connection.get_sample(table, limit=5)
+            print(f"Sample rows retrieved: {len(sample)}")
+            for row in sample:
+                print(f"  {row}")
+
+            assert len(sample) > 0, "Sample query returned no rows"
+        else:
+            # Use Databricks Connect for standard scenarios
+            # Basic count query
+            count = spark.sql(f"SELECT COUNT(*) as cnt FROM {table}").collect()[0]["cnt"]
+            print(f"Row count: {count}")
+
+            assert count > 0, f"Table {table} has no rows - expected data in converted table"
+
+            # Sample query to verify data structure
+            sample = spark.sql(f"SELECT * FROM {table} LIMIT 5").collect()
+            print(f"Sample rows retrieved: {len(sample)}")
+            for row in sample:
+                print(f"  {row}")
+
+            assert len(sample) > 0, "Sample query returned no rows"
 
     # -------------------------------------------------------------------------
     # INSERT Tests
@@ -207,7 +242,7 @@ class TestDeltaOperations:
         if scenario not in converted_tables:
             pytest.skip(f"Table for scenario {scenario} was not converted successfully")
 
-        table = converted_tables[scenario]
+        table = converted_tables[scenario]["table"]
 
         # Get table location from DESCRIBE DETAIL
         detail = spark.sql(f"DESCRIBE DETAIL {table}").collect()[0]
@@ -285,7 +320,7 @@ class TestDeltaOperations:
         if scenario not in converted_tables:
             pytest.skip(f"Table for scenario {scenario} was not converted successfully")
 
-        table = converted_tables[scenario]
+        table = converted_tables[scenario]["table"]
 
         print(f"\n{'='*60}")
         print(f"Testing UPDATE on: {table}")
@@ -352,7 +387,7 @@ class TestDeltaOperations:
         if scenario not in converted_tables:
             pytest.skip(f"Table for scenario {scenario} was not converted successfully")
 
-        table = converted_tables[scenario]
+        table = converted_tables[scenario]["table"]
 
         print(f"\n{'='*60}")
         print(f"Testing OPTIMIZE on: {table}")
@@ -433,7 +468,7 @@ class TestDeltaOperations:
         if scenario not in converted_tables:
             pytest.skip(f"Table for scenario {scenario} was not converted successfully")
 
-        table = converted_tables[scenario]
+        table = converted_tables[scenario]["table"]
 
         # Get table location from DESCRIBE DETAIL
         detail = spark.sql(f"DESCRIBE DETAIL {table}").collect()[0]
