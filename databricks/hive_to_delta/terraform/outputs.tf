@@ -3,6 +3,16 @@ output "role_arn" {
   value       = aws_iam_role.databricks_glue.arn
 }
 
+output "instance_profile_arn" {
+  description = "IAM instance profile ARN for SQL Warehouse configuration"
+  value       = aws_iam_instance_profile.databricks_htd.arn
+}
+
+output "instance_profile_name" {
+  description = "IAM instance profile name"
+  value       = aws_iam_instance_profile.databricks_htd.name
+}
+
 output "bucket_east_1a" {
   description = "Name of the primary S3 bucket in us-east-1"
   value       = aws_s3_bucket.east_1a.bucket
@@ -67,7 +77,10 @@ output "next_steps" {
     1. Use the Role ARN for Databricks storage credential:
        - ${aws_iam_role.databricks_glue.arn}
 
-    2. Copy the AWS credentials for local testing:
+    2. Use the Instance Profile ARN for SQL Warehouse configuration:
+       - ${aws_iam_instance_profile.databricks_htd.arn}
+
+    3. Copy the AWS credentials for local testing:
        - Access Key ID: ${aws_iam_access_key.databricks_user.id}
        - Secret Access Key: (run `terraform output -raw aws_secret_access_key`)
 
@@ -91,7 +104,11 @@ output "next_steps" {
 
     1. Configure Unity Catalog storage credential in Databricks
     2. Create external location pointing to S3 buckets
-    3. Set up Glue catalog connection
-    4. Run conversion tests with hive_to_delta package
+    3. Configure SQL Warehouse with instance profile:
+       databricks warehouses set-workspace-warehouse-config \
+         --instance-profile-arn "${aws_iam_instance_profile.databricks_htd.arn}" \
+         --security-policy DATA_ACCESS_CONTROL
+    4. Set up Glue catalog connection
+    5. Run conversion tests with hive_to_delta package
   EOT
 }

@@ -5,7 +5,7 @@ resource "aws_iam_role" "databricks_glue" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       # Allow Databricks Unity Catalog master role to assume this role
       {
         Sid    = "UCMasterRole"
@@ -29,7 +29,22 @@ resource "aws_iam_role" "databricks_glue" {
         }
         Action = "sts:AssumeRole"
       }
-    ]
+      ],
+      # Conditionally add serverless compute trust policy if workspace IDs provided
+      length(var.databricks_serverless_workspace_ids) > 0 ? [{
+        Sid    = "ServerlessCompute"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${var.databricks_serverless_account_id}:role/serverless-customer-resource-role"
+        }
+        Action = "sts:AssumeRole"
+        Condition = {
+          StringEquals = {
+            "sts:ExternalId" = var.databricks_serverless_workspace_ids
+          }
+        }
+      }] : []
+    )
   })
 
   tags = {
@@ -39,6 +54,18 @@ resource "aws_iam_role" "databricks_glue" {
 
 # Get current AWS account ID
 data "aws_caller_identity" "current" {}
+
+# Instance profile for SQL Warehouse compute
+# Wraps the IAM role so EC2 instances and serverless compute can assume it
+resource "aws_iam_instance_profile" "databricks_htd" {
+  name = "${var.project_prefix}-instance-profile"
+  role = aws_iam_role.databricks_glue.name
+
+  tags = {
+    Name      = "${var.project_prefix}-instance-profile"
+    ManagedBy = "terraform"
+  }
+}
 
 # S3 access policy for all three buckets
 resource "aws_iam_role_policy" "s3_access" {
