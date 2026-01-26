@@ -84,11 +84,20 @@ def build_delta_schema(glue_columns: list[dict[str, str]]) -> dict[str, Any]:
 
     Returns:
         Delta schema dict with 'type': 'struct' and 'fields' list
+
+    Raises:
+        ValueError: If no columns provided or if any column has empty name
     """
+    if not glue_columns:
+        raise ValueError("Invalid Glue schema: no columns provided")
+
     fields = []
 
     for col in glue_columns:
         col_name = col.get("Name", col.get("name", ""))
+        if not col_name or col_name.strip() == "":
+            raise ValueError(f"Invalid Glue schema: column without name found in schema: {col}")
+
         col_type = col.get("Type", col.get("type", "string"))
 
         delta_type = _map_glue_to_delta_type(col_type)

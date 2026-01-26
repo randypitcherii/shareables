@@ -6,12 +6,18 @@ Provides helpers for:
 - Writing content to S3
 """
 
+import logging
+from typing import Any
+
 import boto3
+from botocore.exceptions import ClientError, BotoCoreError
 
 from hive_to_delta.models import ParquetFileInfo
 
+logger = logging.getLogger(__name__)
 
-def get_s3_client(region: str = "us-east-1"):
+
+def get_s3_client(region: str = "us-east-1") -> Any:
     """Create boto3 S3 client.
 
     Args:
@@ -142,9 +148,15 @@ def scan_partition_files(
                             partition_values=partition_values.copy(),
                         )
                     )
+        except (ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS API error scanning {partition_location}: {e}")
+            # Don't add files from this partition to the result
+        except ValueError as e:
+            logger.warning(f"Invalid S3 path {partition_location}: {e}")
         except Exception as e:
-            # Log but continue - some partitions might be in different regions
-            print(f"Warning: Could not scan {partition_location}: {e}")
+            # Re-raise unexpected errors (programming errors)
+            logger.error(f"Unexpected error scanning {partition_location}: {e}")
+            raise
 
     return files
 

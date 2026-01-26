@@ -12,7 +12,7 @@ from typing import Any, Optional
 import boto3
 
 
-def get_glue_client(region: str = "us-east-1") -> boto3.client:
+def get_glue_client(region: str = "us-east-1") -> Any:
     """
     Create a boto3 Glue client.
 
