@@ -40,18 +40,25 @@ All standard partition tests pass successfully using Databricks Connect.
 
 ### Cross-Bucket/Cross-Region Tests ⏸️ BLOCKED
 
-**Issue**: IP ACL restriction on SQL Warehouse access from current environment.
+**Issue**: SQL Warehouse IAM configuration problems
 
-```
-Error: Source IP address: 195.252.198.17 is blocked by Databricks IP ACL
-```
+All available SQL Warehouses (3 total) are configured with IAM roles/instance profiles that don't exist or lack proper trust relationships:
+
+1. **glue_hive_eval** - InvalidInstanceProfileARN: `htd-instance-profile`
+2. **interactive_serverless_wh_uc** - Missing trust relationship: `htd-role`
+3. **dbt_wh** - Status unknown (likely similar issues)
 
 **Impact**:
-- Tests require SQL Warehouse connection which is blocked by workspace IP ACL
-- Standard tests work (Databricks Connect has different routing)
-- Cross-bucket/region tests hang waiting for warehouse connection
+- Warehouses cannot start due to AWS IAM permission errors
+- Tests hang waiting for warehouse to become RUNNING
+- Standard tests work (Databricks Connect doesn't need warehouse)
 
-**Solution**: Run tests from IP-allowed environment (e.g., Databricks notebook, allowed VPN)
+**Root Cause**: Test infrastructure IAM resources from terraform not deployed or misconfigured in AWS account 332745928618
+
+**Solutions**:
+1. Deploy/fix terraform IAM infrastructure (instance profiles, roles, trust policies)
+2. Configure warehouse without these IAM dependencies
+3. Run from Databricks notebook (built-in credentials)
 
 ## Test Execution
 
