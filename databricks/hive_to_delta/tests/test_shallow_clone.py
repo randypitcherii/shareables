@@ -129,49 +129,57 @@ class TestShallowCloneStandard:
 
 
 class TestShallowCloneCrossBucket:
-    """Test shallow clone of cross-bucket tables."""
+    """Test shallow clone behavior with cross-bucket tables.
+
+    Note: Shallow clones in Unity Catalog only work with MANAGED tables.
+    External tables (like our converted Hive tables) cannot be shallow cloned.
+    These tests verify this behavior and document the limitation.
+    """
 
     @pytest.mark.cross_bucket
-    def test_shallow_clone_cross_bucket_creates_clone(
+    def test_shallow_clone_external_table_fails(
         self, spark, target_catalog, target_schema, sql_warehouse_connection
     ):
-        """Create shallow clone of table with data in external bucket.
+        """Verify shallow clone fails for external tables (expected behavior).
 
-        Note: This test requires a pre-existing table with cross-bucket data files.
-        The shallow clone should reference the same external file locations.
-        Cross-bucket tables require SQL Warehouse for querying.
+        Shallow clones in Unity Catalog only work with MANAGED tables.
+        External tables (our converted Hive-to-Delta tables) cannot be shallow cloned.
+        This test documents and verifies this limitation.
         """
-        if not sql_warehouse_connection:
-            pytest.skip("SQL Warehouse connection not available for cross-bucket queries")
+        assert sql_warehouse_connection is not None, (
+            "SQL Warehouse connection required for cross-bucket queries. "
+            "Set HIVE_TO_DELTA_TEST_WAREHOUSE_ID environment variable."
+        )
 
-        # This test documents expected behavior for cross-bucket scenarios
-        # In production, the source table would have files in multiple buckets
-
-        source_table = f"{target_catalog}.{target_schema}.cross_bucket_source"
+        # Use the cross_bucket_table which is an EXTERNAL table
+        source_table = f"{target_catalog}.{target_schema}.cross_bucket_table"
         target_table = f"{target_catalog}.{target_schema}.cross_bucket_clone"
 
-        # Skip if test table doesn't exist (requires special setup)
-        try:
-            sql_warehouse_connection.get_count(source_table)
-        except Exception:
-            pytest.skip(f"Cross-bucket test table {source_table} not available")
-
-        spark.sql(f"DROP TABLE IF EXISTS {target_table}")
-
-        # Create shallow clone
-        spark.sql(f"""
-            CREATE TABLE {target_table}
-            SHALLOW CLONE {source_table}
-        """)
-
-        # Verify clone is queryable via SQL Warehouse (required for cross-bucket)
+        # Verify source table exists
         source_count = sql_warehouse_connection.get_count(source_table)
-        target_count = sql_warehouse_connection.get_count(target_table)
+        assert source_count is not None and source_count > 0, (
+            f"Cross-bucket test table {source_table} not available or empty. "
+            "Run test_convert.py first to create the table."
+        )
 
-        assert source_count == target_count
-
-        # Cleanup
         spark.sql(f"DROP TABLE IF EXISTS {target_table}")
+
+        # Shallow clone should fail for external tables - verify the expected error
+        from pyspark.errors.exceptions.connect import AnalysisException
+
+        with pytest.raises(AnalysisException) as exc_info:
+            spark.sql(f"""
+                CREATE TABLE {target_table}
+                SHALLOW CLONE {source_table}
+            """)
+
+        # Verify the error is about shallow clone not supporting non-managed tables
+        error_message = str(exc_info.value)
+        assert "CANNOT_SHALLOW_CLONE_NON_UC_MANAGED_TABLE_AS_SOURCE_OR_TARGET" in error_message or \
+               "Shallow clone is only supported for the MANAGED table type" in error_message, \
+               f"Expected shallow clone error for external table, got: {error_message}"
+
+        print(f"Confirmed: Shallow clone correctly fails for external table with expected error")
 
     @pytest.mark.cross_bucket
     def test_shallow_clone_cross_bucket_preserves_file_references(self):
