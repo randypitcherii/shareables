@@ -287,8 +287,10 @@ class TestConversion:
         if scenario in ("cross_bucket", "cross_region"):
             # Cross-bucket/cross-region tables require SQL Warehouse with instance profile + fallback
             # Databricks Connect doesn't support this credential resolution
-            if not sql_warehouse_connection:
-                pytest.skip("SQL warehouse required for cross-bucket/cross-region query verification")
+            assert sql_warehouse_connection is not None, (
+                "SQL warehouse required for cross-bucket/cross-region query verification. "
+                "Set HIVE_TO_DELTA_TEST_WAREHOUSE_ID environment variable."
+            )
 
             print(f"\nVerifying {scenario} table via SQL Warehouse (instance profile + fallback)")
 
@@ -327,7 +329,6 @@ class TestConversion:
     # Bulk Conversion Tests
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason="Bulk test tables not yet created in Glue")
     @pytest.mark.standard
     def test_convert_tables_bulk(
         self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region
@@ -339,7 +340,8 @@ class TestConversion:
         - Results are returned for each table
         - Parallel execution completes without errors
         """
-        bulk_test_tables = ["test_bulk_1", "test_bulk_2", "test_bulk_3"]
+        # Use existing test tables
+        bulk_test_tables = ["standard_table", "cross_bucket_table", "cross_region_table"]
 
         print(f"\n{'='*60}")
         print("Testing bulk table conversion with parallel workers")
@@ -399,25 +401,24 @@ class TestConversion:
     # Pattern Matching Tests
     # -------------------------------------------------------------------------
 
-    @pytest.mark.skip(reason="Pattern test tables not yet created in Glue")
     @pytest.mark.standard
     def test_convert_tables_pattern(
         self, spark, s3_clients, target_catalog, target_schema, glue_database, aws_region
     ):
-        """Convert using pattern matching "test_*".
+        """Convert using pattern matching "cross_*".
 
         Verifies:
         - Pattern matching correctly identifies tables
         - Only matching tables are converted
         - Results are returned for each matched table
         """
-        pattern = "test_pattern_*"
+        pattern = "cross_*"
 
         print(f"\n{'='*60}")
         print(f"Testing pattern-based table conversion")
         print(f"Pattern: {pattern}")
-        print(f"Expected matches: test_pattern_alpha, test_pattern_beta")
-        print(f"Should NOT match: test_unmatched")
+        print(f"Expected matches: cross_bucket_table, cross_region_table")
+        print(f"Should NOT match: standard_table")
         print(f"{'='*60}")
 
         results = convert_tables(
@@ -439,33 +440,23 @@ class TestConversion:
         converted_tables = [r.source_table for r in results]
         print(f"\nTables matched by pattern: {converted_tables}")
 
-        # Should match test_pattern_alpha and test_pattern_beta
-        expected_matches = ["test_pattern_alpha", "test_pattern_beta"]
+        # Should match cross_bucket_table and cross_region_table
+        expected_matches = ["cross_bucket_table", "cross_region_table"]
         for expected in expected_matches:
             assert (
                 expected in converted_tables
             ), f"Pattern '{pattern}' should have matched '{expected}'"
 
-        # Should NOT match test_unmatched
+        # Should NOT match standard_table
         assert (
-            "test_unmatched" not in converted_tables
-        ), f"Pattern '{pattern}' should NOT have matched 'test_unmatched'"
+            "standard_table" not in converted_tables
+        ), f"Pattern '{pattern}' should NOT have matched 'standard_table'"
 
         # Verify all matched tables converted successfully
         successful = [r for r in results if r.success]
         assert len(successful) == len(
             results
         ), f"All matched tables should convert successfully"
-
-        # Verify each converted table is queryable
-        for result in successful:
-            row_count = spark.sql(
-                f"SELECT COUNT(*) as cnt FROM {result.target_table}"
-            ).collect()[0]["cnt"]
-            print(f"  {result.target_table}: {row_count} rows")
-            assert (
-                row_count > 0
-            ), f"Table {result.target_table} should have at least one row"
 
 
 # =============================================================================

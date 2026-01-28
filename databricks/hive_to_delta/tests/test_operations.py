@@ -46,10 +46,10 @@ SCENARIOS = list(SCENARIO_TABLE_MAP.keys())
 
 @pytest.fixture(scope="module")
 def converted_tables(spark, target_catalog, target_schema, glue_database, aws_region, cleanup_tables):
-    """Convert tables once per module, return mapping of scenario -> table info.
+    """Get or create tables for operations testing.
 
-    Converts the Glue tables to Delta format and registers them in Unity Catalog.
-    Tables are cleaned up after the test module completes.
+    Uses tables already converted by test_convert.py when they exist.
+    Falls back to converting if not found. Tables are cleaned up after tests.
 
     Returns:
         Dict mapping scenario -> dict with keys:
@@ -59,6 +59,24 @@ def converted_tables(spark, target_catalog, target_schema, glue_database, aws_re
     tables = {}
 
     for scenario, glue_table in SCENARIO_TABLE_MAP.items():
+        # First, try to use the table created by test_convert.py (same name as Glue table)
+        existing_table = f"{target_catalog}.{target_schema}.{glue_table}"
+
+        try:
+            # Check if the table exists and has data
+            count = spark.sql(f"SELECT COUNT(*) as cnt FROM {existing_table}").collect()[0]["cnt"]
+            if count > 0:
+                needs_sql_warehouse = scenario in ["cross_bucket", "cross_region"]
+                tables[scenario] = {
+                    "table": existing_table,
+                    "needs_sql_warehouse": needs_sql_warehouse,
+                }
+                print(f"Using existing {scenario}: {existing_table} ({count} rows, needs_sql_warehouse={needs_sql_warehouse})")
+                continue
+        except Exception as e:
+            print(f"Table {existing_table} not found or not queryable: {e}")
+
+        # Table doesn't exist - convert it
         uc_table_name = f"{target_catalog}.{target_schema}.{glue_table}_ops_test"
 
         # Drop if exists from previous run
@@ -79,7 +97,6 @@ def converted_tables(spark, target_catalog, target_schema, glue_database, aws_re
         )
 
         if result.success:
-            # Track which scenarios need SQL Warehouse for SELECT queries
             needs_sql_warehouse = scenario in ["cross_bucket", "cross_region"]
             tables[scenario] = {
                 "table": uc_table_name,
@@ -182,8 +199,10 @@ class TestDeltaOperations:
         For cross-bucket/cross-region scenarios, uses SQL Warehouse connection
         to avoid Databricks Connect credential resolution issues.
         """
-        if scenario not in converted_tables:
-            pytest.skip(f"Table for scenario {scenario} was not converted successfully")
+        assert scenario in converted_tables, (
+            f"Table for scenario {scenario} was not converted successfully. "
+            "Check converted_tables fixture for conversion errors."
+        )
 
         table_info = converted_tables[scenario]
         table = table_info["table"]
@@ -197,8 +216,10 @@ class TestDeltaOperations:
 
         # Use SQL Warehouse for cross-bucket/cross-region scenarios
         if needs_sql_warehouse:
-            if not sql_warehouse_connection:
-                pytest.skip("SQL Warehouse connection not available for cross-bucket/cross-region testing")
+            assert sql_warehouse_connection is not None, (
+                "SQL Warehouse connection required for cross-bucket/cross-region testing. "
+                "Set HIVE_TO_DELTA_TEST_WAREHOUSE_ID environment variable."
+            )
 
             # Basic count query via SQL Warehouse
             count = sql_warehouse_connection.get_count(table)
@@ -239,8 +260,10 @@ class TestDeltaOperations:
 
         New data should be written to the table root location.
         """
-        if scenario not in converted_tables:
-            pytest.skip(f"Table for scenario {scenario} was not converted successfully")
+        assert scenario in converted_tables, (
+            f"Table for scenario {scenario} was not converted successfully. "
+            "Check converted_tables fixture for conversion errors."
+        )
 
         table = converted_tables[scenario]["table"]
 
@@ -270,14 +293,14 @@ class TestDeltaOperations:
         else:
             partition_col, partition_val = "region", "test"
 
-        # Insert a test row
+        # Insert a test row using the actual table schema: id, name, value, created_at, date
         test_id = 999999
         insert_sql = f"""
             INSERT INTO {table}
             SELECT {test_id} as id,
                    'test_insert' as name,
                    999.99 as value,
-                   true as is_active,
+                   current_timestamp() as created_at,
                    '{partition_val}' as {partition_col}
         """
         print(f"Executing insert...")
@@ -317,8 +340,10 @@ class TestDeltaOperations:
 
         UPDATE creates new files with modified data.
         """
-        if scenario not in converted_tables:
-            pytest.skip(f"Table for scenario {scenario} was not converted successfully")
+        assert scenario in converted_tables, (
+            f"Table for scenario {scenario} was not converted successfully. "
+            "Check converted_tables fixture for conversion errors."
+        )
 
         table = converted_tables[scenario]["table"]
 
@@ -335,14 +360,14 @@ class TestDeltaOperations:
         else:
             partition_col, partition_val = "region", "test"
 
-        # Insert test row
+        # Insert test row using actual schema: id, name, value, created_at, date
         test_id = 888888
         spark.sql(f"""
             INSERT INTO {table}
             SELECT {test_id} as id,
                    'before_update' as name,
                    100.0 as value,
-                   true as is_active,
+                   current_timestamp() as created_at,
                    '{partition_val}' as {partition_col}
         """)
 
@@ -384,8 +409,10 @@ class TestDeltaOperations:
 
         OPTIMIZE should reduce file count while preserving data.
         """
-        if scenario not in converted_tables:
-            pytest.skip(f"Table for scenario {scenario} was not converted successfully")
+        assert scenario in converted_tables, (
+            f"Table for scenario {scenario} was not converted successfully. "
+            "Check converted_tables fixture for conversion errors."
+        )
 
         table = converted_tables[scenario]["table"]
 
@@ -411,6 +438,7 @@ class TestDeltaOperations:
             partition_col, partition_val = "region", "test"
 
         # Insert multiple small rows to create small files
+        # Using actual schema: id, name, value, created_at, date
         test_ids = list(range(500000, 500005))
         for test_id in test_ids:
             spark.sql(f"""
@@ -418,7 +446,7 @@ class TestDeltaOperations:
                 SELECT {test_id} as id,
                        'optimize_test_{test_id}' as name,
                        {test_id}.0 as value,
-                       true as is_active,
+                       current_timestamp() as created_at,
                        '{partition_val}' as {partition_col}
             """)
 
@@ -465,8 +493,10 @@ class TestDeltaOperations:
         Note: Uses default retention (7 days) since retentionDurationCheck
         cannot be disabled via Databricks Connect serverless.
         """
-        if scenario not in converted_tables:
-            pytest.skip(f"Table for scenario {scenario} was not converted successfully")
+        assert scenario in converted_tables, (
+            f"Table for scenario {scenario} was not converted successfully. "
+            "Check converted_tables fixture for conversion errors."
+        )
 
         table = converted_tables[scenario]["table"]
 
@@ -494,13 +524,14 @@ class TestDeltaOperations:
         print(f"Initial parquet files: {initial_parquet_count}")
 
         # Create old file versions via insert/update cycle
+        # Using actual schema: id, name, value, created_at, date
         test_id = 777777
         spark.sql(f"""
             INSERT INTO {table}
             SELECT {test_id} as id,
                    'vacuum_test_v0' as name,
                    1.0 as value,
-                   true as is_active,
+                   current_timestamp() as created_at,
                    '{partition_val}' as {partition_col}
         """)
 
