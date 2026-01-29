@@ -1,0 +1,32 @@
+# Example Terraform variables
+# Copy this to terraform.tfvars and fill in your values
+
+# AWS regions
+aws_region_primary   = "us-east-1"
+aws_region_secondary = "us-west-2"
+
+# Project naming (used as prefix for all created resources)
+project_prefix = "htd"
+
+# Databricks Unity Catalog configuration
+databricks_account_id = "414351767826" # Databricks commercial regions AWS account ID
+
+databricks_uc_master_role_name = "unity-catalog-prod-UCMasterRole-14S5ZJVKOTYTL"
+
+# External ID for Unity Catalog storage credential
+# Get this from: databricks storage-credentials describe <credential_name>
+uc_external_id = "your-external-id-here"
+
+# Databricks workspace ID (optional)
+# Extract from workspace URL: https://dbc-XXXXXXXX-XXXX.cloud.databricks.com
+databricks_workspace_id = ""
+
+# Glue database name
+glue_database_name = "hive_to_delta_test"
+
+# Tags
+tags = {
+  Project     = "Hive to Delta Migration"
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+}
