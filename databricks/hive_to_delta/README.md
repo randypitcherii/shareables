@@ -1212,8 +1212,9 @@ Cross-region queries are 2-3x slower due to network latency. Consider:
 
 - **Quick Start**: See [QUICKSTART.md](QUICKSTART.md) for 15-minute setup
 - **Architecture**: See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design decisions
+- **Testing**: See [TESTING.md](TESTING.md) for test inventory and execution
 - **Terraform Setup**: See [terraform/README.md](terraform/README.md) for infrastructure provisioning
-- **Test Setup**: See [scripts/README.md](scripts/README.md) for integration test configuration
+- **Test Infrastructure Setup**: See [scripts/README.md](scripts/README.md) for AWS/Glue test data configuration
 - **API Details**: See inline docstrings in `hive_to_delta/` modules
 
 ## Support and Contributing
