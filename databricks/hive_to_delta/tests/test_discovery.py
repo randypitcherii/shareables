@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from hive_to_delta.discovery import GlueDiscovery
+from hive_to_delta.discovery import GlueDiscovery, UCDiscovery
 from hive_to_delta.models import TableInfo
 
 
@@ -116,3 +116,42 @@ class TestGlueDiscovery:
         t = result[0]
         assert t.partition_keys == []
         assert len(t.columns) == 2
+
+
+class TestUCDiscovery:
+    """Tests for UCDiscovery pattern matching and filtering."""
+
+    def test_allow_list_filters_tables(self):
+        """Test _matches_fqn with allow patterns."""
+        discovery = UCDiscovery(allow=["hive_metastore.my_db.*"])
+        assert discovery._matches_fqn("hive_metastore.my_db.events", discovery.allow)
+        assert not discovery._matches_fqn(
+            "other_catalog.my_db.events", discovery.allow
+        )
+
+    def test_deny_list_excludes_tables(self):
+        """Test _should_include excludes denied patterns."""
+        discovery = UCDiscovery(
+            allow=["hive_metastore.*.*"],
+            deny=["*.information_schema.*"],
+        )
+        assert not discovery._should_include(
+            "hive_metastore.information_schema.tables"
+        )
+        assert discovery._should_include("hive_metastore.my_db.events")
+
+    def test_default_deny_list(self):
+        """Test default deny excludes information_schema."""
+        discovery = UCDiscovery(allow=["hive_metastore.*.*"])
+        assert not discovery._should_include(
+            "hive_metastore.information_schema.columns"
+        )
+        assert discovery._should_include("hive_metastore.default.my_table")
+
+    def test_multiple_allow_patterns(self):
+        """Test multiple patterns in allow list."""
+        discovery = UCDiscovery(allow=["cat1.db1.*", "cat2.db2.dim_*"])
+        assert discovery._should_include("cat1.db1.events")
+        assert discovery._should_include("cat2.db2.dim_date")
+        assert not discovery._should_include("cat2.db2.fact_sales")
+        assert not discovery._should_include("cat3.db1.events")
