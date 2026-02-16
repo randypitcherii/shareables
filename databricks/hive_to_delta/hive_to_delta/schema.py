@@ -123,11 +123,11 @@ def build_delta_schema_from_spark(spark_schema: Any) -> dict[str, Any]:
 
     fields = []
 
-    for field in spark_schema.fields:
+    for spark_field in spark_schema.fields:
         fields.append({
-            "name": field.name,
-            "type": field.dataType.simpleString(),
-            "nullable": field.nullable,
+            "name": spark_field.name,
+            "type": spark_field.dataType.simpleString(),
+            "nullable": spark_field.nullable,
             "metadata": {},
         })
 

@@ -83,6 +83,36 @@ class S3Listing:
             )
 
 
+def validate_files_df(files_df: Any) -> None:
+    """Validate that a DataFrame has the required columns and types for file listing.
+
+    Args:
+        files_df: Spark DataFrame to validate.
+
+    Raises:
+        ValueError: If required columns are missing or have wrong types.
+    """
+    columns = list(files_df.columns)
+    if "file_path" not in columns:
+        raise ValueError(
+            f"DataFrame must have 'file_path' column, got columns: {columns}"
+        )
+    if "size" not in columns:
+        raise ValueError(
+            f"DataFrame must have 'size' column, got columns: {columns}"
+        )
+
+    dtype_map = {name: dtype for name, dtype in files_df.dtypes}
+    if dtype_map["file_path"] != "string":
+        raise ValueError(
+            f"'file_path' column must be string type, got: {dtype_map['file_path']}"
+        )
+    if dtype_map["size"] not in ("int", "bigint", "long"):
+        raise ValueError(
+            f"'size' column must be int/bigint/long type, got: {dtype_map['size']}"
+        )
+
+
 class InventoryListing:
     """List parquet files from a pre-built inventory DataFrame.
 
@@ -103,41 +133,28 @@ class InventoryListing:
         Raises:
             ValueError: If required columns are missing or have wrong types.
         """
-        columns = list(files_df.columns)
-        if "file_path" not in columns:
-            raise ValueError(
-                f"DataFrame must have 'file_path' column, got columns: {columns}"
-            )
-        if "size" not in columns:
-            raise ValueError(
-                f"DataFrame must have 'size' column, got columns: {columns}"
-            )
-
-        dtype_map = {name: dtype for name, dtype in files_df.dtypes}
-        if dtype_map["file_path"] != "string":
-            raise ValueError(
-                f"'file_path' column must be string type, got: {dtype_map['file_path']}"
-            )
-        if dtype_map["size"] not in ("int", "bigint", "long"):
-            raise ValueError(
-                f"'size' column must be int/bigint/long type, got: {dtype_map['size']}"
-            )
-
+        validate_files_df(files_df)
         self.files_df = files_df
 
     def list_files(self, spark: Any, table: TableInfo) -> list[ParquetFileInfo]:
         """Build ParquetFileInfo list from inventory DataFrame.
 
+        Filters rows to only include files under the table's location prefix,
+        so this works correctly when the DataFrame contains files for multiple tables.
+
         Args:
             spark: Spark session (unused, kept for protocol compatibility).
-            table: Table metadata including partition keys.
+            table: Table metadata including location and partition keys.
 
         Returns:
-            List of ParquetFileInfo built from DataFrame rows.
+            List of ParquetFileInfo built from matching DataFrame rows.
         """
+        location_prefix = table.location.rstrip("/") + "/"
         rows = self.files_df.collect()
         files = []
         for row in rows:
+            if not row.file_path.startswith(location_prefix):
+                continue
             partition_values = (
                 _parse_partition_values(row.file_path, table.partition_keys)
                 if table.partition_keys

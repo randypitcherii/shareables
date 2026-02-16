@@ -13,7 +13,7 @@ import time
 from typing import Any, Optional, Union
 
 from hive_to_delta.delta_log import generate_delta_log, write_delta_log
-from hive_to_delta.listing import InventoryListing, Listing, _parse_partition_values
+from hive_to_delta.listing import Listing, _parse_partition_values, validate_files_df
 from hive_to_delta.models import ConversionResult, ParquetFileInfo, TableInfo
 from hive_to_delta.parallel import ConversionSummary, create_summary, run_parallel
 from hive_to_delta.schema import build_delta_schema_from_glue, build_delta_schema_from_spark
@@ -149,8 +149,8 @@ def convert_table(
     Raises:
         ValueError: If the DataFrame is missing required columns or has wrong types.
     """
-    # Validate DataFrame (reuse InventoryListing validation logic)
-    InventoryListing(files_df)
+    # Validate DataFrame schema
+    validate_files_df(files_df)
 
     partition_keys = partition_columns or []
     table_info = TableInfo(
@@ -364,11 +364,14 @@ def convert_tables(
             return []
         print(f"Found {len(discovered)} tables matching pattern '{tables}'")
     else:
-        # Explicit list — discover all from Glue, filter to requested names
-        discovery = GlueDiscovery(database=glue_database, region=aws_region)
-        all_tables = discovery.discover(spark)
-        table_set = set(tables)
-        discovered = [t for t in all_tables if t.name in table_set]
+        # Explicit list — discover each table individually
+        discovered = []
+        for table_name in tables:
+            discovery = GlueDiscovery(
+                database=glue_database, pattern=table_name, region=aws_region
+            )
+            found = discovery.discover(spark)
+            discovered.extend(found)
 
     if not discovered:
         return []

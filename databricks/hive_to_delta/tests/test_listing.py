@@ -9,6 +9,7 @@ from hive_to_delta.listing import (
     Listing,
     S3Listing,
     _parse_partition_values,
+    validate_files_df,
 )
 from hive_to_delta.models import ParquetFileInfo, TableInfo
 
@@ -45,7 +46,7 @@ class TestS3Listing:
 
         table = TableInfo(
             name="my_table",
-            location="s3://bucket/table/",
+            location="s3://bucket/table",
             partition_keys=["year", "month"],
         )
         listing = S3Listing(region="us-east-1", glue_database="my_db")
@@ -124,7 +125,7 @@ class TestInventoryListing:
             ("s3://bucket/table/file2.parquet", 200),
         ])
         listing = InventoryListing(df)
-        table = TableInfo(name="t", location="s3://bucket/table/", partition_keys=[])
+        table = TableInfo(name="t", location="s3://bucket/table", partition_keys=[])
         spark = MagicMock()
 
         result = listing.list_files(spark, table)
@@ -137,6 +138,23 @@ class TestInventoryListing:
         assert result[1].size == 200
         assert result[1].partition_values == {}
 
+    def test_filters_by_table_location(self):
+        """Files not under table.location are excluded."""
+        df = self._make_mock_df([
+            ("s3://bucket/table_a/file1.parquet", 100),
+            ("s3://bucket/table_b/file2.parquet", 200),
+            ("s3://bucket/table_a/file3.parquet", 300),
+        ])
+        listing = InventoryListing(df)
+        table = TableInfo(name="a", location="s3://bucket/table_a", partition_keys=[])
+        spark = MagicMock()
+
+        result = listing.list_files(spark, table)
+
+        assert len(result) == 2
+        assert result[0].path == "s3://bucket/table_a/file1.parquet"
+        assert result[1].path == "s3://bucket/table_a/file3.parquet"
+
     def test_with_partition_columns(self):
         """Files with partition paths, partition values parsed correctly."""
         df = self._make_mock_df([
@@ -146,7 +164,7 @@ class TestInventoryListing:
         listing = InventoryListing(df)
         table = TableInfo(
             name="t",
-            location="s3://bucket/table/",
+            location="s3://bucket/table",
             partition_keys=["year", "month"],
         )
         spark = MagicMock()
@@ -195,7 +213,7 @@ class TestInventoryListing:
         listing = InventoryListing(df)
         table = TableInfo(
             name="t",
-            location="s3://bucket/table/",
+            location="s3://bucket/table",
             partition_keys=["year", "region"],
         )
         spark = MagicMock()
@@ -209,6 +227,31 @@ class TestInventoryListing:
         """InventoryListing should satisfy the Listing protocol."""
         df = self._make_mock_df([])
         assert isinstance(InventoryListing(df), Listing)
+
+
+class TestValidateFilesDf:
+    """Tests for the standalone validate_files_df function."""
+
+    def _make_mock_df(self, columns=None, dtypes=None):
+        df = MagicMock()
+        df.columns = columns or ["file_path", "size"]
+        df.dtypes = dtypes or [("file_path", "string"), ("size", "bigint")]
+        return df
+
+    def test_valid_df_passes(self):
+        """Valid DataFrame passes without raising."""
+        df = self._make_mock_df()
+        validate_files_df(df)  # Should not raise
+
+    def test_missing_file_path_raises(self):
+        df = self._make_mock_df(columns=["path", "size"])
+        with pytest.raises(ValueError, match="file_path"):
+            validate_files_df(df)
+
+    def test_missing_size_raises(self):
+        df = self._make_mock_df(columns=["file_path", "bytes"])
+        with pytest.raises(ValueError, match="size"):
+            validate_files_df(df)
 
 
 class TestParsePartitionValues:

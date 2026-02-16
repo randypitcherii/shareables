@@ -15,7 +15,7 @@ API Tiers:
 
 from hive_to_delta.converter import convert_table, convert, convert_single_table, convert_tables
 from hive_to_delta.discovery import Discovery, GlueDiscovery, UCDiscovery
-from hive_to_delta.listing import Listing, S3Listing, InventoryListing
+from hive_to_delta.listing import Listing, S3Listing, InventoryListing, validate_files_df
 from hive_to_delta.models import TableInfo, ParquetFileInfo, ConversionResult
 from hive_to_delta.glue import list_glue_tables
 from hive_to_delta.vacuum import vacuum_external_files
@@ -32,6 +32,7 @@ __all__ = [
     "Listing",
     "S3Listing",
     "InventoryListing",
+    "validate_files_df",
     "TableInfo",
     "ParquetFileInfo",
     "ConversionResult",
