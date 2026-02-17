@@ -33,6 +33,7 @@ markers = [
     "standard: Standard partition layout tests",
     "cross_bucket: Cross-bucket partition tests",
     "cross_region: Cross-region partition tests",
+    "infrastructure: Tests requiring live Databricks/AWS infrastructure",
 ]
 
 [tool.ruff]
