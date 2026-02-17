@@ -16,12 +16,46 @@ from hive_to_delta.delta_log import generate_delta_log, write_delta_log
 from hive_to_delta.listing import Listing, _parse_partition_values, validate_files_df
 from hive_to_delta.models import ConversionResult, ParquetFileInfo, TableInfo
 from hive_to_delta.parallel import ConversionSummary, create_summary, run_parallel
+from hive_to_delta.s3 import parse_s3_path, get_s3_client
 from hive_to_delta.schema import build_delta_schema_from_glue, build_delta_schema_from_spark
 
 
 # =============================================================================
 # Shared internal pipeline
 # =============================================================================
+
+
+def _delete_existing_delta_log(table_location: str, aws_region: str = "us-east-1") -> None:
+    """Delete any existing _delta_log directory at the table location.
+
+    This prevents Spark from detecting a Delta table when we need to read
+    raw parquet files for schema inference. Without this, Spark will refuse
+    to read parquet files under a directory that has a _delta_log.
+
+    Args:
+        table_location: S3 root path for the table data.
+        aws_region: AWS region for S3 operations.
+    """
+    table_location = table_location.rstrip("/")
+    delta_log_prefix = f"{table_location}/_delta_log/"
+    bucket, prefix = parse_s3_path(delta_log_prefix)
+
+    try:
+        s3 = get_s3_client(aws_region)
+        paginator = s3.get_paginator("list_objects_v2")
+
+        objects_to_delete = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                objects_to_delete.append({"Key": obj["Key"]})
+
+        if objects_to_delete:
+            # Delete in batches of 1000 (S3 API limit)
+            for i in range(0, len(objects_to_delete), 1000):
+                batch = objects_to_delete[i : i + 1000]
+                s3.delete_objects(Bucket=bucket, Delete={"Objects": batch})
+    except Exception:
+        pass  # Best-effort cleanup; proceed with conversion
 
 
 def _convert_one_table(
@@ -64,12 +98,29 @@ def _convert_one_table(
         )
 
     try:
+        # Delete any existing delta log to prevent conflicts with schema
+        # inference and to ensure a clean conversion
+        _delete_existing_delta_log(table_info.location, aws_region)
+
         # Schema inference
         if table_info.columns is not None:
             schema = build_delta_schema_from_glue(table_info.columns)
         else:
             spark_schema = spark.read.parquet(files[0].path).schema
             schema = build_delta_schema_from_spark(spark_schema)
+
+            # Add partition columns to schema if not already present.
+            # Parquet files don't contain partition columns (they're encoded
+            # in directory paths), so we need to add them explicitly.
+            existing_names = {f["name"] for f in schema["fields"]}
+            for pk in table_info.partition_keys:
+                if pk not in existing_names:
+                    schema["fields"].append({
+                        "name": pk,
+                        "type": "string",
+                        "nullable": True,
+                        "metadata": {},
+                    })
 
         # Generate and write delta log
         delta_log_content = generate_delta_log(

@@ -106,6 +106,22 @@ def build_delta_schema_from_glue(glue_columns: list[dict[str, str]]) -> dict[str
     }
 
 
+def _map_spark_to_delta_type(spark_type: str) -> str:
+    """Map a Spark simpleString type to a Delta-compatible type.
+
+    Simple types (bigint, int, etc.) are mapped via GLUE_TO_DELTA_TYPE_MAP.
+    Complex types containing '<' (array<string>, map<string,int>, etc.)
+    are passed through as-is since Delta accepts Spark's format.
+    Decimal types with parameters (decimal(10,2)) are also passed through.
+    """
+    # Complex types with angle brackets: pass through as-is
+    if "<" in spark_type:
+        return spark_type
+
+    # Delegate to the Glue mapper for simple types
+    return _map_glue_to_delta_type(spark_type)
+
+
 def build_delta_schema_from_spark(spark_schema: Any) -> dict[str, Any]:
     """Build Delta schema from a Spark StructType.
 
@@ -124,9 +140,12 @@ def build_delta_schema_from_spark(spark_schema: Any) -> dict[str, Any]:
     fields = []
 
     for spark_field in spark_schema.fields:
+        spark_type = spark_field.dataType.simpleString()
+        delta_type = _map_spark_to_delta_type(spark_type)
+
         fields.append({
             "name": spark_field.name,
-            "type": spark_field.dataType.simpleString(),
+            "type": delta_type,
             "nullable": spark_field.nullable,
             "metadata": {},
         })

@@ -107,6 +107,38 @@ def require_infrastructure(spark):
         )
 
 
+@pytest.fixture(autouse=True)
+def eager_cleanup(spark, cleanup_tables, target_catalog, target_schema):
+    """Eagerly drop all tracked tables before and after each test.
+
+    This prevents LOCATION_OVERLAP errors when multiple tests create
+    tables pointing to the same S3 location. Also drops well-known table
+    names that may exist from other test modules or previous runs.
+    """
+    # Well-known table names that share the standard_table S3 location
+    well_known = [
+        f"{target_catalog}.{target_schema}.standard_table",
+    ]
+
+    # Before test: drop tracked tables and well-known tables
+    for table_name in list(cleanup_tables) + well_known:
+        try:
+            spark.sql(f"DROP TABLE IF EXISTS {table_name}")
+        except Exception:
+            pass
+    cleanup_tables.clear()
+
+    yield
+
+    # After test: drop tables created during this test and well-known tables
+    for table_name in list(cleanup_tables) + well_known:
+        try:
+            spark.sql(f"DROP TABLE IF EXISTS {table_name}")
+        except Exception:
+            pass
+    cleanup_tables.clear()
+
+
 @pytest.fixture(scope="module")
 def glue_table_info(glue_database, aws_region):
     """Discover the standard_table from Glue and return its TableInfo."""
@@ -364,6 +396,9 @@ class TestConvertWithGlueAndS3:
         assert len(results) >= 1, "convert() should return at least one result"
 
         for result in results:
+            # Track for cleanup so subsequent tests don't hit LOCATION_OVERLAP
+            cleanup_tables.append(result.target_table)
+
             assert isinstance(result, ConversionResult)
             assert result.success, f"convert() failed for {result.source_table}: {result.error}"
             assert result.file_count > 0

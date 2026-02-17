@@ -101,7 +101,7 @@ class TestBuildDeltaSchemaFromSpark:
 
         assert schema["fields"][0] == {
             "name": "id",
-            "type": "bigint",
+            "type": "long",
             "nullable": True,
             "metadata": {},
         }
