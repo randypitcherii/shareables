@@ -6,6 +6,7 @@ infrastructure — see test_infrastructure.py for real integration tests.
 """
 
 import json
+import re as _re
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
@@ -59,6 +60,22 @@ def make_mock_files_df(rows):
         mock_rows.append(row)
 
     df.collect.return_value = mock_rows
+
+    # Support .filter(F.col("file_path").startswith(prefix)).collect()
+    # by extracting the prefix from the PySpark Column repr and filtering.
+    def _mock_filter(condition):
+        filtered_df = MagicMock()
+        match = _re.search(r"startswith\(file_path,\s*(.+?)\)", str(condition))
+        if match:
+            prefix = match.group(1)
+            filtered_df.collect.return_value = [
+                r for r in mock_rows if r.file_path.startswith(prefix)
+            ]
+        else:
+            filtered_df.collect.return_value = mock_rows
+        return filtered_df
+
+    df.filter = _mock_filter
     return df
 
 

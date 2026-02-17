@@ -9,8 +9,16 @@ Plus legacy backward-compatible wrappers:
 - convert_tables: Convert multiple tables in parallel via Glue
 """
 
+from __future__ import annotations
+
+import logging
 import time
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+if TYPE_CHECKING:
+    from hive_to_delta.discovery import Discovery
+
+logger = logging.getLogger(__name__)
 
 from hive_to_delta.delta_log import generate_delta_log, write_delta_log
 from hive_to_delta.listing import Listing, _parse_partition_values, validate_files_df
@@ -54,12 +62,12 @@ def _delete_existing_delta_log(table_location: str, aws_region: str = "us-east-1
             for i in range(0, len(objects_to_delete), 1000):
                 batch = objects_to_delete[i : i + 1000]
                 s3.delete_objects(Bucket=bucket, Delete={"Objects": batch})
-    except Exception:
-        pass  # Best-effort cleanup; proceed with conversion
+    except Exception as e:
+        logger.warning("Failed to delete existing delta log at %s: %s", table_location, e)
 
 
 def _convert_one_table(
-    spark,
+    spark: Any,
     table_info: TableInfo,
     files: list[ParquetFileInfo],
     target_catalog: str,
@@ -134,10 +142,10 @@ def _convert_one_table(
         )
 
         # Register in Unity Catalog
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {target_catalog}.{target_schema}")
-        spark.sql(f"DROP TABLE IF EXISTS {target_table}")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{target_catalog}`.`{target_schema}`")
+        spark.sql(f"DROP TABLE IF EXISTS `{target_catalog}`.`{target_schema}`.`{final_name}`")
         spark.sql(
-            f"CREATE TABLE {target_table} USING DELTA LOCATION '{table_info.location}'"
+            f"CREATE TABLE `{target_catalog}`.`{target_schema}`.`{final_name}` USING DELTA LOCATION '{table_info.location}'"
         )
 
         duration = time.perf_counter() - start_time
@@ -170,8 +178,8 @@ def _convert_one_table(
 
 
 def convert_table(
-    spark,
-    files_df,
+    spark: Any,
+    files_df: Any,
     table_location: str,
     target_catalog: str,
     target_schema: str,
@@ -238,9 +246,9 @@ def convert_table(
 
 
 def convert(
-    spark,
-    discovery,
-    listing,
+    spark: Any,
+    discovery: Discovery,
+    listing: Listing,
     target_catalog: str,
     target_schema: str,
     aws_region: str = "us-east-1",
@@ -322,7 +330,7 @@ def convert(
 
 
 def convert_single_table(
-    spark,
+    spark: Any,
     glue_database: str,
     table_name: str,
     target_catalog: str,
@@ -375,7 +383,7 @@ def convert_single_table(
 
 
 def convert_tables(
-    spark,
+    spark: Any,
     glue_database: str,
     tables: Union[list[str], str],
     target_catalog: str,

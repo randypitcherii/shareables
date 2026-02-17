@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional, Protocol, runtime_checkable
 
+from pyspark.sql import functions as F
+
 from hive_to_delta.glue import get_glue_partitions
 from hive_to_delta.models import ParquetFileInfo, TableInfo
 from hive_to_delta.s3 import scan_partition_files
@@ -150,11 +152,10 @@ class InventoryListing:
             List of ParquetFileInfo built from matching DataFrame rows.
         """
         location_prefix = table.location.rstrip("/") + "/"
-        rows = self.files_df.collect()
+        filtered_df = self.files_df.filter(F.col("file_path").startswith(location_prefix))
+        rows = filtered_df.collect()
         files = []
         for row in rows:
-            if not row.file_path.startswith(location_prefix):
-                continue
             partition_values = (
                 _parse_partition_values(row.file_path, table.partition_keys)
                 if table.partition_keys

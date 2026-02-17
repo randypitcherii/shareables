@@ -1,5 +1,6 @@
 """Tests for hive_to_delta.listing module."""
 
+import re as _re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -116,6 +117,23 @@ class TestInventoryListing:
             row.size = size
             mock_rows.append(row)
         df.collect.return_value = mock_rows
+
+        # Support .filter(F.col("file_path").startswith(prefix)).collect()
+        # by extracting the prefix from the PySpark Column repr and filtering.
+        def _mock_filter(condition):
+            filtered_df = MagicMock()
+            # Column.__str__ gives "Column<'startswith(file_path, <prefix>)'>"
+            match = _re.search(r"startswith\(file_path,\s*(.+?)\)", str(condition))
+            if match:
+                prefix = match.group(1)
+                filtered_df.collect.return_value = [
+                    r for r in mock_rows if r.file_path.startswith(prefix)
+                ]
+            else:
+                filtered_df.collect.return_value = mock_rows
+            return filtered_df
+
+        df.filter = _mock_filter
         return df
 
     def test_basic_listing(self):

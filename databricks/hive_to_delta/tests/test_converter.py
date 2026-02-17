@@ -106,12 +106,12 @@ class TestConvertOneTable:
         sql_calls = [c.args[0].strip() for c in spark.sql.call_args_list]
 
         # Check CREATE SCHEMA
-        assert any("CREATE SCHEMA IF NOT EXISTS cat.sch" in s for s in sql_calls)
+        assert any("CREATE SCHEMA IF NOT EXISTS `cat`.`sch`" in s for s in sql_calls)
         # Check DROP TABLE
-        assert any("DROP TABLE IF EXISTS cat.sch.events" in s for s in sql_calls)
+        assert any("DROP TABLE IF EXISTS `cat`.`sch`.`events`" in s for s in sql_calls)
         # Check CREATE TABLE with LOCATION
         assert any(
-            "CREATE TABLE cat.sch.events" in s and "USING DELTA" in s and "s3://bucket/events" in s
+            "CREATE TABLE `cat`.`sch`.`events`" in s and "USING DELTA" in s and "s3://bucket/events" in s
             for s in sql_calls
         )
 
@@ -160,7 +160,7 @@ class TestConvertOneTable:
         assert result.target_table == "cat.sch.raw_events"
         # Verify CREATE TABLE used the override name
         sql_calls = [c.args[0].strip() for c in spark.sql.call_args_list]
-        assert any("cat.sch.raw_events" in s for s in sql_calls)
+        assert any("`cat`.`sch`.`raw_events`" in s for s in sql_calls)
 
 
 # =============================================================================
