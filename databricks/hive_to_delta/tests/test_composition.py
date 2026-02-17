@@ -1,8 +1,8 @@
-"""Integration tests for hive_to_delta composable pipeline.
+"""Composition tests for hive_to_delta composable pipeline.
 
-These tests validate end-to-end flows with realistic mock compositions,
-mocking only at external boundaries (boto3, spark) and letting the real
-internal code (delta_log, schema, converter, listing, discovery) run.
+These tests validate that internal modules compose correctly using mocks
+at external boundaries (boto3, spark). They do NOT test against real
+infrastructure — see test_infrastructure.py for real integration tests.
 """
 
 import json
