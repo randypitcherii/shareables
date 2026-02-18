@@ -10,8 +10,16 @@ cd databricks/hive_to_delta
 # All tests
 make test
 
-# By category
-make test-standard       # Single-location tables (~30s)
+# By category (no infrastructure required)
+make test-unit           # Unit tests (~7s)
+make test-composition    # Composition tests (~7s)
+
+# Infrastructure tests (requires Databricks + AWS)
+make auth-check          # Verify authentication first
+make test-infrastructure # Composable pipeline tests (~47s)
+
+# Legacy scenario tests (requires Databricks + AWS)
+make test-standard       # Single-location tables
 make test-cross-bucket   # Multi-bucket partitions
 make test-cross-region   # Multi-region partitions
 
@@ -23,13 +31,31 @@ make test-collect        # Show what will run
 
 ## Test Inventory
 
-| Test File | Count | Purpose |
-|-----------|-------|---------|
-| `test_convert.py` | 8 | Hive to Delta conversion |
-| `test_vacuum.py` | 10 | External vacuum for orphaned files |
-| `test_operations.py` | 15 | Delta operations (SELECT, INSERT, UPDATE, OPTIMIZE, VACUUM) |
-| `test_shallow_clone.py` | 9 | Shallow clone creation and queries |
-| **Total** | **42** | |
+| Test File | Count | Infra Required? | Purpose |
+|-----------|-------|-----------------|---------|
+| `test_models.py` | 3 | No | TableInfo dataclass |
+| `test_schema.py` | 7 | No | Schema inference (Glue + Spark) |
+| `test_discovery.py` | 16 | No | Discovery strategies |
+| `test_listing.py` | 14 | No | Listing strategies |
+| `test_converter.py` | 23 | No | Converter pipeline |
+| `test_delta_log.py` | 37 | No | Delta log generation |
+| `test_vacuum.py` | 9 | No | External vacuum |
+| `test_composition.py` | 20 | No | Multi-module composition |
+| `test_infrastructure.py` | 17 | Yes | Real Databricks + AWS |
+| `test_convert.py` | 8 | Yes | Legacy conversion |
+| `test_operations.py` | 15 | Yes | Delta operations |
+| `test_shallow_clone.py` | 9 | Yes | Shallow clones |
+
+## Test Categories
+
+| Category | Make Target | Infra Required | What It Tests |
+|----------|-------------|----------------|---------------|
+| Unit | `make test-unit` | No | Models, schema, discovery, listing, converter, delta log, vacuum |
+| Composition | `make test-composition` | No | Multi-module integration without real infrastructure |
+| Infrastructure | `make test-infrastructure` | Yes | End-to-end composable pipeline against real Databricks + AWS |
+| Standard | `make test-standard` | Yes | Legacy single-location table conversion |
+| Cross-bucket | `make test-cross-bucket` | Yes | Legacy multi-bucket partition conversion |
+| Cross-region | `make test-cross-region` | Yes | Legacy multi-region partition conversion |
 
 ## Test Markers
 
