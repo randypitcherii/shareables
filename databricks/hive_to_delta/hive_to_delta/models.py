@@ -53,3 +53,17 @@ class VacuumResult:
         if self.dry_run:
             return f"{self.table_name}: {len(self.orphaned_files)} orphaned files (dry run)"
         return f"{self.table_name}: {len(self.deleted_files)} files deleted"
+
+
+@dataclass
+class TableInfo:
+    """Metadata about a table to be converted.
+
+    Produced by Discovery strategies, consumed by the conversion pipeline.
+    """
+
+    name: str  # Table name
+    location: str  # S3 root path for the table data
+    target_table_name: Optional[str] = None  # Override for UC table name
+    columns: Optional[list[dict[str, str]]] = None  # Glue-style column defs (if available)
+    partition_keys: list[str] = field(default_factory=list)

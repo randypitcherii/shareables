@@ -7,6 +7,7 @@ Register AWS Glue Hive tables as external Delta tables in Databricks Unity Catal
 - [Migration Checklist](MIGRATION_CHECKLIST.md) - Production migration guide
 - [Configuration Guide](#configuration-guide) - Detailed setup instructions
 - [API Reference](#api-reference) - Function documentation
+- [Composable API](#composable-api) - Pluggable discovery + listing strategies
 - [Troubleshooting](#troubleshooting) - Common errors and fixes
 - [Architecture](ARCHITECTURE.md) - How it works internally
 
@@ -16,6 +17,7 @@ Register AWS Glue Hive tables as external Delta tables in Databricks Unity Catal
 - [Installation](#installation)
 - [Configuration Guide](#configuration-guide)
 - [Quick Start](#quick-start)
+- [Composable API](#composable-api)
 - [API Reference](#api-reference)
 - [Usage Scenarios](#usage-scenarios)
 - [How It Works](#how-it-works)
@@ -63,7 +65,72 @@ pip install "hive_to_delta[dev]"
 
 ## Quick Start
 
-### Basic Usage - Single Table
+### Simple API - Single Table from File List
+
+```python
+from databricks.connect import DatabricksSession
+from hive_to_delta import convert_table
+
+spark = DatabricksSession.builder.getOrCreate()
+
+# You provide the file list as a Spark DataFrame
+files_df = spark.read.format("csv").load("s3://my-inventory/files.csv")
+# DataFrame must have columns: file_path (string), size (long)
+
+result = convert_table(
+    spark=spark,
+    files_df=files_df,
+    table_location="s3://my-bucket/my-table/",
+    target_catalog="main",
+    target_schema="bronze",
+    target_table="my_table",
+    partition_columns=["year", "month"],
+    aws_region="us-east-1",
+)
+```
+
+### Composable API - Pluggable Discovery + Listing
+
+```python
+from hive_to_delta import convert, GlueDiscovery, S3Listing
+
+# Choose your strategies
+discovery = GlueDiscovery(database="my_glue_db", pattern="dim_*", region="us-east-1")
+listing = S3Listing(region="us-east-1", glue_database="my_glue_db")
+
+# Convert all matching tables
+results = convert(
+    spark=spark,
+    discovery=discovery,
+    listing=listing,
+    target_catalog="main",
+    target_schema="bronze",
+    max_workers=4,
+)
+```
+
+### Using InventoryListing for Pre-Built File Lists
+
+```python
+from hive_to_delta import convert, GlueDiscovery, InventoryListing
+
+# Load S3 inventory or pre-built file DataFrame
+files_df = spark.read.parquet("s3://my-bucket/inventory/")
+
+# InventoryListing wraps a DataFrame with file_path + size columns
+listing = InventoryListing(files_df)
+discovery = GlueDiscovery(database="my_glue_db", pattern="*", region="us-east-1")
+
+results = convert(
+    spark=spark,
+    discovery=discovery,
+    listing=listing,
+    target_catalog="main",
+    target_schema="bronze",
+)
+```
+
+### Legacy API - Single Table
 
 ```python
 from databricks.connect import DatabricksSession
@@ -150,9 +217,121 @@ with SqlWarehouseConnection(warehouse_id="your_warehouse_id") as conn:
     )
 ```
 
+## Composable API
+
+v0.2.0 introduces a two-tier API alongside the legacy functions:
+
+| Tier | Function | Use Case |
+|------|----------|----------|
+| Simple | `convert_table()` | Single table, you provide the file list |
+| Composable | `convert()` | Bulk conversion with pluggable discovery + listing |
+| Legacy | `convert_single_table()`, `convert_tables()` | Original Glue-only interface (still supported) |
+
+**Discovery strategies** find tables to convert:
+- `GlueDiscovery` -- queries AWS Glue Data Catalog
+- `UCDiscovery` -- queries Unity Catalog / hive_metastore
+
+**Listing strategies** build file lists:
+- `S3Listing` -- scans S3 directly (with optional Glue partition awareness)
+- `InventoryListing` -- wraps a pre-built DataFrame of file paths + sizes
+
+Mix and match any discovery with any listing strategy.
+
 ## API Reference
 
-### convert_single_table
+### convert_table
+
+Converts a single table from a DataFrame of file paths. Tier 1 simple API.
+
+```python
+convert_table(
+    spark: SparkSession,
+    files_df: DataFrame,              # Must have file_path (string) + size (long)
+    table_location: str,              # S3 root path for table data
+    target_catalog: str,
+    target_schema: str,
+    target_table: str,                # Name in Unity Catalog
+    partition_columns: list[str] = None,
+    aws_region: str = "us-east-1",
+) -> ConversionResult
+```
+
+### convert
+
+Converts tables using pluggable discovery and listing strategies. Tier 2 composable API.
+
+```python
+convert(
+    spark: SparkSession,
+    discovery: Discovery,             # GlueDiscovery, UCDiscovery, or custom
+    listing: Listing,                 # S3Listing, InventoryListing, or custom
+    target_catalog: str,
+    target_schema: str,
+    aws_region: str = "us-east-1",
+    max_workers: int = 4,
+    print_summary: bool = True,
+) -> list[ConversionResult]
+```
+
+### GlueDiscovery
+
+Discovers tables by querying the AWS Glue Data Catalog.
+
+```python
+GlueDiscovery(
+    database: str,                    # Glue database name
+    pattern: str = None,              # Glob pattern to filter table names
+    region: str = "us-east-1",
+)
+# discovery.discover(spark) -> list[TableInfo]
+```
+
+### UCDiscovery
+
+Discovers tables from Unity Catalog or hive_metastore.
+
+```python
+UCDiscovery(
+    allow: list[str],                 # FQN glob patterns: ["hive_metastore.my_db.*"]
+    deny: list[str] = ["*.information_schema.*"],
+)
+# discovery.discover(spark) -> list[TableInfo]
+```
+
+### S3Listing
+
+Lists parquet files by scanning S3 directly.
+
+```python
+S3Listing(
+    region: str = "us-east-1",
+    glue_database: str = None,        # If set, uses Glue partitions for discovery
+)
+# listing.list_files(spark, table_info) -> list[ParquetFileInfo]
+```
+
+### InventoryListing
+
+Lists parquet files from a pre-built inventory DataFrame.
+
+```python
+InventoryListing(
+    files_df: DataFrame,              # Must have file_path (string) + size (long)
+)
+# listing.list_files(spark, table_info) -> list[ParquetFileInfo]
+# Filters to files under table_info.location automatically
+```
+
+### validate_files_df
+
+Validates that a DataFrame has the required columns and types for file listing.
+
+```python
+validate_files_df(files_df: DataFrame) -> None
+# Raises ValueError if file_path (string) or size (int/bigint/long) columns are missing
+```
+
+### convert_single_table (legacy)
 
 Converts one table from Glue to Unity Catalog.
 
@@ -751,18 +930,21 @@ If you encounter issues not covered here:
 ## Running Tests
 
 ```bash
-# All tests
-make test
+# By category (no infrastructure required)
+make test-unit           # Unit tests (~7s)
+make test-composition    # Composition tests (~7s)
 
-# By category
-make test-standard       # Single-location tables (~30s)
+# Infrastructure tests (requires Databricks + AWS)
+make auth-check          # Verify authentication first
+make test-infrastructure # Composable pipeline tests (~47s)
+
+# Legacy scenario tests (requires Databricks + AWS)
+make test-standard       # Single-location tables
 make test-cross-bucket   # Multi-bucket partitions
 make test-cross-region   # Multi-region partitions
 
-# Options
-make test-verbose        # Extra verbose output
-make test-parallel       # Run with 4 workers
-make test-collect        # Show what will run
+# All tests
+make test                # Everything
 ```
 
 ## Environment Variables
