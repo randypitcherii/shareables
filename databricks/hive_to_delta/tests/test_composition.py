@@ -34,8 +34,8 @@ def make_mock_spark(parquet_schema_fields=None):
     # Build a realistic Spark schema for parquet inference
     if parquet_schema_fields is None:
         parquet_schema_fields = [
-            SimpleNamespace(name="id", dataType=SimpleNamespace(simpleString=lambda: "bigint"), nullable=False),
-            SimpleNamespace(name="name", dataType=SimpleNamespace(simpleString=lambda: "string"), nullable=True),
+            SimpleNamespace(name="id", dataType=SimpleNamespace(simpleString=lambda: "bigint", jsonValue=lambda: "long"), nullable=False),
+            SimpleNamespace(name="name", dataType=SimpleNamespace(simpleString=lambda: "string", jsonValue=lambda: "string"), nullable=True),
         ]
 
     mock_schema = SimpleNamespace(fields=parquet_schema_fields)
@@ -320,8 +320,8 @@ class TestConvertComposableIntegration:
         mock_write_s3.return_value = "s3://data-bucket/orders/_delta_log/00000000000000000000.json"
 
         spark = make_mock_spark(parquet_schema_fields=[
-            SimpleNamespace(name="id", dataType=SimpleNamespace(simpleString=lambda: "bigint"), nullable=False),
-            SimpleNamespace(name="amount", dataType=SimpleNamespace(simpleString=lambda: "double"), nullable=True),
+            SimpleNamespace(name="id", dataType=SimpleNamespace(simpleString=lambda: "bigint", jsonValue=lambda: "long"), nullable=False),
+            SimpleNamespace(name="amount", dataType=SimpleNamespace(simpleString=lambda: "double", jsonValue=lambda: "double"), nullable=True),
         ])
 
         discovery = GlueDiscovery(database="my_glue_db", pattern="orders", region="us-east-1")
