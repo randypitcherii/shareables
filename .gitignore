@@ -76,6 +76,10 @@ terraform.tfvars
 # Databricks
 .databricks/
 
+# Claude Code
+.claude/
+.beads/
+
 # System Files
 .DS_Store
 Thumbs.db 
