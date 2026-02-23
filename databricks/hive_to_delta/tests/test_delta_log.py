@@ -101,11 +101,40 @@ class TestMapGlueToDeltaType:
         """Test binary type mapping."""
         assert _map_glue_to_delta_type("binary") == "binary"
 
-    def test_complex_types(self):
-        """Test complex type mappings."""
+    def test_bare_complex_types(self):
+        """Test bare complex type names (without parameters) still map correctly."""
         assert _map_glue_to_delta_type("array") == "array"
         assert _map_glue_to_delta_type("map") == "map"
         assert _map_glue_to_delta_type("struct") == "struct"
+
+    def test_parameterized_complex_types(self):
+        """Test parameterized complex types produce Delta protocol JSON objects."""
+        # array<string> → Delta protocol array object
+        result = _map_glue_to_delta_type("array<string>")
+        assert result == {
+            "type": "array",
+            "elementType": "string",
+            "containsNull": True,
+        }
+
+        # map<string,int> → Delta protocol map object
+        result = _map_glue_to_delta_type("map<string,int>")
+        assert result == {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "integer",
+            "valueContainsNull": True,
+        }
+
+        # struct<name:string,age:int> → Delta protocol struct object
+        result = _map_glue_to_delta_type("struct<name:string,age:int>")
+        assert result == {
+            "type": "struct",
+            "fields": [
+                {"name": "name", "type": "string", "nullable": True, "metadata": {}},
+                {"name": "age", "type": "integer", "nullable": True, "metadata": {}},
+            ],
+        }
 
     def test_unknown_type_defaults_to_string(self):
         """Test unknown types default to string."""
@@ -213,8 +242,8 @@ class TestBuildDeltaSchema:
             "metadata": {},
         }
 
-    def test_complex_types(self):
-        """Test complex types (array, map, struct)."""
+    def test_bare_complex_types(self):
+        """Test bare complex type names (backward compat, not realistic Glue output)."""
         columns = [
             {"Name": "col_array", "Type": "array"},
             {"Name": "col_map", "Type": "map"},
@@ -231,6 +260,47 @@ class TestBuildDeltaSchema:
         assert schema["fields"][1]["type"] == "map"
         assert schema["fields"][2]["name"] == "col_struct"
         assert schema["fields"][2]["type"] == "struct"
+
+    def test_parameterized_complex_types_in_schema(self):
+        """Test parameterized complex types produce Delta protocol JSON objects in schema."""
+        columns = [
+            {"Name": "id", "Type": "bigint"},
+            {"Name": "tags", "Type": "array<string>"},
+            {"Name": "properties", "Type": "map<string,int>"},
+            {"Name": "address", "Type": "struct<street:string,city:string,zip:int>"},
+        ]
+        schema = build_delta_schema(columns)
+
+        assert schema["type"] == "struct"
+        assert len(schema["fields"]) == 4
+
+        # Simple type
+        assert schema["fields"][0]["type"] == "long"
+
+        # array<string>
+        assert schema["fields"][1]["type"] == {
+            "type": "array",
+            "elementType": "string",
+            "containsNull": True,
+        }
+
+        # map<string,int>
+        assert schema["fields"][2]["type"] == {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "integer",
+            "valueContainsNull": True,
+        }
+
+        # struct<street:string,city:string,zip:int>
+        assert schema["fields"][3]["type"] == {
+            "type": "struct",
+            "fields": [
+                {"name": "street", "type": "string", "nullable": True, "metadata": {}},
+                {"name": "city", "type": "string", "nullable": True, "metadata": {}},
+                {"name": "zip", "type": "integer", "nullable": True, "metadata": {}},
+            ],
+        }
 
     def test_type_mapping_edge_cases(self):
         """Test type mapping edge cases (unknown types default to string)."""
