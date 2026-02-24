@@ -20,7 +20,7 @@ databricks workspace list
 ## 1. Install Package
 
 ```bash
-pip install hive_to_delta
+pip install "hive_to_delta @ git+https://github.com/randypitcherii/shareables.git#subdirectory=databricks/hive_to_delta"
 ```
 
 ## 2. Set Up Infrastructure (One-Time)
