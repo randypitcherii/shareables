@@ -51,10 +51,10 @@ Don't use this if:
 ## Installation
 
 ```bash
-pip install hive_to_delta
+pip install "hive_to_delta @ git+https://github.com/randypitcherii/shareables.git#subdirectory=databricks/hive_to_delta"
 
 # With development dependencies
-pip install "hive_to_delta[dev]"
+pip install "hive_to_delta[dev] @ git+https://github.com/randypitcherii/shareables.git#subdirectory=databricks/hive_to_delta"
 ```
 
 **Requirements:**
@@ -626,7 +626,7 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install package
-pip install hive_to_delta
+pip install "hive_to_delta @ git+https://github.com/randypitcherii/shareables.git#subdirectory=databricks/hive_to_delta"
 
 # Verify installation
 python -c "from hive_to_delta import convert_tables; print('Ready!')"
@@ -1414,8 +1414,8 @@ Cross-region queries are 2-3x slower due to network latency. Consider:
 
 **Development setup:**
 ```bash
-git clone https://github.com/your-org/hive_to_delta
-cd hive_to_delta
+git clone https://github.com/randypitcherii/shareables.git
+cd shareables/databricks/hive_to_delta
 python -m venv venv
 source venv/bin/activate
 pip install -e ".[dev]"
