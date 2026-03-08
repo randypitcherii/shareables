@@ -70,6 +70,10 @@ log/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+*.tfvars
+*.tfvars.json
+*.tfplan
+tfplan
 .terraform/
 .terraform.lock.hcl
 
@@ -83,3 +87,6 @@ terraform.tfvars
 # System Files
 .DS_Store
 Thumbs.db 
+
+# Dolt database files (added by bd init)
+.dolt/
