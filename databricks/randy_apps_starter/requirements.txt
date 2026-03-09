@@ -1,3 +1,0 @@
-# Dependencies managed by uv — see pyproject.toml + uv.lock
-# This file exists to prevent Databricks Apps runtime errors.
-# The app.yaml command uses `uv sync --frozen` instead.
