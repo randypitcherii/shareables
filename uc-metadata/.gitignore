@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+dev.env
+test.env
+prod.env
+
+frontend/node_modules/
+frontend/.vite/
+.cache/
+
+.DS_Store
