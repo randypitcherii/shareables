@@ -83,6 +83,7 @@ tfplan
 # Claude Code
 .claude/
 .beads/
+.worktrees/
 
 # System Files
 .DS_Store

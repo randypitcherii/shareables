@@ -1,0 +1,20 @@
+command:
+  - bash
+  - -lc
+  - >
+    uvicorn app:app
+    --host 0.0.0.0
+    --port ${DATABRICKS_APP_PORT:-8000}
+    --workers ${UVICORN_WORKERS:-2}
+    --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5}
+    --timeout-graceful-shutdown ${UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN:-10}
+    --limit-concurrency ${UVICORN_LIMIT_CONCURRENCY:-16}
+    --limit-max-requests ${UVICORN_LIMIT_MAX_REQUESTS:-2000}
+
+env:
+  - name: DATABRICKS_OBO_ENABLED
+    value: "true"
+  - name: UVICORN_WORKERS
+    value: "2"
+  - name: SESSION_STATE_DB_PATH
+    value: "/tmp/randy_apps_starter_session_state.sqlite3"
