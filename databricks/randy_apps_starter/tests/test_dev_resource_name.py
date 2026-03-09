@@ -1,8 +1,4 @@
-from pathlib import Path
 import re
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_resource_name import build_dev_resource_name
 

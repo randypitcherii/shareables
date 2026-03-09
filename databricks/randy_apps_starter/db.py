@@ -99,21 +99,19 @@ def check_connectivity() -> dict[str, Any]:
     started = time.time()
     try:
         conn = get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT current_user, current_database(), version()")
-            row = cur.fetchone()
-            latency_ms = int((time.time() - started) * 1000)
-            return {
-                "ok": True,
-                "latency_ms": latency_ms,
-                "current_user": row[0],
-                "database": row[1],
-                "pg_version": row[2],
-                "error": None,
-            }
-        finally:
-            conn.close()
+        cur = conn.cursor()
+        cur.execute("SELECT current_user, current_database(), version()")
+        row = cur.fetchone()
+        conn.close()
+        latency_ms = int((time.time() - started) * 1000)
+        return {
+            "ok": True,
+            "latency_ms": latency_ms,
+            "current_user": row[0],
+            "database": row[1],
+            "pg_version": row[2],
+            "error": None,
+        }
     except Exception as exc:
         latency_ms = int((time.time() - started) * 1000)
         logger.warning("Lakebase connectivity check failed: %s", exc)

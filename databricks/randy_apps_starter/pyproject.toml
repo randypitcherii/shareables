@@ -2,7 +2,7 @@
 name = "randy-databricks-apps-starter"
 version = "0.1.0"
 description = "Randy starter template for Databricks Apps iteration sandbox."
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.116.0",
   "uvicorn[standard]>=0.35.0",

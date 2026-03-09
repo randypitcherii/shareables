@@ -4,16 +4,25 @@ Canonical starter template for rapid Databricks Apps iteration in a sandbox work
 
 ## Current MVP
 
-- Minimal FastAPI service for deploy validation.
-- Health endpoint: `GET /api/v1/healthcheck`
-- **Lakebase (Postgres) connectivity**: `GET /api/v1/db/health` — live database health check
+- FastAPI service with `uv sync --frozen` launch (no pip, no requirements.txt).
+- **Endpoints**:
+  - `GET /` — interactive terminal UI (`static/terminal.html`)
+  - `GET /api/v1/healthcheck` — app health
+  - `GET /api/v1/db/health` — Lakebase connectivity check
+  - `POST /api/v1/shell/run` — execute shell command (JSON response)
+  - `POST /api/v1/shell/stream` — execute shell command (streaming text)
+  - `POST /api/v1/shell/complete` — tab completion candidates
+  - `GET /api/v1/auth/context` — OBO forwarded user/token presence
 - `db.py` module with `get_connection()` helper using M2M OAuth token auth
-- Shell sandbox endpoint: `POST /api/v1/shell/run` (argv-based)
-- Manual exploration UI: `GET /`
-- OBO context endpoint: `GET /api/v1/auth/context`
 - Per-session shell cwd persisted in local SQLite (`SESSION_STATE_DB_PATH`) for multi-worker consistency.
 - Root `Makefile` and `uv` workflow.
 - DAB + Lakebase template defaults (dev branch, prod main).
+
+### Prerequisites
+
+- Python >= 3.10
+- [uv](https://docs.astral.sh/uv/) (pre-installed on Databricks Apps runtime)
+- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install.html)
 
 ## Quick Start
 
@@ -122,10 +131,46 @@ Key details:
 - Endpoint `GET /api/v1/auth/context` reads `x-forwarded-user` and token presence from `x-forwarded-access-token`.
 - The endpoint intentionally reports only token presence (never token value).
 
+## Shell API
+
+Request body for `shell/run` and `shell/stream`:
+
+```json
+{
+  "argv": ["bash", "-lc", "echo hello"],
+  "session_id": "optional-session-id",
+  "timeout_seconds": 20
+}
+```
+
+- `session_id` persists working directory across requests (SQLite-backed)
+- Default timeout: 20 seconds (max 120)
+
+Request body for `shell/complete`:
+
+```json
+{"line": "partial-inp", "session_id": "optional"}
+```
+
+Returns `{input, fragment, common_prefix, completed_input, candidates}`.
+
+## Dependency Management
+
+Dependencies are managed by `uv` via `pyproject.toml` + `uv.lock`. The `app.yaml` command runs
+`uv sync --frozen` before launching uvicorn, so no `pip install` step is needed.
+
+To update dependencies locally:
+
+```bash
+uv add <package>        # adds to pyproject.toml and updates uv.lock
+uv lock                 # regenerate lockfile after manual pyproject.toml edits
+```
+
 ## Notes
 
 - This MVP intentionally prioritizes exploration speed over hardening.
-- Security hardening and default zerobus logging are tracked in beads for follow-up.
+- The shell sandbox has full filesystem and env access — do not expose to untrusted users.
+- Security hardening and default zerobus logging are tracked for follow-up.
 - Local review safety rails:
   - canonical review port: `8000`
   - `make dev` replaces any previous local reviewer process on that port

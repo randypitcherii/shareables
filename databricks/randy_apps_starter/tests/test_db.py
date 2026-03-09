@@ -1,13 +1,9 @@
 """Tests for the db module and /api/v1/db/health endpoint."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-import sys
 import time
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 @pytest.fixture(autouse=True)
