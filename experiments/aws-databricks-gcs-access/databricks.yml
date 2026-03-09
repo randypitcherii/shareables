@@ -1,0 +1,14 @@
+bundle:
+  name: aws_databricks_gcs_access
+
+variables:
+  gcs_bucket:
+    description: GCS bucket name (from Terraform output)
+    default: dbx-gcs-access-experiment
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
