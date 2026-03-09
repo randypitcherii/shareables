@@ -1,0 +1,30 @@
+bundle:
+  name: uc-metadata
+
+include:
+  - bundle/resources/*.yml
+
+variables:
+  lakebase_project_id:
+    description: Lakebase project ID for this app.
+    default: uc-metadata
+  git_branch_slug:
+    description: Sanitized git branch slug used in the dev Lakebase branch ID.
+    default: local
+  lakebase_endpoint_id:
+    description: Endpoint ID for the app's read-write endpoint.
+    default: app-rw
+
+targets:
+  dev:
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+  prod:
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      lakebase_project_id: uc-metadata-prod
+      git_branch_slug: prod
+      lakebase_endpoint_id: app-rw-prod

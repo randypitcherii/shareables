@@ -1,0 +1,60 @@
+bundle:
+  name: randy_apps_starter
+
+include:
+  - bundle/resources/*.yml
+
+variables:
+  app_name:
+    description: Databricks app name.
+    default: randy-apps-starter
+  lakebase_project_id:
+    description: Lakebase project ID for this template.
+    default: randy-apps-starter
+  lakebase_branch_id:
+    description: Lakebase branch ID used by app endpoint.
+    default: dev-${var.git_branch_slug}
+  lakebase_endpoint_id:
+    description: Read-write Lakebase endpoint ID used by app.
+    default: app-rw
+  git_branch_slug:
+    description: Sanitized git branch name used in dev Lakebase branch IDs.
+    default: local
+
+resources:
+  apps:
+    starter_app:
+      name: ${var.app_name}
+      source_code_path: .
+      description: "Randy Databricks Apps starter with shell sandbox MVP"
+      resources:
+        - name: database
+          database:
+            instance_name: ${resources.database_instances.app_database_instance.name}
+            database_name: postgres
+            permission: CAN_CONNECT_AND_CREATE
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    presets:
+      tags:
+        env: dev
+        owner: ${workspace.current_user.userName}
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      app_name: randy-apps-starter
+      lakebase_project_id: randy-apps-starter
+      lakebase_branch_id: main
+      lakebase_endpoint_id: app-rw
+      git_branch_slug: main
+    presets:
+      tags:
+        env: prod

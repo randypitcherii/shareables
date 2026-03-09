@@ -1,0 +1,20 @@
+[project]
+name = "uc-metadata-command-space"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "databricks-sdk>=0.96.0",
+    "databricks-sql-connector>=4.2.5",
+    "fastapi>=0.135.1",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.2",
+    "requests>=2.32.5",
+    "uvicorn[standard]>=0.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
+]
