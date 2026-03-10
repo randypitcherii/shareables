@@ -16,7 +16,11 @@ Three approaches are tested across different Databricks compute types.
 | 4a. Mixed: bucket-specific s3a | Per-bucket s3a config isolates GCS endpoint from default S3 | FAIL | PASS | untested |
 | 4b. Mixed: Python SDK + S3 | Python SDK for GCS + normal Spark SQL for S3 | PASS | PASS | untested |
 | 4c. Mixed: gs:// + s3a:// | GCS connector + normal s3a coexistence | FAIL | PASS | untested |
-| 5. Cloudflare R2 workaround | Uses R2 as S3-compatible cross-cloud intermediary via `s3a://` | untested (no R2 creds) | untested (no R2 creds) | untested |
+| 5a. UC: s3:// + IAM role | s3:// URL with GCS bucket name + IAM role credential | FAIL | N/A | N/A |
+| 5b. UC: r2:// → GCS endpoint | r2:// URL redirected to storage.googleapis.com | FAIL | N/A | N/A |
+| 5c. UC: R2 cred + s3:// | R2 credential type with GCS HMAC keys | FAIL | N/A | N/A |
+| 5d. UC: gs:// on AWS | gs:// URL on AWS workspace | FAIL | N/A | N/A |
+| 5e. UC: creative URLs | s3a://, embedded endpoints, etc. | FAIL | N/A | N/A |
 
 ## Key Findings
 
@@ -39,11 +43,15 @@ Three approaches are tested across different Databricks compute types.
 - **Classic: All three coexistence strategies work.** Bucket-specific s3a config successfully isolates GCS HMAC creds from default S3, Python SDK has zero interference, and gs:// uses a separate filesystem scheme that coexists cleanly with s3a://.
 - **Bucket-specific s3a config is the recommended classic approach** — it allows GCS + S3 reads via Spark SQL without any Python SDK overhead.
 
-### Cloudflare R2 Workaround (Approach 5)
+### UC External Location Tricks (Approach 5)
 
-- **R2 is S3-compatible** — endpoint: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
-- **Per-bucket s3a config** should allow R2 + GCS + S3 access in the same session, each bucket routed to its own endpoint.
-- **R2 requires separate credentials** — create an `r2-experiment` secret scope in Databricks.
+- **UC cannot be tricked into routing S3 requests to GCS.** All five config combinations fail.
+- **UC accepts arbitrary URLs with `skip_validation=True`** (including `gs://` on AWS, `s3a://`, creative paths) but at query time always routes through the standard AWS IAM credential path — no endpoint override is possible.
+- **R2 credential validation is server-side** — GCS HMAC keys are rejected with "Invalid R2 secret access key" before any location can be created.
+- **`s3a://` is silently converted to `s3://`** by UC when creating external locations.
+- **`gs://` is accepted on AWS** (surprisingly) but fails at query time with the same IAM credential error — UC doesn't know how to route `gs://` on AWS.
+- **R2 precedent is telling** — even Cloudflare R2 required a dedicated credential type, URL scheme, filesystem code, and minimum DBR version.
+- **See `UC_EXTERNAL_LOCATION_RESEARCH.md`** for full analysis and API field documentation.
 
 ## Prerequisites
 
@@ -96,7 +104,7 @@ uv run python scripts/01_hmac_s3_compat.py
 uv run python scripts/02_gcs_python_sdk.py
 uv run python scripts/03_gcs_connector_jar.py
 uv run python scripts/04_mixed_gcs_s3_access.py
-uv run python scripts/05_r2_external_storage.py
+uv run python scripts/05_uc_external_location_gcs.py
 ```
 
 **Classic cluster** (set `DATABRICKS_CLUSTER_ID`):
@@ -107,7 +115,7 @@ uv run python scripts/01_hmac_s3_compat.py
 uv run python scripts/02_gcs_python_sdk.py
 uv run python scripts/03_gcs_connector_jar.py
 uv run python scripts/04_mixed_gcs_s3_access.py
-uv run python scripts/05_r2_external_storage.py
+uv run python scripts/05_uc_external_location_gcs.py
 ```
 
 ## Project Structure
@@ -123,7 +131,7 @@ aws-databricks-gcs-access/
 │   ├── 02_gcs_python_sdk.py  # Approach 2: Python SDK
 │   ├── 03_gcs_connector_jar.py  # Approach 3: GCS Connector JAR
 │   ├── 04_mixed_gcs_s3_access.py  # Approach 4: Mixed GCS + S3 coexistence
-│   └── 05_r2_external_storage.py  # Approach 5: Cloudflare R2 workaround
+│   └── 05_uc_external_location_gcs.py  # Approach 5: UC external location tricks
 └── terraform/
     ├── main.tf               # GCP provider config
     ├── variables.tf          # GCP project, region, bucket name
