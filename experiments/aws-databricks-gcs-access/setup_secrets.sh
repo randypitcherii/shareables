@@ -17,6 +17,12 @@ SA_KEY_BASE64=$(terraform -chdir="$TF_DIR" output -raw sa_key_json_base64)
 # Decode the base64-encoded SA key
 SA_KEY_JSON=$(echo "$SA_KEY_BASE64" | base64 --decode)
 
+# Extract individual SA key fields for cluster-level spark_conf
+SA_EMAIL=$(echo "$SA_KEY_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['client_email'])")
+SA_PRIVATE_KEY=$(echo "$SA_KEY_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['private_key'])")
+SA_PRIVATE_KEY_ID=$(echo "$SA_KEY_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['private_key_id'])")
+SA_PROJECT_ID=$(echo "$SA_KEY_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['project_id'])")
+
 SCOPE="gcs-experiment"
 
 echo "Creating secret scope '$SCOPE'..."
@@ -26,6 +32,10 @@ echo "Setting secrets..."
 echo -n "$HMAC_ACCESS_ID" | databricks secrets put-secret "$SCOPE" hmac_access_id
 echo -n "$HMAC_SECRET" | databricks secrets put-secret "$SCOPE" hmac_secret
 echo -n "$SA_KEY_JSON" | databricks secrets put-secret "$SCOPE" sa_key_json
+echo -n "$SA_EMAIL" | databricks secrets put-secret "$SCOPE" sa_email
+echo -n "$SA_PRIVATE_KEY" | databricks secrets put-secret "$SCOPE" sa_private_key
+echo -n "$SA_PRIVATE_KEY_ID" | databricks secrets put-secret "$SCOPE" sa_private_key_id
+echo -n "$SA_PROJECT_ID" | databricks secrets put-secret "$SCOPE" sa_project_id
 
 echo ""
 echo "Done. Secrets configured:"

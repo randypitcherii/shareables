@@ -10,21 +10,32 @@ Three approaches are tested across different Databricks compute types.
 
 | Approach | Description | Serverless | Classic Interactive | Job Cluster |
 |----------|-------------|------------|---------------------|-------------|
-| 1. HMAC / S3-compat (`s3a://`) | Uses GCS HMAC keys with the S3-compatible API via `s3a://` paths and `spark.hadoop.fs.s3a.*` config | FAIL | untested | untested |
-| 2. Python `google-cloud-storage` SDK | Uses the GCP Python SDK to read objects, then loads data into Spark DataFrames | PASS | untested | untested |
-| 3. GCS Connector JAR (`gs://`) | Uses the Hadoop GCS connector with `gs://` paths and `spark.hadoop.google.cloud.*` config | FAIL | untested | untested |
+| 1. HMAC / S3-compat (`s3a://`) | Uses GCS HMAC keys with the S3-compatible API via `s3a://` paths and `spark.hadoop.fs.s3a.*` config | FAIL | PASS | untested |
+| 2. Python `google-cloud-storage` SDK | Uses the GCP Python SDK to read objects, then loads data into Spark DataFrames | PASS | PASS | untested |
+| 3. GCS Connector JAR (`gs://`) | Uses the Hadoop GCS connector with `gs://` paths and `spark.hadoop.google.cloud.*` config | FAIL | PASS | untested |
 
 ## Key Findings
 
+### Serverless
+
 - **Serverless blocks all `spark.hadoop.*` config overrides.** Both Approach 1 and Approach 3 fail with `CONFIG_NOT_AVAILABLE` because serverless compute does not allow setting custom Hadoop configuration.
-- **The Python SDK is the only working serverless path.** Approach 2 bypasses Spark's Hadoop filesystem layer entirely, using the `google-cloud-storage` library to read objects and then constructing Spark DataFrames in Python.
+- **The Python SDK is the only working serverless path.** Approach 2 bypasses Spark's Hadoop filesystem layer entirely, using the `google-cloud-storage` library to read objects via HTTP and then constructing Spark DataFrames in Python.
+
+### Classic Interactive
+
+- **All three approaches work on classic compute** when configs are set at the cluster level (not at runtime via `spark.conf.set()`).
+- **Cluster-level `spark_conf` is required.** Setting `spark.hadoop.*` configs at runtime via `spark.conf.set()` through Databricks Connect does NOT propagate to the Hadoop filesystem layer. The configs must be baked into the cluster definition.
+- **GCS Connector JAR is pre-installed.** Databricks classic clusters include a shaded GCS connector (`shaded.databricks.com.google.cloud.hadoop`), so no custom JAR installation is needed.
+- **Use individual SA key fields, not `json.keyfile`.** The `spark.hadoop.google.cloud.auth.service.account.json.keyfile` config expects a file path on disk. Use the individual field configs (`email`, `private.key`, `private.key.id`) with `{{secrets/scope/key}}` references instead.
+- **Secrets syntax:** Use `{{secrets/gcs-experiment/key_name}}` in cluster `spark_conf` to inject Databricks secrets at cluster startup time.
 
 ## Prerequisites
 
-- A GCP project with a GCS bucket and service account
+- A GCP project with Storage and IAM APIs enabled
 - [Terraform](https://developer.hashicorp.com/terraform/install) (for provisioning GCP resources)
 - [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install.html) (configured for your AWS workspace)
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
+- `gcloud` CLI (authenticated with `gcloud auth login` and `gcloud auth application-default login`)
 
 ## Setup
 
@@ -44,9 +55,15 @@ Three approaches are tested across different Databricks compute types.
    ./setup_secrets.sh
    ```
 
-   This reads Terraform outputs and populates a `gcs-experiment` secret scope with `hmac_access_id`, `hmac_secret`, and `sa_key_json`.
+   This reads Terraform outputs and populates a `gcs-experiment` secret scope with all required secrets.
 
-3. **Install Python dependencies:**
+3. **Deploy the Databricks Asset Bundle** (creates the classic cluster definition):
+
+   ```bash
+   databricks bundle deploy
+   ```
+
+4. **Install Python dependencies:**
 
    ```bash
    uv sync
@@ -54,42 +71,42 @@ Three approaches are tested across different Databricks compute types.
 
 ## Running the Tests
 
-Each script in `scripts/` corresponds to one approach. Run them with `uv run`:
+Each script in `scripts/` corresponds to one approach. Run them with `uv run`.
+
+**Serverless (default):**
 
 ```bash
-# Approach 1: HMAC / S3-compatible access
 uv run python scripts/01_hmac_s3_compat.py
-
-# Approach 2: Python google-cloud-storage SDK
 uv run python scripts/02_gcs_python_sdk.py
-
-# Approach 3: GCS Connector JAR
 uv run python scripts/03_gcs_connector_jar.py
 ```
 
-Equivalent notebook versions are available in `notebooks/` for interactive use in the Databricks workspace.
+**Classic cluster** (set `DATABRICKS_CLUSTER_ID`):
+
+```bash
+export DATABRICKS_CLUSTER_ID=<cluster-id-from-bundle-deploy>
+uv run python scripts/01_hmac_s3_compat.py
+uv run python scripts/02_gcs_python_sdk.py
+uv run python scripts/03_gcs_connector_jar.py
+```
 
 ## Project Structure
 
 ```
 aws-databricks-gcs-access/
-├── databricks.yml            # Databricks Asset Bundle config
+├── databricks.yml            # Databricks Asset Bundle config (cluster + spark_conf)
 ├── pyproject.toml            # Python project and dependencies
-├── uv.lock                   # Locked dependency versions
 ├── setup_secrets.sh          # Populates Databricks secrets from Terraform outputs
-├── notebooks/
-│   ├── 01_hmac_s3_compat.py
-│   ├── 02_gcs_python_sdk.py
-│   └── 03_gcs_connector_jar.py
 ├── scripts/
-│   ├── 01_hmac_s3_compat.py
-│   ├── 02_gcs_python_sdk.py
-│   └── 03_gcs_connector_jar.py
+│   ├── _common.py            # Shared constants and helpers
+│   ├── 01_hmac_s3_compat.py  # Approach 1: HMAC/S3-compatible
+│   ├── 02_gcs_python_sdk.py  # Approach 2: Python SDK
+│   └── 03_gcs_connector_jar.py  # Approach 3: GCS Connector JAR
 └── terraform/
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    ├── gcs.tf
-    ├── hmac.tf
-    └── service_account.tf
+    ├── main.tf               # GCP provider config
+    ├── variables.tf          # GCP project, region, bucket name
+    ├── outputs.tf            # Credential outputs (marked sensitive)
+    ├── gcs.tf                # Bucket + sample data
+    ├── hmac.tf               # HMAC key pair
+    └── service_account.tf    # Service account + IAM bindings
 ```

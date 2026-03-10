@@ -1,5 +1,7 @@
 """Shared constants and helpers for GCS access experiment scripts."""
 
+import os
+
 from databricks.connect import DatabricksSession
 from databricks.sdk import WorkspaceClient
 
@@ -9,8 +11,18 @@ SEPARATOR = "=" * 60
 
 
 def get_spark_and_dbutils():
-    """Initialize Spark session and dbutils from WorkspaceClient."""
-    spark = DatabricksSession.builder.getOrCreate()
+    """Initialize Spark session and dbutils from WorkspaceClient.
+
+    Set DATABRICKS_CLUSTER_ID env var to target a classic cluster.
+    Unset it (or leave default config) for serverless.
+    """
+    cluster_id = os.environ.get("DATABRICKS_CLUSTER_ID")
+    if cluster_id:
+        spark = DatabricksSession.builder.clusterId(cluster_id).getOrCreate()
+        print(f"Connected to classic cluster: {cluster_id}")
+    else:
+        spark = DatabricksSession.builder.getOrCreate()
+        print("Connected via default config (serverless)")
     dbutils = WorkspaceClient().dbutils
     return spark, dbutils
 
