@@ -24,6 +24,11 @@ resources:
         spark.hadoop.fs.s3a.access.key: "{{secrets/gcs-experiment/hmac_access_id}}"
         spark.hadoop.fs.s3a.secret.key: "{{secrets/gcs-experiment/hmac_secret}}"
         spark.hadoop.fs.s3a.path.style.access: "true"
+        # Bucket-specific s3a config for GCS (isolates GCS from default S3)
+        spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.endpoint: "https://storage.googleapis.com"
+        spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.access.key: "{{secrets/gcs-experiment/hmac_access_id}}"
+        spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.secret.key: "{{secrets/gcs-experiment/hmac_secret}}"
+        spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.path.style.access: "true"
         # GCS connector configs for gs:// access
         spark.hadoop.google.cloud.auth.service.account.enable: "true"
         spark.hadoop.google.cloud.auth.service.account.email: "{{secrets/gcs-experiment/sa_email}}"

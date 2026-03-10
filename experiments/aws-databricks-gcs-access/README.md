@@ -13,6 +13,10 @@ Three approaches are tested across different Databricks compute types.
 | 1. HMAC / S3-compat (`s3a://`) | Uses GCS HMAC keys with the S3-compatible API via `s3a://` paths and `spark.hadoop.fs.s3a.*` config | FAIL | PASS | untested |
 | 2. Python `google-cloud-storage` SDK | Uses the GCP Python SDK to read objects, then loads data into Spark DataFrames | PASS | PASS | untested |
 | 3. GCS Connector JAR (`gs://`) | Uses the Hadoop GCS connector with `gs://` paths and `spark.hadoop.google.cloud.*` config | FAIL | PASS | untested |
+| 4a. Mixed: bucket-specific s3a | Per-bucket s3a config isolates GCS endpoint from default S3 | FAIL | PASS | untested |
+| 4b. Mixed: Python SDK + S3 | Python SDK for GCS + normal Spark SQL for S3 | PASS | PASS | untested |
+| 4c. Mixed: gs:// + s3a:// | GCS connector + normal s3a coexistence | FAIL | PASS | untested |
+| 5. Cloudflare R2 workaround | Uses R2 as S3-compatible cross-cloud intermediary via `s3a://` | untested (no R2 creds) | untested (no R2 creds) | untested |
 
 ## Key Findings
 
@@ -28,6 +32,18 @@ Three approaches are tested across different Databricks compute types.
 - **GCS Connector JAR is pre-installed.** Databricks classic clusters include a shaded GCS connector (`shaded.databricks.com.google.cloud.hadoop`), so no custom JAR installation is needed.
 - **Use individual SA key fields, not `json.keyfile`.** The `spark.hadoop.google.cloud.auth.service.account.json.keyfile` config expects a file path on disk. Use the individual field configs (`email`, `private.key`, `private.key.id`) with `{{secrets/scope/key}}` references instead.
 - **Secrets syntax:** Use `{{secrets/gcs-experiment/key_name}}` in cluster `spark_conf` to inject Databricks secrets at cluster startup time.
+
+### Mixed Access (Approach 4)
+
+- **Serverless: Python SDK is the only mixed-access path.** Bucket-specific s3a config (`fs.s3a.bucket.<NAME>.<setting>`) is blocked on serverless with the same `CONFIG_NOT_AVAILABLE` error as global s3a config. The gs:// connector is also blocked.
+- **Classic: All three coexistence strategies work.** Bucket-specific s3a config successfully isolates GCS HMAC creds from default S3, Python SDK has zero interference, and gs:// uses a separate filesystem scheme that coexists cleanly with s3a://.
+- **Bucket-specific s3a config is the recommended classic approach** — it allows GCS + S3 reads via Spark SQL without any Python SDK overhead.
+
+### Cloudflare R2 Workaround (Approach 5)
+
+- **R2 is S3-compatible** — endpoint: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+- **Per-bucket s3a config** should allow R2 + GCS + S3 access in the same session, each bucket routed to its own endpoint.
+- **R2 requires separate credentials** — create an `r2-experiment` secret scope in Databricks.
 
 ## Prerequisites
 
@@ -79,6 +95,8 @@ Each script in `scripts/` corresponds to one approach. Run them with `uv run`.
 uv run python scripts/01_hmac_s3_compat.py
 uv run python scripts/02_gcs_python_sdk.py
 uv run python scripts/03_gcs_connector_jar.py
+uv run python scripts/04_mixed_gcs_s3_access.py
+uv run python scripts/05_r2_external_storage.py
 ```
 
 **Classic cluster** (set `DATABRICKS_CLUSTER_ID`):
@@ -88,6 +106,8 @@ export DATABRICKS_CLUSTER_ID=<cluster-id-from-bundle-deploy>
 uv run python scripts/01_hmac_s3_compat.py
 uv run python scripts/02_gcs_python_sdk.py
 uv run python scripts/03_gcs_connector_jar.py
+uv run python scripts/04_mixed_gcs_s3_access.py
+uv run python scripts/05_r2_external_storage.py
 ```
 
 ## Project Structure
@@ -101,7 +121,9 @@ aws-databricks-gcs-access/
 │   ├── _common.py            # Shared constants and helpers
 │   ├── 01_hmac_s3_compat.py  # Approach 1: HMAC/S3-compatible
 │   ├── 02_gcs_python_sdk.py  # Approach 2: Python SDK
-│   └── 03_gcs_connector_jar.py  # Approach 3: GCS Connector JAR
+│   ├── 03_gcs_connector_jar.py  # Approach 3: GCS Connector JAR
+│   ├── 04_mixed_gcs_s3_access.py  # Approach 4: Mixed GCS + S3 coexistence
+│   └── 05_r2_external_storage.py  # Approach 5: Cloudflare R2 workaround
 └── terraform/
     ├── main.tf               # GCP provider config
     ├── variables.tf          # GCP project, region, bucket name
