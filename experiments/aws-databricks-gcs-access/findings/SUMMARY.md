@@ -12,13 +12,13 @@
 
 | Approach | Serverless | Classic / Job |
 |----------|:----------:|:-------------:|
-| HMAC keys via `s3a://` | :x: | :white_check_mark: |
-| Python SDK (`google-cloud-storage`) | :white_check_mark: | :white_check_mark: |
-| GCS Connector (`gs://`) | :x: | :white_check_mark: |
-| Mixed GCS+S3: bucket-specific `s3a` | :x: | :white_check_mark: |
-| Mixed GCS+S3: Python SDK + Spark SQL | :white_check_mark: | :white_check_mark: |
-| Mixed GCS+S3: `gs://` + `s3a://` | :x: | :white_check_mark: |
-| UC external location (all 5 variants) | :x: | :x: |
+| HMAC keys via `s3a://` | ❌ | ✅ |
+| Python SDK (`google-cloud-storage`) | ✅ | ✅ |
+| GCS Connector (`gs://`) | ❌ | ✅ |
+| Mixed GCS+S3: bucket-specific `s3a` | ❌ | ✅ |
+| Mixed GCS+S3: Python SDK + Spark SQL | ✅ | ✅ |
+| Mixed GCS+S3: `gs://` + `s3a://` | ❌ | ✅ |
+| UC external location (all 5 variants) | ❌ | ❌ |
 
 **Why do serverless approaches fail?** Serverless blocks all `spark.hadoop.*` config overrides. The Python SDK sidesteps this by using plain HTTP — no Hadoop involved.
 
