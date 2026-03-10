@@ -10,17 +10,17 @@ Three approaches are tested across different Databricks compute types.
 
 | Approach | Description | Serverless | Classic Interactive | Job Cluster |
 |----------|-------------|------------|---------------------|-------------|
-| 1. HMAC / S3-compat (`s3a://`) | Uses GCS HMAC keys with the S3-compatible API via `s3a://` paths and `spark.hadoop.fs.s3a.*` config | FAIL | PASS | PASS |
-| 2. Python `google-cloud-storage` SDK | Uses the GCP Python SDK to read objects, then loads data into Spark DataFrames | PASS | PASS | PASS |
-| 3. GCS Connector JAR (`gs://`) | Uses the Hadoop GCS connector with `gs://` paths and `spark.hadoop.google.cloud.*` config | FAIL | PASS | PASS |
-| 4a. Mixed: bucket-specific s3a | Per-bucket s3a config isolates GCS endpoint from default S3 | FAIL | PASS | PASS |
-| 4b. Mixed: Python SDK + S3 | Python SDK for GCS + normal Spark SQL for S3 | PASS | PASS | PASS |
-| 4c. Mixed: gs:// + s3a:// | GCS connector + normal s3a coexistence | FAIL | PASS | PASS |
-| 5a. UC: s3:// + IAM role | s3:// URL with GCS bucket name + IAM role credential | FAIL | N/A | N/A |
-| 5b. UC: r2:// → GCS endpoint | r2:// URL redirected to storage.googleapis.com | FAIL | N/A | N/A |
-| 5c. UC: R2 cred + s3:// | R2 credential type with GCS HMAC keys | FAIL | N/A | N/A |
-| 5d. UC: gs:// on AWS | gs:// URL on AWS workspace | FAIL | N/A | N/A |
-| 5e. UC: creative URLs | s3a://, embedded endpoints, etc. | FAIL | N/A | N/A |
+| 1. HMAC / S3-compat (`s3a://`) | Uses GCS HMAC keys with the S3-compatible API via `s3a://` paths and `spark.hadoop.fs.s3a.*` config | ❌ | ✅ | ✅ |
+| 2. Python `google-cloud-storage` SDK | Uses the GCP Python SDK to read objects, then loads data into Spark DataFrames | ✅ | ✅ | ✅ |
+| 3. GCS Connector JAR (`gs://`) | Uses the Hadoop GCS connector with `gs://` paths and `spark.hadoop.google.cloud.*` config | ❌ | ✅ | ✅ |
+| 4a. Mixed: bucket-specific s3a | Per-bucket s3a config isolates GCS endpoint from default S3 | ❌ | ✅ | ✅ |
+| 4b. Mixed: Python SDK + S3 | Python SDK for GCS + normal Spark SQL for S3 | ✅ | ✅ | ✅ |
+| 4c. Mixed: gs:// + s3a:// | GCS connector + normal s3a coexistence | ❌ | ✅ | ✅ |
+| 5a. UC: s3:// + IAM role | s3:// URL with GCS bucket name + IAM role credential | ❌ | ➖ | ➖ |
+| 5b. UC: r2:// → GCS endpoint | r2:// URL redirected to storage.googleapis.com | ❌ | ➖ | ➖ |
+| 5c. UC: R2 cred + s3:// | R2 credential type with GCS HMAC keys | ❌ | ➖ | ➖ |
+| 5d. UC: gs:// on AWS | gs:// URL on AWS workspace | ❌ | ➖ | ➖ |
+| 5e. UC: creative URLs | s3a://, embedded endpoints, etc. | ❌ | ➖ | ➖ |
 
 ## Key Findings
 
