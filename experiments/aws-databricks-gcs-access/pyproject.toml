@@ -1,0 +1,10 @@
+[project]
+name = "aws-databricks-gcs-access"
+version = "0.1.0"
+description = "Experiment: testing methods for reading GCS data from AWS Databricks"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "databricks-sdk",
+    "databricks-connect",
+    "google-cloud-storage",
+]
