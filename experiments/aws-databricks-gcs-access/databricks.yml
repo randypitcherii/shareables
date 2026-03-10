@@ -38,6 +38,62 @@ resources:
       custom_tags:
         ResourceClass: SingleNode
 
+  jobs:
+    gcs_experiment_job:
+      name: gcs-experiment-job-cluster-tests
+      tasks:
+        - task_key: test_01_hmac
+          spark_python_task:
+            python_file: scripts/01_hmac_s3_compat.py
+          new_cluster: &gcs_job_cluster
+            spark_version: 16.4.x-scala2.12
+            node_type_id: m5d.large
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            single_user_name: ${workspace.current_user.userName}
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+              spark.hadoop.fs.s3a.endpoint: "https://storage.googleapis.com"
+              spark.hadoop.fs.s3a.access.key: "{{secrets/gcs-experiment/hmac_access_id}}"
+              spark.hadoop.fs.s3a.secret.key: "{{secrets/gcs-experiment/hmac_secret}}"
+              spark.hadoop.fs.s3a.path.style.access: "true"
+              spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.endpoint: "https://storage.googleapis.com"
+              spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.access.key: "{{secrets/gcs-experiment/hmac_access_id}}"
+              spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.secret.key: "{{secrets/gcs-experiment/hmac_secret}}"
+              spark.hadoop.fs.s3a.bucket.dbx-gcs-access-experiment.path.style.access: "true"
+              spark.hadoop.google.cloud.auth.service.account.enable: "true"
+              spark.hadoop.google.cloud.auth.service.account.email: "{{secrets/gcs-experiment/sa_email}}"
+              spark.hadoop.google.cloud.auth.service.account.private.key: "{{secrets/gcs-experiment/sa_private_key}}"
+              spark.hadoop.google.cloud.auth.service.account.private.key.id: "{{secrets/gcs-experiment/sa_private_key_id}}"
+              spark.hadoop.fs.gs.project.id: "{{secrets/gcs-experiment/sa_project_id}}"
+            custom_tags:
+              ResourceClass: SingleNode
+          libraries:
+            - pypi:
+                package: google-cloud-storage
+        - task_key: test_02_python_sdk
+          spark_python_task:
+            python_file: scripts/02_gcs_python_sdk.py
+          new_cluster: *gcs_job_cluster
+          libraries:
+            - pypi:
+                package: google-cloud-storage
+        - task_key: test_03_gcs_connector
+          spark_python_task:
+            python_file: scripts/03_gcs_connector_jar.py
+          new_cluster: *gcs_job_cluster
+          libraries:
+            - pypi:
+                package: google-cloud-storage
+        - task_key: test_04_mixed_access
+          spark_python_task:
+            python_file: scripts/04_mixed_gcs_s3_access.py
+          new_cluster: *gcs_job_cluster
+          libraries:
+            - pypi:
+                package: google-cloud-storage
+
 targets:
   dev:
     mode: development
