@@ -46,3 +46,14 @@ class AuditStore:
         if not record:
             return None
         return asdict(record)
+
+
+# Module-level singleton
+_store: AuditStore | None = None
+
+
+def get_audit_store() -> AuditStore:
+    global _store
+    if _store is None:
+        _store = AuditStore()
+    return _store
