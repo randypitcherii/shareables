@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 # Each entry: (prefix_to_strip, family_name, regex applied to the remainder)
 # ---------------------------------------------------------------------------
 _FAMILY_PATTERNS: list[tuple[str, str, re.Pattern]] = [
-    ("databricks-claude-sonnet-", "claude-sonnet", re.compile(r"^(\d+)[-.](\d+)(?:-\d{8})?$")),
-    ("databricks-claude-opus-", "claude-opus", re.compile(r"^(\d+)[-.](\d+)(?:-\d{8})?$")),
-    ("databricks-claude-haiku-", "claude-haiku", re.compile(r"^(\d+)[-.](\d+)(?:-\d{8})?$")),
+    ("databricks-claude-sonnet-", "claude-sonnet", re.compile(r"^(\d+)(?:[-.](\d+))?(?:-\d{8})?$")),
+    ("databricks-claude-opus-", "claude-opus", re.compile(r"^(\d+)(?:[-.](\d+))?(?:-\d{8})?$")),
+    ("databricks-claude-haiku-", "claude-haiku", re.compile(r"^(\d+)(?:[-.](\d+))?(?:-\d{8})?$")),
     ("databricks-gemini-", "gemini", re.compile(r"^(\d+)[-.](\d+)")),
     ("databricks-codex-", "codex", re.compile(r"^(.+)$")),
     ("databricks-gpt-4o-mini", "gpt-4o-mini", re.compile(r"^(?:-(\d{4}-\d{2}-\d{2}))?$")),
     ("databricks-gpt-4o", "gpt-4o", re.compile(r"^(?:-(\d{4}-\d{2}-\d{2}))?$")),
-    ("databricks-gpt-", "gpt", re.compile(r"^(\d+)")),
+    ("databricks-gpt-", "gpt", re.compile(r"^(\d+)(?:[-.](\d+))?")),
 ]
 
 
@@ -66,11 +66,16 @@ class AliasRegistry:
         self._aliases.clear()
         self._endpoints.clear()
 
+        endpoint_count = 0
+        prefix_match_count = 0
+        ready_count = 0
         for ep in endpoints:
+            endpoint_count += 1
             name = ep.name if hasattr(ep, "name") else ep.get("name", "")
             # Only consider endpoints matching configured prefixes
             if not any(name.startswith(p) for p in self._prefixes):
                 continue
+            prefix_match_count += 1
 
             # Only consider READY endpoints
             ready = None
@@ -78,19 +83,27 @@ class AliasRegistry:
                 ready = getattr(ep.state, "ready", None)
             elif isinstance(ep, dict):
                 ready = (ep.get("state") or {}).get("ready")
-            if ready != "READY":
+            ready_str = ready.value if hasattr(ready, "value") else str(ready)
+            if ready_str != "READY":
+                logger.info("Skipping %s: ready=%r", name, ready)
                 continue
+            ready_count += 1
 
             self._endpoints.add(name)
 
             parsed = parse_model_family(name)
             if parsed is None:
+                logger.info("No family match for endpoint: %s", name)
                 continue
 
             family, version = parsed
+            logger.info("Matched %s -> family=%s version=%s", name, family, version)
             current = self._best.get(family)
             if current is None or version > current[0]:
                 self._best[family] = (version, name)
+
+        logger.info("Refresh stats: %d total, %d prefix-matched, %d ready, %d family-matched",
+                    endpoint_count, prefix_match_count, ready_count, len(self._best))
 
         # Build alias map
         for family, (_, endpoint_name) in self._best.items():
