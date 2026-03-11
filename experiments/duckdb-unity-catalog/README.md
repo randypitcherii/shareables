@@ -19,12 +19,13 @@ Delta tables require UniForm (`delta.universalFormat.enabledFormats = 'iceberg'`
 
 | Table Type | Read | Predicate Pushdown | Write (Append) | Write (Update) | Delete Row | Create Table | Drop Table |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Managed Delta** (UniForm) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
-| **External Delta** (UniForm) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
-| **Managed Iceberg** (native) | ❌¹ | ❌¹ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Managed Delta** (UniForm) | ✅ | ✅ | ❌¹ | ❌¹ | ❌¹ | — | — |
+| **External Delta** (UniForm) | ✅ | ✅ | ❌¹ | ❌¹ | ❌¹ | — | — |
+| **Managed Iceberg** (native) | ❌² | ✅ | ❌² | ❌² | ❌² | ✅ | ✅ |
 | **Foreign Iceberg** | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
-> ¹ Native Iceberg tables on VDM managed storage fail with S3 403 — credential vending returns empty `storage-credentials`. Delta+UniForm tables vend credentials correctly. This appears to be a Databricks-side gap in how VDM storage credentials are vended for native Iceberg vs UniForm tables. Validated across multiple AWS workspaces (fe-vm, e2-demo-field-eng) — same behavior on both.
+> ¹ Delta+UniForm tables are read-only via Iceberg REST — Databricks does not support writes to Delta tables through the Iceberg REST API, even with UniForm enabled. Write attempts fail with S3 403.
+> ² Native Iceberg tables on VDM managed storage fail with S3 403 — credential vending returns valid credentials (confirmed via raw API inspection), but DuckDB fails to use them for data file access. PyIceberg reads the same tables successfully. Create/Drop DDL works because it goes through the catalog API, not direct storage access.
 
 ### UC REST Connection (`uc_catalog` extension, Delta protocol)
 
@@ -33,23 +34,23 @@ Requires `GRANT EXTERNAL USE SCHEMA` on the target schema.
 
 | Table Type | Read | Predicate Pushdown | Write (Append) | Write (Update) | Delete Row | Create Table | Drop Table |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Managed Delta** (UniForm) | ❌² | ❌² | ❌² | ❌² | ❌² | ❌² | ❌² |
-| **External Delta** (UniForm) | ❌² | ❌² | ❌² | ❌² | ❌² | ❌² | ❌² |
-| **Managed Iceberg** (native) | ✅ | ✅ | ❌³ | ❌⁴ | ❌⁴ | — | — |
+| **Managed Delta** (UniForm) | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ |
+| **External Delta** (UniForm) | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ | ❌³ |
+| **Managed Iceberg** (native) | ✅ | ✅ | ❌⁴ | ❌⁵ | ❌⁵ | — | — |
 | **Foreign Iceberg** | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
-> ² Delta+UniForm tables fail with "Bad Request" on the `temporary-table-credentials` API — the `uc_catalog` extension may not handle UniForm tables correctly
-> ³ DeltaKernel error: "Unsupported: Unknown feature 'icebergWriterCompatV1'" — the delta extension can't write to native Iceberg tables
-> ⁴ "Can only update/delete from base table" — DuckDB's delta extension doesn't support DML on Iceberg tables
+> ³ Delta+UniForm tables fail with "Bad Request" on the `temporary-table-credentials` API
+> ⁴ DeltaKernel error: "Unsupported: Unknown feature 'icebergWriterCompatV1'"
+> ⁵ "Can only update/delete from base table"
 
 ### Delta Sharing Protocol (no native DuckDB client)
 
 | Table Type | Read | Predicate Pushdown | Write (Append) | Write (Update) | Delete Row | Create Table | Drop Table |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **All types** | ❌⁵ | ❌⁵ | ❌⁶ | ❌⁶ | ❌⁶ | ❌⁶ | ❌⁶ |
+| **All types** | ❌⁶ | ❌⁶ | ❌⁷ | ❌⁷ | ❌⁷ | ❌⁷ | ❌⁷ |
 
-> ⁵ DuckDB has no native Delta Sharing client — reads require a Python bridge (delta-sharing lib → pandas → DuckDB)
-> ⁶ Delta Sharing protocol is read-only by design — no write endpoints exist in the spec
+> ⁶ No native DuckDB Delta Sharing client — requires Python bridge
+> ⁷ Protocol is read-only by design
 
 ---
 
@@ -61,17 +62,10 @@ Tested on 3 workspaces (2026-03-11):
 
 | Path | fe-vm (AWS, VDM storage) | e2-demo-field-eng (AWS) | logfood (Azure) |
 |---|---|---|---|
-| Iceberg REST + Delta+UniForm | Full CRUD | Full CRUD | ADLS not supported by DuckDB |
-| Iceberg REST + Native Iceberg | Reads fail (empty creds), writes work | Reads fail (same), writes work | ADLS not supported by DuckDB |
-| uc_catalog + Delta+UniForm | Bad Request on temp-creds API | Reads work, writes fail | Permission denied (untested) |
-| uc_catalog + Native Iceberg | Read + predicate work, writes fail | Read + predicate work, writes fail | Permission denied (untested) |
-
-**Key cross-workspace observations:**
-
-- Native Iceberg read failure via Iceberg REST **reproduces across both AWS workspaces** — confirms this is a Databricks-side credential vending gap, not workspace-specific
-- uc_catalog reads work for Delta+UniForm on e2-demo but fail with "Bad Request" on fe-vm — behavior varies by workspace/config
-- DuckDB's iceberg extension does not support ADLS storage (Azure), only S3
-- uc_catalog write failures are consistent: `columnMapping` not supported by DeltaKernel, UPDATE/DELETE blocked by DuckDB binder
+| Iceberg REST + Delta+UniForm | Read-only (writes fail 403) | Read-only (writes fail 403) | ADLS not supported |
+| Iceberg REST + Native Iceberg | Reads fail, writes fail | Reads fail, writes fail | ADLS not supported |
+| uc_catalog + Delta+UniForm | Bad Request | Reads work, writes fail | Permission denied |
+| uc_catalog + Native Iceberg | Read-only | Read-only | Permission denied |
 
 ---
 
@@ -79,27 +73,31 @@ Tested on 3 workspaces (2026-03-11):
 
 ### What works
 
-- **Delta+UniForm via Iceberg REST = full CRUD** — Read, predicate pushdown, insert, update, delete all work. This is the recommended path for DuckDB ↔ UC integration.
+- **Delta+UniForm via Iceberg REST = read-only** — Read and predicate pushdown work. This is the recommended path for DuckDB ↔ UC integration.
 - **Native Iceberg via UC Catalog = read-only** — Read and predicate pushdown work via the `uc_catalog` extension. Writes fail due to DeltaKernel incompatibility.
-- **Iceberg REST Create/Drop Table** — DuckDB can create and drop Iceberg tables through the Iceberg REST catalog.
+- **Iceberg REST Create/Drop Table** — DuckDB can create and drop native Iceberg tables through the Iceberg REST catalog.
 - **OAuth token auth** — Databricks SDK OAuth tokens work for both paths (no PAT required).
 
 ### What doesn't work (and why)
 
-1. **Native Iceberg reads via Iceberg REST** — Credential vending returns empty `storage-credentials` for native Iceberg tables on VDM managed storage. Delta+UniForm tables vend correctly. This is a Databricks-side gap.
+1. **ALL writes via both paths** — Every write operation fails with S3 403 or other errors. DuckDB + UC is currently read-only in practice.
 
-2. **Delta+UniForm via UC Catalog** — The `temporary-table-credentials` API returns "Bad Request" for Delta+UniForm tables. The `uc_catalog` extension may not handle UniForm table properties correctly.
+2. **Native Iceberg reads via Iceberg REST** — DuckDB fails to use vended credentials for data file access (S3 403), even though credentials are valid (confirmed via raw API inspection). PyIceberg reads the same tables successfully. This is a DuckDB client-side issue.
 
-3. **`uc_catalog` named secret bug** — Named secrets are silently ignored ([#48](https://github.com/duckdb/unity_catalog/issues/48)). The extension only looks for `__default_uc`. **Workaround: use unnamed `CREATE SECRET`.**
+3. **Delta+UniForm via UC Catalog** — The `temporary-table-credentials` API returns "Bad Request" for Delta+UniForm tables.
 
-4. **`EXTERNAL USE SCHEMA` required** — Both paths require `GRANT EXTERNAL USE SCHEMA ON SCHEMA <schema> TO <user>` before credential vending works.
+4. **`uc_catalog` named secret bug** — Named secrets are silently ignored ([#48](https://github.com/duckdb/unity_catalog/issues/48)). The extension only looks for `__default_uc`. **Workaround: use unnamed `CREATE SECRET`.**
 
-5. **Delta Sharing** — No native DuckDB client. Read-only by protocol design.
+5. **`EXTERNAL USE SCHEMA` required** — Both paths require `GRANT EXTERNAL USE SCHEMA ON SCHEMA <schema> TO <user>` before credential vending works.
+
+6. **Delta Sharing** — No native DuckDB client. Read-only by protocol design.
 
 ### Recommendations
 
-- **Use Iceberg REST with Delta+UniForm tables** for full CRUD from DuckDB with UC governance
-- Enable UniForm on all Delta tables you want DuckDB to access
+- **Use Iceberg REST with Delta+UniForm tables** for **read-only** access from DuckDB with UC governance
+- **Use UC Catalog with native Iceberg tables** for **read-only** access as an alternative
+- DuckDB + UC is currently **read-only** in practice — no write path works
+- Enable UniForm on Delta tables you want DuckDB to read via Iceberg REST
 - Grant `EXTERNAL USE SCHEMA` on target schemas
 - Use unnamed secrets with `uc_catalog` extension until [#48](https://github.com/duckdb/unity_catalog/issues/48) is fixed
 
@@ -142,7 +140,7 @@ uv run python scripts/02_delta_uc_rest.py    # Test Delta / UC REST path
 
 ## DuckDB Connection Examples
 
-### Iceberg REST (recommended for Delta+UniForm)
+### Iceberg REST (recommended for Delta+UniForm, read-only)
 
 ```sql
 INSTALL iceberg; LOAD iceberg;
