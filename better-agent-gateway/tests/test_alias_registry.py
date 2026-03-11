@@ -38,6 +38,31 @@ class TestParseModelFamily:
         family, version = parse_model_family("databricks-codex-mini-latest")
         assert family == "codex"
 
+    def test_gpt_5(self):
+        family, version = parse_model_family("databricks-gpt-5")
+        assert family == "gpt"
+        assert version == (5,)
+
+    def test_gpt_5_turbo(self):
+        family, version = parse_model_family("databricks-gpt-5-turbo")
+        assert family == "gpt"
+        assert version == (5,)
+
+    def test_gpt_5_beats_gpt_4_for_gpt_latest(self):
+        """gpt-5 should win over gpt-4 for gpt-latest alias."""
+        f1, v1 = parse_model_family("databricks-gpt-4")
+        f2, v2 = parse_model_family("databricks-gpt-5")
+        assert f1 == f2 == "gpt"
+        assert v2 > v1
+
+    def test_gpt_5_does_not_compete_with_gpt_4o(self):
+        """gpt-5 and gpt-4o are separate families."""
+        f1, _ = parse_model_family("databricks-gpt-5")
+        f2, _ = parse_model_family("databricks-gpt-4o")
+        assert f1 == "gpt"
+        assert f2 == "gpt-4o"
+        assert f1 != f2
+
     def test_no_match(self):
         result = parse_model_family("my-custom-endpoint")
         assert result is None
@@ -72,6 +97,20 @@ class TestAliasRegistry:
         assert registry.resolve("claude-sonnet-latest") == "databricks-claude-sonnet-4-6"
         assert registry.resolve("claude-opus-latest") == "databricks-claude-opus-4-6"
         assert registry.resolve("gpt-4o-latest") == "databricks-gpt-4o"
+
+    def test_gpt_latest_picks_highest_gpt_version(self):
+        registry = AliasRegistry(prefixes=["databricks-gpt"])
+        endpoints = self._mock_endpoints([
+            "databricks-gpt-4",
+            "databricks-gpt-4o",
+            "databricks-gpt-4o-mini",
+            "databricks-gpt-5",
+        ])
+        registry.refresh_from_endpoints(endpoints)
+        # gpt-5 wins gpt-latest, gpt-4o and gpt-4o-mini get their own aliases
+        assert registry.resolve("gpt-latest") == "databricks-gpt-5"
+        assert registry.resolve("gpt-4o-latest") == "databricks-gpt-4o"
+        assert registry.resolve("gpt-4o-mini-latest") == "databricks-gpt-4o-mini"
 
     def test_resolve_passthrough(self):
         registry = AliasRegistry(prefixes=["databricks-claude"])
