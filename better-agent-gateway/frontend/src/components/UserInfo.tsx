@@ -2,6 +2,9 @@ import { useEffect, useState, useCallback } from 'react'
 
 interface AuthContext {
   forwarded_user: string | null
+  display_name: string | null
+  email: string | null
+  user_name: string | null
   obo_token_present: boolean
   mode: string
 }
@@ -31,19 +34,22 @@ export function UserInfo() {
     if ('caches' in window) {
       caches.keys().then((names) => names.forEach((name) => caches.delete(name)))
     }
-    // Redirect to the app root which triggers a fresh SSO/OAuth consent flow
-    // The __clear_session=1 param signals intent (Databricks Apps proxy handles the rest)
-    window.location.href = '/?__clear_session=1'
+    // Databricks Apps proxy exposes a logout endpoint that clears the
+    // OAuth session and forces re-authentication / re-consent on next visit.
+    window.location.href = '/_logout'
   }
 
   if (error) return <div className="error">Failed to load user info: {error}</div>
   if (!auth) return <div className="user-info loading">Loading user info...</div>
 
-  const displayUser = auth.forwarded_user
-    ? auth.forwarded_user.split('@')[0].replace(/\./g, ' ')
-    : 'Unknown'
+  // Prefer resolved display_name, fall back to email, then forwarded_user
+  const displayUser = auth.display_name
+    || auth.email
+    || (auth.forwarded_user
+      ? auth.forwarded_user.split('@')[0].replace(/\./g, ' ')
+      : 'Unknown')
 
-  const rawUser = auth.forwarded_user || 'Not available'
+  const identityValue = auth.email || auth.user_name || auth.forwarded_user || 'Not available'
 
   return (
     <div className="user-info">
@@ -51,11 +57,11 @@ export function UserInfo() {
       <div className="user-info-grid">
         <div className="user-info-row">
           <span className="label">User</span>
-          <span className="value" title={rawUser}>{displayUser}</span>
+          <span className="value" title={identityValue}>{displayUser}</span>
         </div>
         <div className="user-info-row">
           <span className="label">Identity</span>
-          <span className="value mono">{rawUser}</span>
+          <span className="value mono">{identityValue}</span>
         </div>
         <div className="user-info-row">
           <span className="label">OAuth Token</span>
