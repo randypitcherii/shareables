@@ -165,4 +165,16 @@ headers = wc.config.authenticate()
 # Use headers with httpx/requests to call the app
 ```
 
-**Tested and confirmed (2026-03-11):** Standard `all-apis` scoped tokens from `databricks auth login` ARE accepted by the app. No explicit scope matching is enforced — the proxy passes through any valid workspace OAuth token on `/api/` routes. Token exchange (RFC 8693) to downscope to `serving.serving-endpoints` also works if least-privilege is desired.
+**Tested and confirmed (2026-03-11):** Standard `all-apis` scoped tokens from `databricks auth login` ARE accepted by the app proxy on `/api/` routes. However, the proxy **downscopes the OBO token** to only the declared `user_api_scopes` (`serving.serving-endpoints`). This means:
+
+- Bearer token with `all-apis` → proxy accepts it → OBO token only has `serving.serving-endpoints`
+- Catalogs: blocked (`"does not have required scopes: unity-catalog"`)
+- Warehouses: blocked (`"does not have required scopes: sql"`)
+- Serving endpoints: works (33 visible)
+
+**The three-layer security model is validated:**
+1. **SSO-only auth** — PATs always return 401
+2. **Proxy-enforced scope downscoping** — OBO token constrained regardless of input token scope
+3. **App-level routing** — only proxies to `/serving-endpoints/*/invocations`
+
+Token exchange (RFC 8693) also works for pre-downscoping if desired, but the proxy handles it automatically.
