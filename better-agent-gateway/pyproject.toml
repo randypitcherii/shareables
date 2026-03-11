@@ -20,3 +20,6 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests that hit the live deployed app (require credentials in .env)",
+]
