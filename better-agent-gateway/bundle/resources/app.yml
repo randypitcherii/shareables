@@ -4,6 +4,9 @@ resources:
       name: better-agent-gateway-${bundle.target}
       description: "Scoped OAuth LLM gateway with automatic -latest model resolution"
       source_code_path: ../..
+      user_api_scopes:
+        - serving.serving-endpoints
+        - sql
       config:
         command:
           - "python"
