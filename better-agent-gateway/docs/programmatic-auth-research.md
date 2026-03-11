@@ -165,4 +165,4 @@ headers = wc.config.authenticate()
 # Use headers with httpx/requests to call the app
 ```
 
-**Open question:** Whether `all-apis` scoped tokens satisfy the app's `serving.serving-endpoints` user authorization requirement, or whether explicit scope matching is enforced. This needs testing.
+**Tested and confirmed (2026-03-11):** Standard `all-apis` scoped tokens from `databricks auth login` ARE accepted by the app. No explicit scope matching is enforced — the proxy passes through any valid workspace OAuth token on `/api/` routes. Token exchange (RFC 8693) to downscope to `serving.serving-endpoints` also works if least-privilege is desired.

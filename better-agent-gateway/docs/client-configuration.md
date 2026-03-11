@@ -21,22 +21,42 @@ Authentication is handled by your browser session cookie — the `api_key` value
 
 ## 2. Authentication
 
-The gateway uses **Databricks App scoped OAuth** with On-Behalf-Of (OBO) token exchange.
+The gateway uses **Databricks App scoped OAuth** with On-Behalf-Of (OBO) token exchange. There are two ways to authenticate:
 
-**How it works:**
+### Option A: Browser Session (Interactive)
 
 1. Navigate to `https://<your-gateway-host>/` in a browser.
 2. Databricks redirects you through your SSO provider (first visit only).
-3. You are prompted to grant the app the `serving.serving-endpoints` scope — this allows it to call model serving endpoints on your behalf.
+3. You are prompted to grant the app the `serving.serving-endpoints` scope.
 4. After consent, your browser holds a session cookie that authenticates all subsequent API requests.
 
-**Important:** API requests must include the session cookie. This means:
+### Option B: Bearer Token (Programmatic) — Recommended for SDKs
 
-- Browser-based tools (fetch, curl with cookie jar) work out of the box after you've logged in.
-- SDK clients running in the same machine/browser context need the cookie forwarded (see examples below).
-- The gateway never uses a shared service principal — every request runs as your identity.
+Any valid Databricks OAuth token works as a bearer token on all routes (not just `/api/`). No browser needed.
 
-There is no persistent token or API key to manage. Sessions are tied to your Databricks SSO session.
+```bash
+# Get a token via Databricks CLI
+databricks auth login --host https://<workspace-url>
+TOKEN=$(databricks auth token | jq -r '.access_token')
+
+# Use it directly
+curl -H "Authorization: Bearer $TOKEN" \
+  https://<your-gateway-host>/api/v1/healthz
+```
+
+Or in Python:
+```python
+from databricks.sdk import WorkspaceClient
+
+w = WorkspaceClient(host="https://<workspace-url>")
+headers = w.config.authenticate()  # {"Authorization": "Bearer <token>"}
+```
+
+**Key facts:**
+- Standard `all-apis` scoped tokens work — no special scope needed
+- PATs (Personal Access Tokens) do NOT work — always returns 401
+- Token lifetime is ~1 hour; use `w.config.authenticate()` for auto-refresh
+- Every request runs as your identity (never the app's service principal)
 
 ---
 
@@ -79,28 +99,20 @@ Response shape:
 
 ## 4. Example: Python (openai SDK)
 
-First, log in via browser to establish the session cookie, then save it:
-
-```bash
-# After logging in via browser, export cookies from your browser
-# or use a headless login flow. For scripted use, capture the cookie manually.
-```
+Use the Databricks SDK for automatic token management:
 
 ```python
-import httpx
 from openai import OpenAI
+from databricks.sdk import WorkspaceClient
 
 GATEWAY_URL = "https://<your-gateway-host>/api/v1"
 
-# Pass session cookie via a custom httpx client
-session_cookie = "<value of your_session_cookie from browser>"
+# Auto-refreshing token via Databricks SDK
+w = WorkspaceClient(host="https://<workspace-url>")
 
 client = OpenAI(
     base_url=GATEWAY_URL,
-    api_key="not-used",  # required by the SDK, ignored by the gateway
-    http_client=httpx.Client(
-        cookies={"your_session_cookie": session_cookie}
-    ),
+    api_key=w.config.authenticate()["Authorization"].replace("Bearer ", ""),
 )
 
 response = client.chat.completions.create(
@@ -112,22 +124,29 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-**Tip:** If you're running this from a Databricks notebook or app that is already authenticated, the cookie is handled automatically by the runtime — just set `base_url` and `api_key`.
+For long-running scripts, use a callable `api_key` for automatic refresh:
+
+```python
+client = OpenAI(
+    base_url=GATEWAY_URL,
+    api_key=lambda: w.config.authenticate()["Authorization"].replace("Bearer ", ""),
+)
+```
 
 ---
 
 ## 5. Example: curl
 
-Save cookies after browser login, then use them in requests:
-
 ```bash
-# Step 1: trigger login and save cookies (opens browser for SSO)
-curl -c cookies.txt -b cookies.txt -L https://<your-gateway-host>/
+# Get a token (opens browser for SSO on first run)
+databricks auth login --host https://<workspace-url>
+TOKEN=$(databricks auth token | jq -r '.access_token')
 
-# Step 2: chat completion
-curl -s -b cookies.txt \
-  -X POST https://<your-gateway-host>/api/v1/chat/completions \
+# Chat completion
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
+  -X POST https://<your-gateway-host>/api/v1/chat/completions \
   -d '{
     "model": "claude-sonnet-latest",
     "messages": [{"role": "user", "content": "What is 2+2?"}],
@@ -169,16 +188,16 @@ llm = ChatOpenAI(
 )
 ```
 
-**Note for all tools:** The gateway requires a valid session cookie. Tools that make server-side API calls (not from your browser) will need the cookie injected via a custom HTTP client or proxy.
+**Note for all tools:** The gateway accepts either a browser session cookie or a `Authorization: Bearer <token>` header. For programmatic access, use the bearer token approach (see Section 2).
 
 ---
 
 ## 7. Troubleshooting
 
 **`401 Unauthorized`**
-- Your session has expired or you haven't logged in.
-- Visit `https://<your-gateway-host>/` in a browser and complete the SSO flow.
-- Re-export your session cookie if using curl or an SDK.
+- Your token has expired — run `databricks auth login` to refresh.
+- PATs (Personal Access Tokens) do not work — only OAuth tokens are accepted.
+- If using browser access, visit `https://<your-gateway-host>/` to re-authenticate.
 
 **`404` on `/api/v1/models` or `/api/v1/chat/completions`**
 - Confirm your base URL ends with `/api/v1` (not just the host root).
