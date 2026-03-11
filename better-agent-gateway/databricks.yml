@@ -1,6 +1,10 @@
 bundle:
   name: better-agent-gateway
 
+sync:
+  include:
+    - frontend/dist/**
+
 include:
   - bundle/resources/*.yml
 
