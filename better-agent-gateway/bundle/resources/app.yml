@@ -1,0 +1,20 @@
+resources:
+  apps:
+    better-agent-gateway:
+      name: better-agent-gateway-${bundle.target}
+      description: "Scoped OAuth LLM gateway with automatic -latest model resolution"
+      source_code_path: ../..
+      user_api_scopes:
+        - serving.serving-endpoints
+      config:
+        command:
+          - "bash"
+          - "-lc"
+          - "cd frontend && npm ci && npm run build && cd .. && uv sync --frozen && uv run uvicorn app:app --host 0.0.0.0 --port ${DATABRICKS_APP_PORT:-8000} --workers ${UVICORN_WORKERS:-2} --timeout-keep-alive 5 --timeout-graceful-shutdown 10 --limit-concurrency 16 --limit-max-requests 2000"
+        env:
+          - name: DATABRICKS_OBO_ENABLED
+            value: "true"
+          - name: UVICORN_WORKERS
+            value: "2"
+          - name: ALIAS_REFRESH_INTERVAL_SECONDS
+            value: "300"
