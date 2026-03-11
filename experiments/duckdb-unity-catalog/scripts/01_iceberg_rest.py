@@ -1,12 +1,20 @@
 """
 DuckDB + Unity Catalog via Iceberg REST Catalog
 ================================================
-Tests read/write operations across managed_delta, external_delta, and managed_iceberg
-table types using DuckDB's `iceberg` extension with the Databricks UC REST endpoint.
+Tests read/write operations across managed_delta (UniForm), external_delta (UniForm),
+and managed_iceberg (native) using DuckDB's `iceberg` extension with the Databricks
+UC Iceberg REST endpoint.
+
+Key findings:
+  - Delta+UniForm tables: full CRUD works (read, insert, update, delete)
+  - Native Iceberg tables: writes work, reads fail on VDM managed storage
+    (credential vending returns empty storage-credentials)
+  - Create/Drop only works for Iceberg tables (not Delta)
 
 Requires:
   - DuckDB >= 1.4.2 (DELETE/UPDATE support)
   - Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
+  - GRANT EXTERNAL USE SCHEMA on the target schema
 
 Run:
   uv run python scripts/01_iceberg_rest.py
@@ -35,10 +43,10 @@ from _common import (
 
 ENDPOINT = f"https://{WORKSPACE}/api/2.1/unity-catalog/iceberg-rest"
 
-# Table types to exercise (Create/Drop tests use managed_iceberg only — Delta is read-only)
-READ_WRITE_TABLES = ["managed_iceberg"]
-READ_ONLY_TABLES = ["managed_delta", "external_delta"]
-ALL_TABLES = READ_ONLY_TABLES + READ_WRITE_TABLES
+# Delta+UniForm tables support full CRUD via Iceberg REST.
+# Native Iceberg tables have a credential vending gap on VDM managed storage
+# (reads fail with S3 403, but writes work).
+ALL_TABLES = ["managed_delta", "external_delta", "managed_iceberg"]
 
 # Temporary table created and dropped within this script
 TEST_TABLE = "duckdb_iceberg_rest_tmp"
@@ -170,17 +178,11 @@ def test_write_append(con: duckdb.DuckDBPyConnection):
     print_header("WRITE — APPEND (INSERT INTO)")
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
-        expected_fail = tbl in READ_ONLY_TABLES
         try:
             run(con, f"INSERT INTO {full} SELECT * FROM {full} WHERE 1=0;")
             record(tbl, "write_append", True, "INSERT succeeded")
         except Exception as e:
-            if expected_fail:
-                # Delta+UniForm tables are read-only via Iceberg REST — expected
-                record(tbl, "write_append", False,
-                       f"expected (read-only via Iceberg REST): {e}")
-            else:
-                record(tbl, "write_append", False, str(e))
+            record(tbl, "write_append", False, str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -191,17 +193,12 @@ def test_write_update(con: duckdb.DuckDBPyConnection):
     print_header("WRITE — UPDATE")
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
-        expected_fail = tbl in READ_ONLY_TABLES
         try:
             # Attempt a no-op UPDATE (WHERE 1=0) to test capability without side effects
             run(con, f"UPDATE {full} SET id = id WHERE 1=0;")
             record(tbl, "write_update", True, "UPDATE succeeded")
         except Exception as e:
-            if expected_fail:
-                record(tbl, "write_update", False,
-                       f"expected (read-only via Iceberg REST): {e}")
-            else:
-                record(tbl, "write_update", False, str(e))
+            record(tbl, "write_update", False, str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -212,17 +209,12 @@ def test_delete_row(con: duckdb.DuckDBPyConnection):
     print_header("DELETE ROW")
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
-        expected_fail = tbl in READ_ONLY_TABLES
         try:
             # No-op DELETE (WHERE 1=0) to test capability without removing data
             run(con, f"DELETE FROM {full} WHERE 1=0;")
             record(tbl, "delete_row", True, "DELETE succeeded")
         except Exception as e:
-            if expected_fail:
-                record(tbl, "delete_row", False,
-                       f"expected (read-only via Iceberg REST): {e}")
-            else:
-                record(tbl, "delete_row", False, str(e))
+            record(tbl, "delete_row", False, str(e))
 
 
 # ---------------------------------------------------------------------------

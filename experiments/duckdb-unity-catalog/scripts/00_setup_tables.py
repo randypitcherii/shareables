@@ -76,10 +76,21 @@ def main():
     for t in tables:
         print(f"  📋 {t['tableName']}")
 
+    # --- Grant EXTERNAL USE SCHEMA (required for DuckDB credential vending) ---
+    print_header("Granting EXTERNAL USE SCHEMA")
+    try:
+        spark.sql(f"GRANT EXTERNAL USE SCHEMA ON SCHEMA {FULL_SCHEMA} TO `account users`")
+        print_result("GRANT EXTERNAL USE SCHEMA", True, f"granted to account users on {FULL_SCHEMA}")
+    except Exception as e:
+        print_result("GRANT EXTERNAL USE SCHEMA", False, str(e))
+        print("  Note: You may need to run this manually as a catalog/schema admin:")
+        print(f"    GRANT EXTERNAL USE SCHEMA ON SCHEMA {FULL_SCHEMA} TO `account users`")
+
     print_header("Setup complete")
     print(f"  Schema: {FULL_SCHEMA}")
     print(f"  Tables: managed_delta, external_delta, managed_iceberg")
     print(f"  Source: {source} ({row_limit} rows each)")
+    print(f"  Note: Delta tables have UniForm enabled for Iceberg REST compatibility")
 
 
 if __name__ == "__main__":

@@ -1,33 +1,42 @@
 """
-DuckDB + Unity Catalog: Delta / UC REST Path Experiment
-=======================================================
+DuckDB + Unity Catalog via UC REST (uc_catalog extension, Delta protocol)
+=========================================================================
+Tests read/write operations across managed_delta (UniForm), external_delta (UniForm),
+and managed_iceberg (native) using DuckDB's `uc_catalog` extension with the Delta
+protocol.
 
-Tests whether DuckDB can interact with UC Delta tables via:
-  A) The Delta Sharing REST protocol (UC exposes a Delta Sharing server)
-  B) The DuckDB `delta` extension (direct cloud storage access — bypasses UC)
+Key findings:
+  - Native Iceberg tables: read + predicate pushdown work
+  - Delta+UniForm tables: all operations fail with "Bad Request" on
+    the temporary-table-credentials API
+  - Writes to native Iceberg fail: DeltaKernel can't handle icebergWriterCompatV1
+  - UPDATE/DELETE fail: "Can only update/delete from base table"
 
-Key finding from research: DuckDB has NO native Delta Sharing REST client.
-  - `delta_scan` reads Delta tables directly from cloud storage (bypasses UC)
-  - Delta Sharing protocol requires a Python bridge (delta-sharing lib → pandas → DuckDB)
-  - Delta Sharing is READ-ONLY by protocol design (no writes possible)
+Workaround required:
+  - Named secrets are silently ignored (duckdb/unity_catalog#48)
+  - Must use unnamed CREATE SECRET (no name parameter)
 
-This script documents both approaches and captures actual error messages.
+Also documents the Delta Sharing protocol (read-only by design, no native DuckDB client).
 
-Run: uv run python scripts/02_delta_uc_rest.py
-Requires: Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
+Requires:
+  - DuckDB >= 1.4.0
+  - Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
+  - GRANT EXTERNAL USE SCHEMA on the target schema
+
+Run:
+  uv run python scripts/02_delta_uc_rest.py
 """
 
 import os
 import sys
-import json
+
 import duckdb
 
-# Add scripts/ dir to path so _common imports work from any cwd
+# Allow running from repo root or scripts/ dir
 sys.path.insert(0, os.path.dirname(__file__))
 from _common import (
     CATALOG,
     SCHEMA,
-    FULL_SCHEMA,
     WORKSPACE,
     WORKSPACE_URL,
     SEPARATOR,
@@ -40,508 +49,250 @@ from _common import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Token is fetched lazily via get_databricks_token() from the SDK auth chain
-DATABRICKS_TOKEN = ""  # populated in main()
+ALL_TABLES = ["managed_delta", "external_delta", "managed_iceberg"]
 
-# Delta tables to test (managed and external)
-DELTA_TABLES = ["managed_delta", "external_delta"]
-
-# Iceberg table via UC REST (not Iceberg REST) — testing Delta path
-ICEBERG_TABLE = "managed_iceberg"
-
-ALL_TABLES = DELTA_TABLES + [ICEBERG_TABLE]
-
-# Operations from the README capabilities grid
-OPERATIONS = [
-    "Read (SELECT)",
-    "Predicate Pushdown",
-    "Write (Append)",
-    "Write (Update)",
-    "Delete Row",
-    "Create Table",
-    "Drop Table",
-]
-
-# Accumulate results: {table_name: {operation: (success, detail)}}
-results: dict[str, dict[str, tuple[bool, str]]] = {t: {} for t in ALL_TABLES}
+# Tracks pass/fail for summary matrix: { (table_type, operation): bool }
+results: dict[tuple[str, str], bool] = {}
 
 
 # ---------------------------------------------------------------------------
-# Pre-flight checks
+# Helpers
 # ---------------------------------------------------------------------------
 
-def check_prerequisites() -> bool:
-    """Verify required environment variables and imports are available."""
-    print_header("Pre-flight Checks")
+def record(table: str, operation: str, success: bool, detail: str = ""):
+    results[(table, operation)] = success
+    print_result(f"{table} / {operation}", success, detail)
 
-    ok = True
 
-    if not DATABRICKS_TOKEN:
-        print_result(
-            "Databricks auth token",
-            False,
-            "not available — check ~/.databrickscfg or run 'databricks auth login'",
-        )
-        ok = False
-    else:
-        print_result("Databricks auth token", True, "obtained via SDK")
-
-    # Check DuckDB version
-    try:
-        ver = duckdb.__version__
-        print_result("DuckDB import", True, f"version {ver}")
-    except Exception as e:
-        print_result("DuckDB import", False, str(e))
-        ok = False
-
-    # Check delta extension availability (install if needed)
-    try:
-        conn = duckdb.connect()
-        conn.execute("INSTALL delta; LOAD delta;")
-        conn.close()
-        print_result("DuckDB delta extension", True, "installed and loaded")
-    except Exception as e:
-        print_result("DuckDB delta extension", False, str(e))
-        ok = False
-
-    # Check requests library (needed for Delta Sharing REST calls)
-    try:
-        import requests  # noqa: F401
-        print_result("requests library", True, "available")
-    except ImportError:
-        print_result(
-            "requests library",
-            False,
-            "not installed — needed for Delta Sharing REST probe",
-        )
-        # Non-fatal; we'll skip that section
-
-    return ok
+def run(con: duckdb.DuckDBPyConnection, sql: str):
+    """Execute SQL and return fetchall result. Raises on error."""
+    return con.execute(sql).fetchall()
 
 
 # ---------------------------------------------------------------------------
-# Approach A: Delta Sharing REST (UC REST path)
+# Setup: connect DuckDB and attach Unity Catalog via uc_catalog extension
 # ---------------------------------------------------------------------------
-# UC exposes a Delta Sharing server. We probe it directly via HTTP to
-# understand what's reachable, then explain why DuckDB can't use it natively.
 
-def probe_delta_sharing_rest() -> dict[str, object]:
-    """
-    Probe the UC Delta Sharing REST endpoint to see what's accessible.
-    Returns a dict with findings.
-    """
-    try:
-        import requests
-    except ImportError:
-        return {"error": "requests library not available"}
+def setup_connection() -> duckdb.DuckDBPyConnection:
+    print_header("DuckDB UC Catalog (Delta protocol) — connecting to Unity Catalog")
+    print(f"  Workspace : {WORKSPACE}")
+    print(f"  Catalog   : {CATALOG}")
+    print(f"  Schema    : {SCHEMA}")
 
-    headers = {"Authorization": f"Bearer {DATABRICKS_TOKEN}"}
+    token = get_databricks_token()
 
-    # Step 1: List shares
-    list_shares_url = f"{WORKSPACE_URL}/api/2.0/delta-sharing/shares"
-    try:
-        resp = requests.get(list_shares_url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            shares_data = resp.json()
-            shares = shares_data.get("shares", [])
-            return {"status": resp.status_code, "shares": shares, "raw": shares_data}
-        else:
-            return {
-                "status": resp.status_code,
-                "error": resp.text[:500],
-                "note": "Delta Sharing endpoint returned non-200",
-            }
-    except Exception as e:
-        return {"error": str(e)}
+    con = duckdb.connect()
+
+    # Install / load required extensions
+    con.execute("INSTALL uc_catalog FROM core; LOAD uc_catalog;")
+    con.execute("INSTALL delta; LOAD delta;")
+
+    # IMPORTANT: Must use UNNAMED secret — named secrets are silently ignored
+    # due to bug: https://github.com/duckdb/unity_catalog/issues/48
+    # The uc_catalog extension only looks for the __default_uc secret.
+    con.execute(f"""
+        CREATE SECRET (
+            TYPE UC,
+            TOKEN '{token}',
+            ENDPOINT '{WORKSPACE_URL}',
+            AWS_REGION 'us-east-1'
+        );
+    """)
+
+    # Attach Unity Catalog via uc_catalog extension (uses Delta protocol under the hood)
+    con.execute(f"ATTACH '{CATALOG}' AS uc (TYPE UC_CATALOG);")
+
+    print("  Attached catalog as 'uc' (UC_CATALOG type)")
+    print("  NOTE: Using unnamed secret (workaround for duckdb/unity_catalog#48)")
+    return con
 
 
-def run_delta_sharing_rest_section():
-    """Document and probe the Delta Sharing REST path."""
-    print_header("Approach A: Delta Sharing REST Protocol (UC REST Path)")
+# ---------------------------------------------------------------------------
+# Test: READ (SELECT)
+# ---------------------------------------------------------------------------
 
+def test_read(con: duckdb.DuckDBPyConnection):
+    print_header("READ (SELECT)")
+    for tbl in ALL_TABLES:
+        full = f"uc.{SCHEMA}.{tbl}"
+        try:
+            rows = run(con, f"SELECT * FROM {full} LIMIT 5;")
+            record(tbl, "read", True, f"{len(rows)} rows returned")
+        except Exception as e:
+            record(tbl, "read", False, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Test: PREDICATE PUSHDOWN
+# ---------------------------------------------------------------------------
+
+def test_predicate_pushdown(con: duckdb.DuckDBPyConnection):
+    """Test filtered SELECT — if it works, predicate pushdown is in play."""
+    print_header("PREDICATE PUSHDOWN")
+    for tbl in ALL_TABLES:
+        full = f"uc.{SCHEMA}.{tbl}"
+        try:
+            rows = run(con, f"SELECT * FROM {full} WHERE trip_distance > 100 LIMIT 5;")
+            record(tbl, "predicate_pushdown", True,
+                   f"filtered query succeeded ({len(rows)} rows)")
+        except Exception as e:
+            record(tbl, "predicate_pushdown", False, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Test: WRITE APPEND (INSERT INTO)
+# ---------------------------------------------------------------------------
+
+def test_write_append(con: duckdb.DuckDBPyConnection):
+    print_header("WRITE — APPEND (INSERT INTO)")
+    for tbl in ALL_TABLES:
+        full = f"uc.{SCHEMA}.{tbl}"
+        try:
+            run(con, f"INSERT INTO {full} SELECT * FROM {full} WHERE 1=0;")
+            record(tbl, "write_append", True, "INSERT succeeded")
+        except Exception as e:
+            record(tbl, "write_append", False, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Test: WRITE UPDATE
+# ---------------------------------------------------------------------------
+
+def test_write_update(con: duckdb.DuckDBPyConnection):
+    print_header("WRITE — UPDATE")
+    for tbl in ALL_TABLES:
+        full = f"uc.{SCHEMA}.{tbl}"
+        try:
+            run(con, f"UPDATE {full} SET trip_distance = trip_distance WHERE 1=0;")
+            record(tbl, "write_update", True, "UPDATE succeeded")
+        except Exception as e:
+            record(tbl, "write_update", False, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Test: DELETE ROW
+# ---------------------------------------------------------------------------
+
+def test_delete_row(con: duckdb.DuckDBPyConnection):
+    print_header("DELETE ROW")
+    for tbl in ALL_TABLES:
+        full = f"uc.{SCHEMA}.{tbl}"
+        try:
+            run(con, f"DELETE FROM {full} WHERE 1=0;")
+            record(tbl, "delete_row", True, "DELETE succeeded")
+        except Exception as e:
+            record(tbl, "delete_row", False, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Test: CREATE TABLE + DROP TABLE
+# ---------------------------------------------------------------------------
+
+def test_create_drop_table(con: duckdb.DuckDBPyConnection):
+    """uc_catalog does not support CREATE/DROP — document this."""
+    print_header("CREATE TABLE / DROP TABLE")
+    print("  uc_catalog extension does not support DDL (CREATE/DROP TABLE).")
+    print("  These operations are not available via the UC REST Delta protocol path.")
+    for tbl in ALL_TABLES:
+        record(tbl, "create_table", False, "uc_catalog extension does not support DDL")
+        record(tbl, "drop_table", False, "uc_catalog extension does not support DDL")
+
+
+# ---------------------------------------------------------------------------
+# Delta Sharing Protocol documentation
+# ---------------------------------------------------------------------------
+
+def document_delta_sharing():
+    """Document the Delta Sharing path — no native DuckDB client exists."""
+    print_header("Delta Sharing Protocol (documented, not tested)")
     print("""
-  What this path is:
-    UC exposes a Delta Sharing REST server at:
-      {workspace}/api/2.0/delta-sharing/...
+  Delta Sharing is a separate protocol from UC REST. Key facts:
 
-    Clients authenticate with a bearer token (PAT).
-    The server returns presigned cloud storage URLs for Parquet files.
+  1. DuckDB has NO native Delta Sharing client
+     - Reads require a Python bridge: delta-sharing lib -> pandas -> DuckDB
+     - No predicate pushdown (full table load to memory)
 
-  Why DuckDB can't use this natively:
-    - DuckDB has NO built-in Delta Sharing protocol client
-    - The `delta` extension reads storage directly, NOT via this protocol
-    - To use this path from DuckDB, you need a Python bridge:
-        delta-sharing library → pandas DataFrame → DuckDB in-memory query
+  2. Delta Sharing is READ-ONLY by protocol design
+     - No write endpoints exist in the spec
+     - This is a fundamental protocol constraint
 
-  Protocol is READ-ONLY by design:
-    - No write endpoints exist in the Delta Sharing spec
-    - This is a fundamental protocol constraint, not a DuckDB limitation
-""")
+  3. UC exposes a Delta Sharing server at:
+     {workspace}/api/2.0/delta-sharing/...
+     But it requires Share/Recipient setup in UC (not just a PAT).
 
-    if not DATABRICKS_TOKEN:
-        print("  Skipping REST probe — DATABRICKS_TOKEN not set.")
-        return
-
-    print("  Probing Delta Sharing REST endpoint...")
-    findings = probe_delta_sharing_rest()
-
-    status = findings.get("status")
-    if "error" in findings and "status" not in findings:
-        print_result(
-            "Delta Sharing REST probe",
-            False,
-            findings["error"],
-        )
-    elif status == 200:
-        shares = findings.get("shares", [])
-        print_result(
-            "Delta Sharing REST /shares endpoint",
-            True,
-            f"reachable — {len(shares)} share(s) returned: {[s.get('name') for s in shares]}",
-        )
-        if not shares:
-            print("""
-  Note: No shares returned. To use Delta Sharing, a UC admin must:
-    1. Create a Share object in UC covering the target tables
-    2. Create a Recipient in UC
-    3. Grant the Recipient access to the Share
-    4. Download the credential file for the Recipient
-  A PAT alone does not expose tables — the Share/Recipient layer is required.
-""")
-    elif status == 403:
-        print_result(
-            "Delta Sharing REST /shares endpoint",
-            False,
-            f"HTTP 403 Forbidden — PAT lacks permission or Delta Sharing not enabled: {findings.get('error', '')[:200]}",
-        )
-    elif status == 404:
-        print_result(
-            "Delta Sharing REST /shares endpoint",
-            False,
-            "HTTP 404 — Delta Sharing endpoint not found at this workspace URL",
-        )
-    else:
-        print_result(
-            "Delta Sharing REST /shares endpoint",
-            False,
-            f"HTTP {status} — {findings.get('error', '')[:200]}",
-        )
-
-    # Document the Python bridge approach
-    print("""
-  Python Bridge Approach (out of scope for pure DuckDB testing):
-    To query UC Delta tables via Delta Sharing from DuckDB, you would:
-
-      import delta_sharing, duckdb
-      profile = "/path/to/credential.share"   # downloaded from UC UI
-      table_url = f"{profile}#<share>.<schema>.<table>"
-      df = delta_sharing.load_as_pandas(table_url)  # reads all data to memory
-      conn = duckdb.connect()
-      conn.register("shared_table", df)
-      result = conn.execute("SELECT * FROM shared_table WHERE id = 1").df()
-
-    Limitations:
-      - Requires a credential .share file (PAT-based or OIDC)
-      - Full table data loads into memory before DuckDB can query it
-      - No predicate pushdown (hints are best-effort server-side only)
-      - Read-only — no writes possible
-      - Requires: pip install delta-sharing
-""")
+  For DuckDB writes to UC, use the Iceberg REST path instead:
+    ATTACH '<catalog>' AS uc (TYPE iceberg,
+      ENDPOINT 'https://<workspace>/api/2.1/unity-catalog/iceberg-rest')
+""".format(workspace=WORKSPACE))
 
 
 # ---------------------------------------------------------------------------
-# Approach B: DuckDB `delta` extension (direct cloud storage — bypasses UC)
-# ---------------------------------------------------------------------------
-
-def get_table_storage_path(table_name: str) -> str | None:
-    """
-    Attempt to retrieve the storage path for a UC table via UC REST API.
-    This is what you'd need to pass to delta_scan().
-    """
-    if not DATABRICKS_TOKEN:
-        return None
-
-    try:
-        import requests
-    except ImportError:
-        return None
-
-    url = (
-        f"{WORKSPACE_URL}/api/2.1/unity-catalog/tables"
-        f"/{CATALOG}.{SCHEMA}.{table_name}"
-    )
-    headers = {"Authorization": f"Bearer {DATABRICKS_TOKEN}"}
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("storage_location")
-        return None
-    except Exception:
-        return None
-
-
-def try_delta_scan_read(conn: duckdb.DuckDBPyConnection, storage_path: str, table_name: str) -> tuple[bool, str]:
-    """Attempt to read a Delta table via delta_scan()."""
-    try:
-        result = conn.execute(
-            f"SELECT COUNT(*) as row_count FROM delta_scan('{storage_path}')"
-        ).fetchone()
-        count = result[0] if result else 0
-        return True, f"read {count} rows"
-    except Exception as e:
-        err = str(e)
-        # Classify the error type for clarity
-        if "credential" in err.lower() or "permission" in err.lower() or "access" in err.lower():
-            return False, f"storage credential error (expected without cloud creds): {err[:200]}"
-        elif "not found" in err.lower() or "no such" in err.lower():
-            return False, f"table not found at storage path: {err[:200]}"
-        else:
-            return False, f"{err[:200]}"
-
-
-def try_delta_scan_predicate(conn: duckdb.DuckDBPyConnection, storage_path: str) -> tuple[bool, str]:
-    """Attempt predicate pushdown via delta_scan()."""
-    try:
-        result = conn.execute(
-            f"SELECT COUNT(*) FROM delta_scan('{storage_path}') WHERE id = 1"
-        ).fetchone()
-        return True, "predicate pushdown executed"
-    except Exception as e:
-        err = str(e)
-        if "credential" in err.lower() or "access" in err.lower() or "permission" in err.lower():
-            return False, f"storage credential error (blocks predicate test): {err[:200]}"
-        return False, f"{err[:200]}"
-
-
-def try_delta_scan_append(conn: duckdb.DuckDBPyConnection, storage_path: str) -> tuple[bool, str]:
-    """Attempt blind append (insert) via delta_scan()."""
-    try:
-        conn.execute(
-            f"INSERT INTO delta_scan('{storage_path}') SELECT 99999 AS id, 'duckdb_test' AS name"
-        )
-        return True, "blind append succeeded (bypasses UC governance)"
-    except Exception as e:
-        err = str(e)
-        if "read.only" in err.lower() or "not supported" in err.lower() or "cannot" in err.lower():
-            return False, f"write not supported via delta_scan: {err[:200]}"
-        elif "credential" in err.lower() or "access" in err.lower() or "permission" in err.lower():
-            return False, f"storage credential error: {err[:200]}"
-        return False, f"{err[:200]}"
-
-
-def run_delta_scan_section():
-    """Test the DuckDB delta extension (direct cloud storage path)."""
-    print_header("Approach B: DuckDB delta Extension (Direct Cloud Storage)")
-
-    print("""
-  What this path is:
-    The DuckDB `delta` extension uses delta-kernel-rs to read Delta tables
-    directly from cloud storage by accessing the _delta_log/ transaction log.
-    It does NOT go through Unity Catalog at all — it bypasses UC governance.
-
-  Authentication required:
-    Cloud storage credentials (S3 keys, Azure SAS, GCS SA key)
-    NOT a Databricks token — delta_scan does not understand Databricks auth.
-
-  Expected outcome:
-    Without cloud storage credentials, all delta_scan() calls will fail
-    with storage permission errors. This is expected behavior.
-    The errors confirm the approach path but show the credential gap.
-""")
-
-    # Retrieve storage paths from UC REST API (using PAT)
-    print("  Looking up table storage paths from UC REST API...")
-    storage_paths = {}
-    for table_name in ALL_TABLES:
-        path = get_table_storage_path(table_name)
-        if path:
-            storage_paths[table_name] = path
-            print(f"    {table_name}: {path}")
-        else:
-            print(f"    {table_name}: could not retrieve (no token or API error)")
-
-    if not storage_paths:
-        print("""
-  No storage paths retrieved. To test delta_scan manually:
-    1. In Databricks SQL run: DESCRIBE EXTENDED {catalog}.{schema}.{table}
-    2. Find the "Location" field (e.g., s3://bucket/path/to/table)
-    3. Run: FROM delta_scan('s3://bucket/path/to/table')
-       with appropriate cloud storage credentials configured in DuckDB.
-""".format(catalog=CATALOG, schema=SCHEMA, table="managed_delta"))
-
-    conn = duckdb.connect()
-    try:
-        conn.execute("LOAD delta;")
-    except Exception as e:
-        print_result("Load delta extension", False, str(e))
-        return
-
-    for table_name in ALL_TABLES:
-        print(f"\n  --- Table: {table_name} ---")
-
-        storage_path = storage_paths.get(table_name)
-        if not storage_path:
-            no_path_msg = "storage path unknown — cannot test delta_scan without storage location"
-            for op in OPERATIONS:
-                results[table_name][op] = (False, no_path_msg)
-                print_result(op, False, no_path_msg)
-            continue
-
-        # Read
-        success, detail = try_delta_scan_read(conn, storage_path, table_name)
-        results[table_name]["Read (SELECT)"] = (success, detail)
-        print_result("Read (SELECT)", success, detail)
-
-        # Predicate pushdown (only if read worked, otherwise same error)
-        if success:
-            pp_success, pp_detail = try_delta_scan_predicate(conn, storage_path)
-        else:
-            pp_success, pp_detail = False, "skipped — read failed (same credential barrier)"
-        results[table_name]["Predicate Pushdown"] = (pp_success, pp_detail)
-        print_result("Predicate Pushdown", pp_success, pp_detail)
-
-        # Append (blind insert — the one write operation delta extension supports)
-        if success:
-            app_success, app_detail = try_delta_scan_append(conn, storage_path)
-        else:
-            app_success, app_detail = False, "skipped — read failed (same credential barrier)"
-        results[table_name]["Write (Append)"] = (app_success, app_detail)
-        print_result("Write (Append)", app_success, app_detail)
-
-        # Update — not supported by delta extension
-        update_detail = "delta extension supports blind append only; UPDATE not supported (no MERGE/UPDATE/DELETE)"
-        results[table_name]["Write (Update)"] = (False, update_detail)
-        print_result("Write (Update)", False, update_detail)
-
-        # Delete — not supported by delta extension
-        delete_detail = "delta extension does not support DELETE operations"
-        results[table_name]["Delete Row"] = (False, delete_detail)
-        print_result("Delete Row", False, delete_detail)
-
-        # Create Table — delta extension cannot create Delta tables
-        create_detail = "delta extension cannot CREATE tables; tables must pre-exist on storage"
-        results[table_name]["Create Table"] = (False, create_detail)
-        print_result("Create Table", False, create_detail)
-
-        # Drop Table — delta extension cannot drop Delta tables
-        drop_detail = "delta extension cannot DROP tables; no DDL support"
-        results[table_name]["Drop Table"] = (False, drop_detail)
-        print_result("Drop Table", False, drop_detail)
-
-    conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Protocol architecture explanation
-# ---------------------------------------------------------------------------
-
-def explain_why_uc_rest_cant_write():
-    """Print architectural explanation for why writes are impossible via UC REST."""
-    print_header("Why UC REST / Delta Sharing Cannot Support Writes")
-    print("""
-  The Delta Sharing protocol is a READ-ONLY data sharing protocol by design.
-
-  Architecture:
-    UC Delta Sharing Server → returns presigned S3/ADLS/GCS URLs for Parquet files
-    Client downloads those files and queries locally
-
-  There are no write endpoints in the Delta Sharing spec:
-    ✅  GET  /shares                     list shares
-    ✅  GET  /shares/{share}/schemas      list schemas
-    ✅  GET  /shares/{share}/.../tables   list tables
-    ✅  POST /shares/{share}/.../query    get presigned URLs for read
-    ❌  no INSERT / UPDATE / DELETE / MERGE endpoints exist
-
-  This is a fundamental protocol constraint, not a DuckDB or UC limitation.
-  The protocol was designed for safe, governed, read-only data sharing with
-  external recipients — write access would break the security model.
-
-  If you need writes from DuckDB to UC Delta tables, your options are:
-    1. Iceberg REST path (DuckDB iceberg extension) — full CRUD with UC governance
-       → ATTACH 'https://{workspace}/api/2.1/unity-catalog/iceberg-rest'
-    2. Databricks SQL endpoint (JDBC/ODBC) — writes via SQL, not native Delta
-    3. delta-rs Python library — writes Delta format directly to storage (bypasses UC)
-""".format(workspace=WORKSPACE_URL.replace("https://", "")))
-
-
-# ---------------------------------------------------------------------------
-# Summary
+# Summary matrix
 # ---------------------------------------------------------------------------
 
 def print_summary():
-    """Print a summary table of all results."""
-    print_header("Summary: Delta / UC REST Path Results")
+    print_header("SUMMARY MATRIX")
+    operations = [
+        "read",
+        "predicate_pushdown",
+        "write_append",
+        "write_update",
+        "delete_row",
+        "create_table",
+        "drop_table",
+    ]
+    col_w = 22
 
-    # Column widths
-    table_col = 20
-    op_col = 22
-    result_col = 8
-
-    header = (
-        f"  {'Table':<{table_col}} {'Operation':<{op_col}} {'Result':<{result_col}} Detail"
-    )
+    header = f"{'Table Type':<22}" + "".join(op[:col_w].center(col_w) for op in operations)
     print(header)
-    print("  " + "-" * 90)
+    print("-" * len(header))
 
-    for table_name in ALL_TABLES:
-        for op in OPERATIONS:
-            if op in results[table_name]:
-                success, detail = results[table_name][op]
-                icon = "✅" if success else "❌"
-                print(
-                    f"  {table_name:<{table_col}} {op:<{op_col}} {icon:<{result_col}} {detail[:60]}"
-                )
+    for tbl in ALL_TABLES:
+        row = f"{tbl:<22}"
+        for op in operations:
+            key = (tbl, op)
+            if key in results:
+                icon = "PASS" if results[key] else "FAIL"
             else:
-                print(
-                    f"  {table_name:<{table_col}} {op:<{op_col}} {'➖':<{result_col}} not tested"
-                )
+                icon = "N/A "
+            row += icon.center(col_w)
+        print(row)
 
     print()
+    passed = sum(1 for v in results.values() if v)
+    total = len(results)
+    print(f"  Total: {passed}/{total} passed")
 
-    # High-level takeaways
+    print()
     print("  Key Takeaways:")
-    print("    ❌ No native DuckDB Delta Sharing REST client exists")
-    print("    ❌ delta_scan() bypasses UC entirely — needs cloud storage creds, not a PAT")
-    print("    ❌ Delta Sharing protocol is read-only by design — no writes possible")
-    print("    ❌ delta_scan() supports blind-append only — no UPDATE/DELETE/MERGE")
-    print("    ❌ delta_scan() cannot CREATE or DROP tables")
-    print("    ⚠️  managed_iceberg tested here via Delta path — expect same failures")
-    print("    ✅  Iceberg REST path is the recommended DuckDB ↔ UC integration")
-    print("       (see scripts/03_iceberg_uc_rest.py for that experiment)")
-    print()
+    print("    ✅ Native Iceberg reads + predicate pushdown work via uc_catalog")
+    print("    ❌ Delta+UniForm tables fail (Bad Request on temporary-table-credentials)")
+    print("    ❌ Writes to native Iceberg fail (DeltaKernel incompatibility)")
+    print("    ❌ UPDATE/DELETE fail ('Can only update/delete from base table')")
+    print("    ❌ No DDL support (CREATE/DROP TABLE)")
+    print("    ⚠️  Must use unnamed secrets (named secrets silently ignored — bug #48)")
+    print("    ✅ Iceberg REST is the recommended path for full CRUD")
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
-def main():
-    global DATABRICKS_TOKEN
+if __name__ == "__main__":
+    con = setup_connection()
 
-    print(f"\n{SEPARATOR}")
-    print("DuckDB + Unity Catalog: Delta / UC REST Path Experiment")
-    print(f"Workspace: {WORKSPACE_URL}")
-    print(f"Catalog:   {CATALOG}")
-    print(f"Schema:    {SCHEMA}")
-    print(f"Tables:    {', '.join(ALL_TABLES)}")
-    print(SEPARATOR)
+    test_read(con)
+    test_predicate_pushdown(con)
+    test_write_append(con)
+    test_write_update(con)
+    test_delete_row(con)
+    test_create_drop_table(con)
 
-    # Get token via SDK auth chain
-    try:
-        DATABRICKS_TOKEN = get_databricks_token()
-    except Exception as e:
-        print(f"  WARNING: Could not get Databricks token: {e}")
-
-    prereqs_ok = check_prerequisites()
-    if not prereqs_ok:
-        print("\n  WARNING: Some prerequisites missing. Continuing with available functionality.\n")
-
-    run_delta_sharing_rest_section()
-    run_delta_scan_section()
-    explain_why_uc_rest_cant_write()
     print_summary()
 
+    con.close()
 
-if __name__ == "__main__":
-    main()
+    document_delta_sharing()
+
+    print(f"\n{SEPARATOR}")
+    print("Done.")
