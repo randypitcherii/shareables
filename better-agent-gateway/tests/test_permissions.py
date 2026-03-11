@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.routes.permissions import (
+    CHAT_CHECK_MODEL,
+    _sanitize_error,
     _truncate_names,
     router,
 )
@@ -40,6 +42,7 @@ def _make_mock_client(catalogs=None, warehouses=None, endpoints=None,
     mock.warehouses.list.return_value = warehouses or []
     mock.serving_endpoints.list.return_value = endpoints or []
     mock.current_user.me.return_value = _make_mock_user(user_name, display_name)
+    mock.config.authenticate.return_value = {"Authorization": "Bearer fake"}
     return mock
 
 
@@ -50,7 +53,51 @@ def _make_error_client(error_msg="Connection refused"):
     mock.warehouses.list.side_effect = Exception(error_msg)
     mock.serving_endpoints.list.side_effect = Exception(error_msg)
     mock.current_user.me.side_effect = Exception(error_msg)
+    mock.config.authenticate.side_effect = Exception(error_msg)
     return mock
+
+
+def _mock_httpx_success():
+    """Return a mock httpx response for a successful chat completion."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "choices": [{"message": {"content": "Hello to you!"}}],
+    }
+    return resp
+
+
+def _mock_httpx_error(status_code=403):
+    """Return a mock httpx response for an HTTP error."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    return resp
+
+
+# --- _sanitize_error ---
+
+
+def test_sanitize_error_clean_message():
+    """Clean message passes through unchanged."""
+    assert _sanitize_error("Something went wrong") == "Something went wrong"
+
+
+def test_sanitize_error_strips_config_suffix():
+    """Message with '. Config: ...' gets truncated at '. Config:'."""
+    msg = "Auth failed. Config: host=https://x.com, client_id=abc, client_secret=***"
+    assert _sanitize_error(msg) == "Auth failed"
+
+
+def test_sanitize_error_strips_reqid():
+    """Message with '[ReqId: ...]' gets the ReqId stripped."""
+    msg = "Permission denied [ReqId: abc-123-def]"
+    assert _sanitize_error(msg) == "Permission denied"
+
+
+def test_sanitize_error_strips_both_config_and_reqid():
+    """Message with both Config and ReqId gets both stripped."""
+    msg = "Bad request [ReqId: xyz-789]. Config: host=https://x.com, auth_type=oauth"
+    assert _sanitize_error(msg) == "Bad request"
 
 
 # --- _truncate_names ---
@@ -73,6 +120,51 @@ def test_truncate_names_over_limit():
     assert result[-1] == "...and 5 more"
 
 
+# --- _chat_completion_check ---
+
+
+def test_chat_completion_check_success():
+    """httpx returns 200 with valid chat response."""
+    mock_client = _make_mock_client()
+
+    with patch("httpx.post", return_value=_mock_httpx_success()):
+        from server.routes.permissions import _chat_completion_check
+        result = _chat_completion_check(mock_client)
+
+    assert result["success"] is True
+    assert result["model"] == CHAT_CHECK_MODEL
+    assert result["response"] == "Hello to you!"
+    assert result["error"] is None
+
+
+def test_chat_completion_check_http_error():
+    """httpx returns 403 → error with HTTP status."""
+    mock_client = _make_mock_client()
+
+    with patch("httpx.post", return_value=_mock_httpx_error(403)):
+        from server.routes.permissions import _chat_completion_check
+        result = _chat_completion_check(mock_client)
+
+    assert result["success"] is False
+    assert result["model"] == CHAT_CHECK_MODEL
+    assert result["response"] is None
+    assert result["error"] == "HTTP 403"
+
+
+def test_chat_completion_check_exception():
+    """httpx raises an exception → error is captured."""
+    mock_client = _make_mock_client()
+
+    with patch("httpx.post", side_effect=Exception("Connection timeout")):
+        from server.routes.permissions import _chat_completion_check
+        result = _chat_completion_check(mock_client)
+
+    assert result["success"] is False
+    assert result["model"] == CHAT_CHECK_MODEL
+    assert result["response"] is None
+    assert result["error"] == "Connection timeout"
+
+
 # --- comparison endpoint ---
 
 
@@ -88,6 +180,11 @@ def test_comparison_no_obo_token(client, monkeypatch):
     data = resp.json()
     assert data["obo_user"]["current_user"]["error"] == "No OBO token available"
     assert data["obo_user"]["catalogs"]["error"] == "No OBO token available"
+    # chat_completion should also report no OBO token
+    chat = data["obo_user"]["chat_completion"]
+    assert chat["success"] is False
+    assert chat["error"] == "No OBO token available"
+    assert chat["model"] == CHAT_CHECK_MODEL
     assert data["app_sp"]["catalogs"]["error"] is not None
 
 
@@ -99,7 +196,8 @@ def test_comparison_response_shape(client, monkeypatch):
     mock_sp = _make_mock_client()
 
     with patch("server.routes.permissions._obo_client", return_value=mock_obo), \
-         patch("server.routes.permissions._sp_client", return_value=mock_sp):
+         patch("server.routes.permissions._sp_client", return_value=mock_sp), \
+         patch("httpx.post", return_value=_mock_httpx_success()):
         resp = client.get(
             "/api/v1/permissions/comparison",
             headers={"X-Forwarded-Access-Token": "fake-token"},
@@ -123,6 +221,13 @@ def test_comparison_response_shape(client, monkeypatch):
             assert "count" in cell
             assert "names" in cell
             assert "error" in cell
+        # Check chat_completion shape
+        assert "chat_completion" in data[actor]
+        chat = data[actor]["chat_completion"]
+        assert "success" in chat
+        assert "model" in chat
+        assert "response" in chat
+        assert "error" in chat
 
 
 def test_comparison_obo_sees_more_than_sp(client, monkeypatch):
@@ -153,7 +258,8 @@ def test_comparison_obo_sees_more_than_sp(client, monkeypatch):
     )
 
     with patch("server.routes.permissions._obo_client", return_value=mock_obo), \
-         patch("server.routes.permissions._sp_client", return_value=mock_sp):
+         patch("server.routes.permissions._sp_client", return_value=mock_sp), \
+         patch("httpx.post", return_value=_mock_httpx_success()):
         resp = client.get(
             "/api/v1/permissions/comparison",
             headers={"X-Forwarded-Access-Token": "fake-token"},
@@ -183,6 +289,12 @@ def test_comparison_obo_sees_more_than_sp(client, monkeypatch):
     assert data["app_sp"]["serving_endpoints"]["count"] == 1
     assert data["app_sp"]["serving_endpoints"]["names"] == ["databricks-claude-sonnet-4"]
 
+    # Both chat completions succeeded (mocked)
+    assert data["obo_user"]["chat_completion"]["success"] is True
+    assert data["obo_user"]["chat_completion"]["model"] == CHAT_CHECK_MODEL
+    assert data["app_sp"]["chat_completion"]["success"] is True
+    assert data["app_sp"]["chat_completion"]["model"] == CHAT_CHECK_MODEL
+
 
 def test_comparison_graceful_error_handling(client, monkeypatch):
     """If SDK calls fail, errors are returned without crashing."""
@@ -207,3 +319,9 @@ def test_comparison_graceful_error_handling(client, monkeypatch):
         for resource in ("catalogs", "warehouses", "serving_endpoints"):
             assert data[actor][resource]["count"] == 0
             assert data[actor][resource]["error"] is not None
+        # chat_completion should also have an error
+        chat = data[actor]["chat_completion"]
+        assert chat["success"] is False
+        assert chat["error"] is not None
+        assert chat["model"] == CHAT_CHECK_MODEL
+        assert chat["response"] is None
