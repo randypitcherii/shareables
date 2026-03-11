@@ -14,7 +14,7 @@ Key finding from research: DuckDB has NO native Delta Sharing REST client.
 This script documents both approaches and captures actual error messages.
 
 Run: uv run python scripts/02_delta_uc_rest.py
-Requires: DATABRICKS_TOKEN env var
+Requires: Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
 """
 
 import os
@@ -28,7 +28,10 @@ from _common import (
     CATALOG,
     SCHEMA,
     FULL_SCHEMA,
+    WORKSPACE,
+    WORKSPACE_URL,
     SEPARATOR,
+    get_databricks_token,
     print_header,
     print_result,
 )
@@ -37,8 +40,8 @@ from _common import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-WORKSPACE_URL = "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
-DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
+# Token is fetched lazily via get_databricks_token() from the SDK auth chain
+DATABRICKS_TOKEN = ""  # populated in main()
 
 # Delta tables to test (managed and external)
 DELTA_TABLES = ["managed_delta", "external_delta"]
@@ -75,13 +78,13 @@ def check_prerequisites() -> bool:
 
     if not DATABRICKS_TOKEN:
         print_result(
-            "DATABRICKS_TOKEN env var",
+            "Databricks auth token",
             False,
-            "not set — set this to your Databricks PAT before running",
+            "not available — check ~/.databrickscfg or run 'databricks auth login'",
         )
         ok = False
     else:
-        print_result("DATABRICKS_TOKEN env var", True, "set")
+        print_result("Databricks auth token", True, "obtained via SDK")
 
     # Check DuckDB version
     try:
@@ -514,6 +517,8 @@ def print_summary():
 # ---------------------------------------------------------------------------
 
 def main():
+    global DATABRICKS_TOKEN
+
     print(f"\n{SEPARATOR}")
     print("DuckDB + Unity Catalog: Delta / UC REST Path Experiment")
     print(f"Workspace: {WORKSPACE_URL}")
@@ -521,6 +526,12 @@ def main():
     print(f"Schema:    {SCHEMA}")
     print(f"Tables:    {', '.join(ALL_TABLES)}")
     print(SEPARATOR)
+
+    # Get token via SDK auth chain
+    try:
+        DATABRICKS_TOKEN = get_databricks_token()
+    except Exception as e:
+        print(f"  WARNING: Could not get Databricks token: {e}")
 
     prereqs_ok = check_prerequisites()
     if not prereqs_ok:

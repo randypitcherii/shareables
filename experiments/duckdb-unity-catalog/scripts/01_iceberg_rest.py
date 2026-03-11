@@ -6,7 +6,7 @@ table types using DuckDB's `iceberg` extension with the Databricks UC REST endpo
 
 Requires:
   - DuckDB >= 1.4.2 (DELETE/UPDATE support)
-  - DATABRICKS_TOKEN environment variable set to a Databricks PAT
+  - Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
 
 Run:
   uv run python scripts/01_iceberg_rest.py
@@ -22,7 +22,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from _common import (
     CATALOG,
     SCHEMA,
+    WORKSPACE,
     SEPARATOR,
+    get_databricks_token,
     print_header,
     print_result,
 )
@@ -31,7 +33,6 @@ from _common import (
 # Configuration
 # ---------------------------------------------------------------------------
 
-WORKSPACE = "fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
 ENDPOINT = f"https://{WORKSPACE}/api/2.1/unity-catalog/iceberg-rest"
 
 # Table types to exercise (Create/Drop tests use managed_iceberg only — Delta is read-only)
@@ -65,26 +66,23 @@ def run(con: duckdb.DuckDBPyConnection, sql: str):
 # ---------------------------------------------------------------------------
 
 def setup_connection() -> duckdb.DuckDBPyConnection:
-    token = os.environ.get("DATABRICKS_TOKEN")
-    if not token:
-        print("ERROR: DATABRICKS_TOKEN environment variable is not set.")
-        sys.exit(1)
-
     print_header("DuckDB Iceberg REST — connecting to Unity Catalog")
     print(f"  Workspace : {WORKSPACE}")
     print(f"  Endpoint  : {ENDPOINT}")
     print(f"  Catalog   : {CATALOG}")
     print(f"  Schema    : {SCHEMA}")
 
+    token = get_databricks_token()
+
     con = duckdb.connect()
 
     # Install / load required extensions
     con.execute("INSTALL iceberg; LOAD iceberg;")
-    con.execute("LOAD httpfs;")
+    con.execute("INSTALL httpfs; LOAD httpfs;")
     # Pull latest extension fixes before testing
     con.execute("UPDATE EXTENSIONS;")
 
-    # Create a named Iceberg secret using the PAT token
+    # Create a named Iceberg secret using the SDK-obtained token
     con.execute(f"""
         CREATE SECRET uc_iceberg_secret (
             TYPE iceberg,

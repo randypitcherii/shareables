@@ -5,7 +5,31 @@ import os
 CATALOG = "fe_randy_pitcher_workspace_catalog"
 SCHEMA = "duckdb_uc_experiment"
 FULL_SCHEMA = f"{CATALOG}.{SCHEMA}"
+WORKSPACE = "fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
+WORKSPACE_URL = f"https://{WORKSPACE}"
 SEPARATOR = "=" * 60
+
+
+def get_databricks_token() -> str:
+    """Get a Databricks access token via the SDK's default auth chain.
+
+    Uses WorkspaceClient which respects ~/.databrickscfg, env vars, and
+    OAuth (databricks-cli auth type). No static PAT needed.
+    """
+    from databricks.sdk import WorkspaceClient
+
+    w = WorkspaceClient()
+    # The SDK's config.authenticate() returns headers dict or callable depending on version
+    headers_or_fn = w.config.authenticate()
+    if callable(headers_or_fn):
+        auth_header = headers_or_fn()
+    else:
+        auth_header = headers_or_fn
+    token = auth_header.get("Authorization", "").removeprefix("Bearer ")
+    if not token:
+        raise RuntimeError("Failed to get Databricks token via SDK auth chain")
+    print(f"  Auth: Databricks SDK ({w.config.auth_type})")
+    return token
 
 
 def _try_connect_spark():

@@ -7,4 +7,5 @@ dependencies = [
     "databricks-sdk",
     "databricks-connect",
     "duckdb>=1.4.0",
+    "requests",
 ]

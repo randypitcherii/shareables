@@ -168,6 +168,7 @@ dependencies = [
     { name = "databricks-connect" },
     { name = "databricks-sdk" },
     { name = "duckdb" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -175,6 +176,7 @@ requires-dist = [
     { name = "databricks-connect" },
     { name = "databricks-sdk" },
     { name = "duckdb", specifier = ">=1.4.0" },
+    { name = "requests" },
 ]
 
 [[package]]
