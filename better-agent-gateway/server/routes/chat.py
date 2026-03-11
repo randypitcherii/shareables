@@ -6,10 +6,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from ..auth import RequestContext, get_request_context
 from ..audit import get_audit_store
+from ..auth import RequestContext, get_request_context
 from ..proxy import ServingEndpointProxy
-from ..utils import sanitize_error as _sanitize_error
+from ..utils import sanitize_error
 
 _VALID_MODEL_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
@@ -91,5 +91,5 @@ async def chat_completions(
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Serving endpoint error: {_sanitize_error(str(exc))}",
+            detail=f"Serving endpoint error: {sanitize_error(str(exc))}",
         ) from exc

@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-# Load env file early
 runtime_env = os.getenv("APP_ENV", "dev").lower()
 env_file = Path(__file__).parent / f"{runtime_env}.env"
 if env_file.exists():

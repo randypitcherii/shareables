@@ -14,7 +14,7 @@ from typing import Any
 from databricks.sdk import WorkspaceClient
 from fastapi import APIRouter, Header
 
-from ..utils import sanitize_error as _sanitize_error
+from ..utils import sanitize_error
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -77,37 +77,19 @@ def _get_current_user(client: WorkspaceClient) -> dict[str, Any]:
         }
     except Exception as exc:
         logger.warning("Failed to get current user", exc_info=True)
-        return {"username": None, "display_name": None, "error": _sanitize_error(str(exc))}
+        return {"username": None, "display_name": None, "error": sanitize_error(str(exc))}
 
 
-def _list_catalogs(client: WorkspaceClient) -> dict[str, Any]:
+def _list_named_resources(client: WorkspaceClient, resource_type: str) -> dict[str, Any]:
+    """List named resources of a given type (catalogs, warehouses, serving_endpoints)."""
+    api = getattr(client, resource_type)
     try:
-        catalogs = list(client.catalogs.list())
-        names = sorted([c.name for c in catalogs if c.name])
+        items = list(api.list())
+        names = sorted(item.name for item in items if item.name)
         return {"count": len(names), "names": _truncate_names(names), "error": None}
     except Exception as exc:
-        logger.warning("Failed to list catalogs", exc_info=True)
-        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
-
-
-def _list_warehouses(client: WorkspaceClient) -> dict[str, Any]:
-    try:
-        warehouses = list(client.warehouses.list())
-        names = sorted([w.name for w in warehouses if w.name])
-        return {"count": len(names), "names": _truncate_names(names), "error": None}
-    except Exception as exc:
-        logger.warning("Failed to list warehouses", exc_info=True)
-        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
-
-
-def _list_serving_endpoints(client: WorkspaceClient) -> dict[str, Any]:
-    try:
-        endpoints = list(client.serving_endpoints.list())
-        names = sorted([e.name for e in endpoints if e.name])
-        return {"count": len(names), "names": _truncate_names(names), "error": None}
-    except Exception as exc:
-        logger.warning("Failed to list serving endpoints", exc_info=True)
-        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
+        logger.warning("Failed to list %s", resource_type, exc_info=True)
+        return {"count": 0, "names": [], "error": sanitize_error(str(exc))}
 
 
 CHAT_CHECK_MODEL = "databricks-claude-haiku-4-5"
@@ -130,15 +112,14 @@ def _chat_completion_check(client: WorkspaceClient) -> dict[str, Any]:
             },
             timeout=15.0,
         )
-        if resp.status_code == 200:
-            body = resp.json()
-            content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {"success": True, "model": CHAT_CHECK_MODEL, "response": content.strip(), "error": None}
-        else:
+        if resp.status_code != 200:
             return {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": f"HTTP {resp.status_code}"}
+        body = resp.json()
+        content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return {"success": True, "model": CHAT_CHECK_MODEL, "response": content.strip(), "error": None}
     except Exception as exc:
         logger.warning("Chat completion check failed", exc_info=True)
-        return {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": _sanitize_error(str(exc))}
+        return {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": sanitize_error(str(exc))}
 
 
 _NO_TOKEN_ERROR = "No OBO token available"
@@ -157,9 +138,9 @@ async def permissions_comparison(
         """Run all permission checks for a single client (blocking)."""
         return {
             "current_user": _get_current_user(client),
-            "catalogs": _list_catalogs(client),
-            "warehouses": _list_warehouses(client),
-            "serving_endpoints": _list_serving_endpoints(client),
+            "catalogs": _list_named_resources(client, "catalogs"),
+            "warehouses": _list_named_resources(client, "warehouses"),
+            "serving_endpoints": _list_named_resources(client, "serving_endpoints"),
             "chat_completion": _chat_completion_check(client),
         }
 
@@ -176,7 +157,7 @@ async def permissions_comparison(
         sp_future = loop.run_in_executor(_executor, partial(_collect, sp))
     except Exception as exc:
         sp_future = None
-        err = _sanitize_error(str(exc))
+        err = sanitize_error(str(exc))
         sp_error = {"count": 0, "names": [], "error": err}
         sp_results = {
             "current_user": {"username": None, "display_name": None, "error": err},

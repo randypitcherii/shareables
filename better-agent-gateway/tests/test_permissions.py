@@ -8,10 +8,10 @@ from fastapi.testclient import TestClient
 
 from server.routes.permissions import (
     CHAT_CHECK_MODEL,
-    _sanitize_error,
     _truncate_names,
     router,
 )
+from server.utils import sanitize_error
 
 
 @pytest.fixture
@@ -74,30 +74,30 @@ def _mock_httpx_error(status_code=403):
     return resp
 
 
-# --- _sanitize_error ---
+# --- sanitize_error ---
 
 
-def test_sanitize_error_clean_message():
+def testsanitize_error_clean_message():
     """Clean message passes through unchanged."""
-    assert _sanitize_error("Something went wrong") == "Something went wrong"
+    assert sanitize_error("Something went wrong") == "Something went wrong"
 
 
-def test_sanitize_error_strips_config_suffix():
+def testsanitize_error_strips_config_suffix():
     """Message with '. Config: ...' gets truncated at '. Config:'."""
     msg = "Auth failed. Config: host=https://x.com, client_id=abc, client_secret=***"
-    assert _sanitize_error(msg) == "Auth failed"
+    assert sanitize_error(msg) == "Auth failed"
 
 
-def test_sanitize_error_strips_reqid():
+def testsanitize_error_strips_reqid():
     """Message with '[ReqId: ...]' gets the ReqId stripped."""
     msg = "Permission denied [ReqId: abc-123-def]"
-    assert _sanitize_error(msg) == "Permission denied"
+    assert sanitize_error(msg) == "Permission denied"
 
 
-def test_sanitize_error_strips_both_config_and_reqid():
+def testsanitize_error_strips_both_config_and_reqid():
     """Message with both Config and ReqId gets both stripped."""
     msg = "Bad request [ReqId: xyz-789]. Config: host=https://x.com, auth_type=oauth"
-    assert _sanitize_error(msg) == "Bad request"
+    assert sanitize_error(msg) == "Bad request"
 
 
 # --- _truncate_names ---

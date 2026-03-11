@@ -11,6 +11,11 @@ interface AuthContext {
   scoped_permissions: string[]
 }
 
+function formatForwardedUser(forwarded: string | null): string {
+  if (!forwarded) return 'Unknown'
+  return forwarded.split('@')[0].replace(/\./g, ' ')
+}
+
 export function UserInfo() {
   const [auth, setAuth] = useState<AuthContext | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,12 +37,9 @@ export function UserInfo() {
   if (error) return <div className="error">Failed to load user info: {error}</div>
   if (!auth) return <div className="user-info loading">Loading user info...</div>
 
-  // Prefer resolved display_name, fall back to email, then forwarded_user
   const displayUser = auth.display_name
     || auth.email
-    || (auth.forwarded_user
-      ? auth.forwarded_user.split('@')[0].replace(/\./g, ' ')
-      : 'Unknown')
+    || formatForwardedUser(auth.forwarded_user)
 
   const identityValue = auth.email || auth.user_name || auth.forwarded_user || 'Not available'
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ _FAMILY_PATTERNS: list[tuple[str, str, re.Pattern]] = [
 ]
 
 
-def parse_model_family(endpoint_name: str) -> Optional[tuple[str, tuple[int, ...]]]:
+def parse_model_family(endpoint_name: str) -> tuple[str, tuple[int, ...]] | None:
     """Parse an endpoint name into (family, version_tuple) or None."""
     for prefix, family, pattern in _FAMILY_PATTERNS:
         if not endpoint_name.startswith(prefix):

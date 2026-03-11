@@ -69,7 +69,14 @@ function ResourceCell({ result }: { result: ResourceResult }) {
     )
   }
 
-  const status = result.count === 0 ? 'perm-badge-none' : result.count <= 3 ? 'perm-badge-limited' : 'perm-badge-ok'
+  let status: string
+  if (result.count === 0) {
+    status = 'perm-badge-none'
+  } else if (result.count <= 3) {
+    status = 'perm-badge-limited'
+  } else {
+    status = 'perm-badge-ok'
+  }
 
   return (
     <div className="perm-cell">
