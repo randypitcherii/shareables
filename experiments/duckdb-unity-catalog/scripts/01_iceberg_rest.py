@@ -145,7 +145,7 @@ def test_predicate_pushdown(con: duckdb.DuckDBPyConnection):
         try:
             # Enable Iceberg-level logging so we can inspect pruning messages
             con.execute("CALL enable_logging('Iceberg');")
-            run(con, f"SELECT * FROM {full} WHERE id > 999999999 LIMIT 1;")
+            run(con, f"SELECT * FROM {full} WHERE trip_distance > 999999999 LIMIT 1;")
 
             logs = con.execute("""
                 SELECT message FROM duckdb_logs()
@@ -179,8 +179,11 @@ def test_write_append(con: duckdb.DuckDBPyConnection):
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
         try:
-            run(con, f"INSERT INTO {full} SELECT * FROM {full} WHERE 1=0;")
-            record(tbl, "write_append", True, "INSERT succeeded")
+            before = con.execute(f"SELECT count(*) FROM {full}").fetchone()[0]
+            run(con, f"INSERT INTO {full} SELECT * FROM {full} LIMIT 1;")
+            after = con.execute(f"SELECT count(*) FROM {full}").fetchone()[0]
+            record(tbl, "write_append", True,
+                   f"inserted {after - before} row(s) (before={before}, after={after})")
         except Exception as e:
             record(tbl, "write_append", False, str(e))
 
@@ -194,9 +197,17 @@ def test_write_update(con: duckdb.DuckDBPyConnection):
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
         try:
-            # Attempt a no-op UPDATE (WHERE 1=0) to test capability without side effects
-            run(con, f"UPDATE {full} SET id = id WHERE 1=0;")
-            record(tbl, "write_update", True, "UPDATE succeeded")
+            # Update a single row by targeting the MIN trip_distance value
+            before_val = con.execute(
+                f"SELECT MIN(trip_distance) FROM {full}"
+            ).fetchone()[0]
+            run(con, f"""
+                UPDATE {full}
+                SET trip_distance = trip_distance
+                WHERE trip_distance = (SELECT MIN(trip_distance) FROM {full});
+            """)
+            record(tbl, "write_update", True,
+                   f"UPDATE succeeded (targeted trip_distance={before_val})")
         except Exception as e:
             record(tbl, "write_update", False, str(e))
 
@@ -210,9 +221,14 @@ def test_delete_row(con: duckdb.DuckDBPyConnection):
     for tbl in ALL_TABLES:
         full = f"uc.{SCHEMA}.{tbl}"
         try:
-            # No-op DELETE (WHERE 1=0) to test capability without removing data
-            run(con, f"DELETE FROM {full} WHERE 1=0;")
-            record(tbl, "delete_row", True, "DELETE succeeded")
+            before = con.execute(f"SELECT count(*) FROM {full}").fetchone()[0]
+            run(con, f"""
+                DELETE FROM {full}
+                WHERE trip_distance = (SELECT MIN(trip_distance) FROM {full});
+            """)
+            after = con.execute(f"SELECT count(*) FROM {full}").fetchone()[0]
+            record(tbl, "delete_row", True,
+                   f"deleted {before - after} row(s) (before={before}, after={after})")
         except Exception as e:
             record(tbl, "delete_row", False, str(e))
 
