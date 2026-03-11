@@ -1,5 +1,6 @@
 import { ModelTable } from './components/ModelTable'
 import { HealthBadge } from './components/HealthBadge'
+import { UserInfo } from './components/UserInfo'
 import './App.css'
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
             Use <code>*-latest</code> aliases to always hit the newest model version.
           </p>
         </section>
+        <UserInfo />
         <ModelTable />
       </main>
     </div>
