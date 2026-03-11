@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,10 +18,33 @@ if env_file.exists():
 
 from server.routes import api_router
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    """Startup: refresh alias registry. Background: periodic refresh."""
+    from server.alias_registry import refresh_registry_from_workspace
+    from server.config import settings
+
+    await refresh_registry_from_workspace()
+
+    async def _periodic_refresh():
+        while True:
+            await asyncio.sleep(settings.alias_refresh_interval_seconds)
+            await refresh_registry_from_workspace()
+
+    task = asyncio.create_task(_periodic_refresh())
+    logger.info("Alias refresh scheduled every %ds", settings.alias_refresh_interval_seconds)
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="Better Agent Gateway",
     description="Scoped OAuth LLM gateway with automatic -latest model resolution",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

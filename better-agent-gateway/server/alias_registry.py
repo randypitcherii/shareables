@@ -114,21 +114,12 @@ class AliasRegistry:
     # Workspace discovery (async-friendly)
     # ------------------------------------------------------------------
 
-    async def refresh_from_workspace(self) -> None:
-        """Query the Databricks workspace for serving endpoints and rebuild aliases."""
-        from databricks.sdk import WorkspaceClient
-
-        def _fetch():
-            w = WorkspaceClient()
-            return list(w.serving_endpoints.list())
-
-        endpoints = await asyncio.to_thread(_fetch)
-        self.refresh_from_endpoints(endpoints)
-        logger.info(
-            "Registry refreshed: %d endpoints, %d aliases",
-            len(self._endpoints),
-            len(self._aliases),
+    async def refresh_from_workspace(self, workspace_client) -> None:
+        """Fetch serving endpoints from workspace and rebuild aliases."""
+        endpoints = await asyncio.to_thread(
+            lambda: list(workspace_client.serving_endpoints.list()),
         )
+        self.refresh_from_endpoints(endpoints)
 
 
 # ---------------------------------------------------------------------------
@@ -145,12 +136,13 @@ def get_registry() -> AliasRegistry:
     return _registry
 
 
-async def refresh_registry_from_workspace(
-    prefixes: list[str] | None = None,
-) -> AliasRegistry:
-    """Create / refresh the singleton registry from the workspace."""
-    global _registry
-    if _registry is None:
-        _registry = AliasRegistry(prefixes=prefixes)
-    await _registry.refresh_from_workspace()
-    return _registry
+async def refresh_registry_from_workspace() -> None:
+    """Refresh the module-level registry from the workspace."""
+    from .config import get_workspace_client, settings
+    registry = get_registry()
+    try:
+        client = get_workspace_client()
+        await registry.refresh_from_workspace(client)
+        logger.info("Registry refreshed successfully")
+    except Exception:
+        logger.exception("Failed to refresh alias registry from workspace")
