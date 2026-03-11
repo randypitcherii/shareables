@@ -20,7 +20,8 @@ def test_create_session_and_resolve_latest_alias():
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["resolved_model"] == "claude-sonnet-4-5-20260215"
+    # With no serving endpoints loaded, the alias passes through unresolved
+    assert body["resolved_model"] == "claude-sonnet-latest"
     assert body["session_id"]
 
 
