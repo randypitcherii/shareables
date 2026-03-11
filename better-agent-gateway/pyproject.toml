@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "click>=8.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
     "httpx>=0.28.1",

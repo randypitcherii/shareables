@@ -216,3 +216,33 @@ llm = ChatOpenAI(
 **Stale `-latest` alias**
 - If a new model version was deployed but the alias hasn't updated, wait up to 5 minutes for the next refresh cycle.
 - The gateway only tracks endpoints in `READY` state with the `databricks-` prefix.
+
+---
+
+## 8. Validation
+
+Run the end-to-end validation script to verify the gateway is working correctly. It checks health, authentication, model discovery, chat completion, scope enforcement, and identity attribution.
+
+```bash
+# Default: uses GATEWAY_URL env var or the dev deployment URL
+uv run python scripts/validate.py
+
+# Point at a specific gateway
+uv run python scripts/validate.py --app-url https://your-gateway.aws.databricksapps.com
+
+# Verbose output (shows full request/response details)
+uv run python scripts/validate.py --verbose
+
+# Override both app and workspace URLs
+uv run python scripts/validate.py \
+  --app-url https://your-gateway.aws.databricksapps.com \
+  --workspace-url https://your-workspace.cloud.databricks.com
+```
+
+The script requires a valid Databricks OAuth token. If you haven't authenticated recently, run:
+
+```bash
+databricks auth login --host https://<workspace-url>
+```
+
+All 8 checks should pass on a correctly deployed gateway. Checks 2-3 (auth rejection, PAT rejection) are enforced by the Databricks App proxy and may not pass against a local dev server.
