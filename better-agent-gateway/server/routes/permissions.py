@@ -4,31 +4,24 @@ Uses Databricks SDK WorkspaceClient instances for both the OBO user and the
 app service principal, avoiding raw HTTP and protocol prefix issues.
 """
 
+import asyncio
 import logging
 import os
-import re
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
 from fastapi import APIRouter, Header
+
+from ..utils import sanitize_error as _sanitize_error
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 MAX_NAMES = 20
 
-
-def _sanitize_error(msg: str) -> str:
-    """Strip SDK config noise and request IDs from error messages.
-
-    The Databricks SDK appends config details (client_id, client_secret,
-    auth_type, env vars) and request IDs that should not be shown to users.
-    """
-    # Remove '. Config: ...' suffix (and everything after it)
-    msg = re.sub(r"\. Config:.*", "", msg)
-    # Remove '[ReqId: ...]' fragments
-    msg = re.sub(r"\s*\[ReqId:\s*[^\]]*\]", "", msg)
-    return msg.strip()
+_executor = ThreadPoolExecutor(max_workers=10)
 
 
 def _truncate_names(names: list[str]) -> list[str]:
@@ -158,34 +151,31 @@ _NO_TOKEN_CHAT = {"success": False, "model": CHAT_CHECK_MODEL, "response": None,
 async def permissions_comparison(
     x_forwarded_access_token: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    # OBO user results
-    obo_results: dict[str, Any] = {}
-    if x_forwarded_access_token:
-        obo = _obo_client(x_forwarded_access_token)
-        obo_results["current_user"] = _get_current_user(obo)
-        obo_results["catalogs"] = _list_catalogs(obo)
-        obo_results["warehouses"] = _list_warehouses(obo)
-        obo_results["serving_endpoints"] = _list_serving_endpoints(obo)
-        obo_results["chat_completion"] = _chat_completion_check(obo)
-    else:
-        obo_results = {
-            "current_user": _NO_TOKEN_USER,
-            "catalogs": _NO_TOKEN_RESOURCE,
-            "warehouses": _NO_TOKEN_RESOURCE,
-            "serving_endpoints": _NO_TOKEN_RESOURCE,
-            "chat_completion": _NO_TOKEN_CHAT,
+    loop = asyncio.get_event_loop()
+
+    def _collect(client: WorkspaceClient) -> dict[str, Any]:
+        """Run all permission checks for a single client (blocking)."""
+        return {
+            "current_user": _get_current_user(client),
+            "catalogs": _list_catalogs(client),
+            "warehouses": _list_warehouses(client),
+            "serving_endpoints": _list_serving_endpoints(client),
+            "chat_completion": _chat_completion_check(client),
         }
 
+    # OBO user results
+    if x_forwarded_access_token:
+        obo = _obo_client(x_forwarded_access_token)
+        obo_future = loop.run_in_executor(_executor, partial(_collect, obo))
+    else:
+        obo_future = None
+
     # App SP results
-    sp_results: dict[str, Any] = {}
     try:
         sp = _sp_client()
-        sp_results["current_user"] = _get_current_user(sp)
-        sp_results["catalogs"] = _list_catalogs(sp)
-        sp_results["warehouses"] = _list_warehouses(sp)
-        sp_results["serving_endpoints"] = _list_serving_endpoints(sp)
-        sp_results["chat_completion"] = _chat_completion_check(sp)
+        sp_future = loop.run_in_executor(_executor, partial(_collect, sp))
     except Exception as exc:
+        sp_future = None
         err = _sanitize_error(str(exc))
         sp_error = {"count": 0, "names": [], "error": err}
         sp_results = {
@@ -195,5 +185,20 @@ async def permissions_comparison(
             "serving_endpoints": sp_error,
             "chat_completion": {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": err},
         }
+
+    # Await results in parallel
+    if obo_future is not None:
+        obo_results = await obo_future
+    else:
+        obo_results = {
+            "current_user": _NO_TOKEN_USER,
+            "catalogs": _NO_TOKEN_RESOURCE,
+            "warehouses": _NO_TOKEN_RESOURCE,
+            "serving_endpoints": _NO_TOKEN_RESOURCE,
+            "chat_completion": _NO_TOKEN_CHAT,
+        }
+
+    if sp_future is not None:
+        sp_results = await sp_future
 
     return {"obo_user": obo_results, "app_sp": sp_results}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,9 @@ from pydantic import BaseModel, Field
 from ..auth import RequestContext, get_request_context
 from ..audit import get_audit_store
 from ..proxy import ServingEndpointProxy
+from ..utils import sanitize_error as _sanitize_error
+
+_VALID_MODEL_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
 # Module-level proxy singleton (initialized lazily)
 _proxy: ServingEndpointProxy | None = None
@@ -45,6 +49,13 @@ async def chat_completions(
     context: RequestContext = Depends(get_request_context),
 ):
     registry = _get_alias_registry()
+
+    if not _VALID_MODEL_RE.match(payload.model):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid model name. Only alphanumeric characters, hyphens, underscores, and dots are allowed.",
+        )
+
     resolved_endpoint = registry.resolve(payload.model)
 
     get_audit_store().add(
@@ -80,5 +91,5 @@ async def chat_completions(
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Serving endpoint error: {exc}",
+            detail=f"Serving endpoint error: {_sanitize_error(str(exc))}",
         ) from exc
