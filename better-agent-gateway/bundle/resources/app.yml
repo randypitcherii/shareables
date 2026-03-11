@@ -1,6 +1,19 @@
 resources:
   apps:
     better-agent-gateway:
-      name: better-agent-gateway
+      name: better-agent-gateway-${bundle.target}
       description: "Scoped OAuth LLM gateway with automatic -latest model resolution"
-      source_code_path: .
+      source_code_path: ../..
+      config:
+        command:
+          - "python"
+          - "-m"
+          - "uvicorn"
+          - "app:app"
+          - "--host"
+          - "0.0.0.0"
+          - "--port"
+          - "8000"
+        env:
+          - name: ALIAS_REFRESH_INTERVAL_SECONDS
+            value: "300"
