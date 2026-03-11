@@ -24,42 +24,12 @@ def main():
     source = "samples.nyctaxi.trips"
     row_limit = 100
 
-    # --- Managed Delta ---
+    # --- Managed Delta (with UniForm for Iceberg REST visibility) ---
     table = f"{FULL_SCHEMA}.managed_delta"
     print_header(f"Creating {table}")
     spark.sql(f"DROP TABLE IF EXISTS {table}")
     spark.sql(f"""
         CREATE TABLE {table}
-        USING DELTA
-        AS SELECT * FROM {source} LIMIT {row_limit}
-    """)
-    count = spark.sql(f"SELECT count(*) as cnt FROM {table}").collect()[0]["cnt"]
-    print_result("managed_delta", True, f"{count} rows")
-
-    # --- External Delta ---
-    # Use a managed location path for external — write data first, then create external table pointing to it
-    ext_table = f"{FULL_SCHEMA}.external_delta"
-    print_header(f"Creating {ext_table}")
-    spark.sql(f"DROP TABLE IF EXISTS {ext_table}")
-    # For external delta, we create it as a regular table first to get data placed,
-    # then note: on serverless UC, truly "external" tables require an external location.
-    # Instead, we'll create a standard delta table and mark it in our grid notes.
-    # The key difference for DuckDB is whether it can access the table — both managed
-    # and "external" delta tables surface the same way through UC REST.
-    spark.sql(f"""
-        CREATE TABLE {ext_table}
-        USING DELTA
-        AS SELECT * FROM {source} LIMIT {row_limit}
-    """)
-    count = spark.sql(f"SELECT count(*) as cnt FROM {ext_table}").collect()[0]["cnt"]
-    print_result("external_delta", True, f"{count} rows (note: created as managed, see README)")
-
-    # --- Managed Iceberg (UniForm) ---
-    ice_table = f"{FULL_SCHEMA}.managed_iceberg"
-    print_header(f"Creating {ice_table}")
-    spark.sql(f"DROP TABLE IF EXISTS {ice_table}")
-    spark.sql(f"""
-        CREATE TABLE {ice_table}
         USING DELTA
         TBLPROPERTIES (
             'delta.universalFormat.enabledFormats' = 'iceberg',
@@ -67,8 +37,38 @@ def main():
         )
         AS SELECT * FROM {source} LIMIT {row_limit}
     """)
+    count = spark.sql(f"SELECT count(*) as cnt FROM {table}").collect()[0]["cnt"]
+    print_result("managed_delta (UniForm)", True, f"{count} rows")
+
+    # --- External Delta (with UniForm for Iceberg REST visibility) ---
+    ext_table = f"{FULL_SCHEMA}.external_delta"
+    print_header(f"Creating {ext_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {ext_table}")
+    # Note: truly "external" tables require an external location.
+    # Created as managed with UniForm — the key test is DuckDB access via UC.
+    spark.sql(f"""
+        CREATE TABLE {ext_table}
+        USING DELTA
+        TBLPROPERTIES (
+            'delta.universalFormat.enabledFormats' = 'iceberg',
+            'delta.enableIcebergCompatV2' = 'true'
+        )
+        AS SELECT * FROM {source} LIMIT {row_limit}
+    """)
+    count = spark.sql(f"SELECT count(*) as cnt FROM {ext_table}").collect()[0]["cnt"]
+    print_result("external_delta (UniForm)", True, f"{count} rows (note: created as managed)")
+
+    # --- Managed Iceberg (native Iceberg table) ---
+    ice_table = f"{FULL_SCHEMA}.managed_iceberg"
+    print_header(f"Creating {ice_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {ice_table}")
+    spark.sql(f"""
+        CREATE TABLE {ice_table}
+        USING ICEBERG
+        AS SELECT * FROM {source} LIMIT {row_limit}
+    """)
     count = spark.sql(f"SELECT count(*) as cnt FROM {ice_table}").collect()[0]["cnt"]
-    print_result("managed_iceberg (UniForm)", True, f"{count} rows")
+    print_result("managed_iceberg (native)", True, f"{count} rows")
 
     # --- Verify all tables ---
     print_header("Verification — listing tables")
