@@ -1,55 +1,34 @@
-"""Permission comparison endpoint -- shows OBO user vs app SP access side-by-side."""
+"""Permission comparison endpoint -- shows OBO user vs app SP access side-by-side.
+
+Uses Databricks SDK WorkspaceClient instances for both the OBO user and the
+app service principal, avoiding raw HTTP and protocol prefix issues.
+"""
 
 import logging
 import os
-import time
+import re
 from typing import Any
 
-import httpx
+from databricks.sdk import WorkspaceClient
 from fastapi import APIRouter, Header
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Cached SP token
-_sp_token: str | None = None
-_sp_token_expires_at: float = 0.0
-
 MAX_NAMES = 20
 
 
-async def _get_sp_token() -> str:
-    """Exchange client credentials for an SP OAuth token, cached for 50 min."""
-    global _sp_token, _sp_token_expires_at
+def _sanitize_error(msg: str) -> str:
+    """Strip SDK config noise and request IDs from error messages.
 
-    if _sp_token and time.time() < _sp_token_expires_at:
-        return _sp_token
-
-    host = os.getenv("DATABRICKS_HOST", "")
-    client_id = os.getenv("DATABRICKS_CLIENT_ID", "")
-    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET", "")
-
-    if not all([host, client_id, client_secret]):
-        raise RuntimeError(
-            "Missing DATABRICKS_HOST, DATABRICKS_CLIENT_ID, or DATABRICKS_CLIENT_SECRET"
-        )
-
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(
-            f"{host}/oidc/v1/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "scope": "all-apis",
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-    _sp_token = data["access_token"]
-    _sp_token_expires_at = time.time() + 50 * 60  # cache for 50 minutes
-    return _sp_token
+    The Databricks SDK appends config details (client_id, client_secret,
+    auth_type, env vars) and request IDs that should not be shown to users.
+    """
+    # Remove '. Config: ...' suffix (and everything after it)
+    msg = re.sub(r"\. Config:.*", "", msg)
+    # Remove '[ReqId: ...]' fragments
+    msg = re.sub(r"\s*\[ReqId:\s*[^\]]*\]", "", msg)
+    return msg.strip()
 
 
 def _truncate_names(names: list[str]) -> list[str]:
@@ -60,92 +39,161 @@ def _truncate_names(names: list[str]) -> list[str]:
     return names[:MAX_NAMES] + [f"...and {remaining} more"]
 
 
-async def _list_catalogs(token: str, host: str) -> dict[str, Any]:
+def _get_host() -> str:
+    """Get workspace host with https:// prefix."""
+    host = os.getenv("DATABRICKS_HOST", "")
+    if host and not host.startswith("https://"):
+        host = f"https://{host}"
+    return host
+
+
+def _obo_client(obo_token: str) -> WorkspaceClient:
+    """Create a WorkspaceClient authenticated as the OBO user.
+
+    Forces auth_type="pat" so the SDK ignores DATABRICKS_CLIENT_ID /
+    DATABRICKS_CLIENT_SECRET env vars that the platform injects for the
+    app service principal.
+    """
+    return WorkspaceClient(
+        host=_get_host(),
+        token=obo_token,
+        auth_type="pat",
+    )
+
+
+def _sp_client() -> WorkspaceClient:
+    """Create a WorkspaceClient authenticated as the app service principal.
+
+    Uses DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET which are
+    auto-injected by the Databricks Apps platform.
+    """
+    return WorkspaceClient(
+        host=_get_host(),
+        client_id=os.getenv("DATABRICKS_CLIENT_ID", ""),
+        client_secret=os.getenv("DATABRICKS_CLIENT_SECRET", ""),
+    )
+
+
+def _get_current_user(client: WorkspaceClient) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{host}/api/2.1/unity-catalog/catalogs",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        catalogs = data.get("catalogs", [])
-        names = [c.get("name", "unknown") for c in catalogs]
-        return {"count": len(names), "names": _truncate_names(sorted(names)), "error": None}
+        me = client.current_user.me()
+        return {
+            "username": me.user_name,
+            "display_name": me.display_name,
+            "error": None,
+        }
+    except Exception as exc:
+        logger.warning("Failed to get current user", exc_info=True)
+        return {"username": None, "display_name": None, "error": _sanitize_error(str(exc))}
+
+
+def _list_catalogs(client: WorkspaceClient) -> dict[str, Any]:
+    try:
+        catalogs = list(client.catalogs.list())
+        names = sorted([c.name for c in catalogs if c.name])
+        return {"count": len(names), "names": _truncate_names(names), "error": None}
     except Exception as exc:
         logger.warning("Failed to list catalogs", exc_info=True)
-        return {"count": 0, "names": [], "error": str(exc)}
+        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
 
 
-async def _list_warehouses(token: str, host: str) -> dict[str, Any]:
+def _list_warehouses(client: WorkspaceClient) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{host}/api/2.0/sql/warehouses",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        warehouses = data.get("warehouses", [])
-        names = [w.get("name", "unknown") for w in warehouses]
-        return {"count": len(names), "names": _truncate_names(sorted(names)), "error": None}
+        warehouses = list(client.warehouses.list())
+        names = sorted([w.name for w in warehouses if w.name])
+        return {"count": len(names), "names": _truncate_names(names), "error": None}
     except Exception as exc:
         logger.warning("Failed to list warehouses", exc_info=True)
-        return {"count": 0, "names": [], "error": str(exc)}
+        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
 
 
-async def _list_serving_endpoints(token: str, host: str) -> dict[str, Any]:
+def _list_serving_endpoints(client: WorkspaceClient) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{host}/api/2.0/serving-endpoints",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        endpoints = data.get("endpoints", [])
-        names = [e.get("name", "unknown") for e in endpoints]
-        return {"count": len(names), "names": _truncate_names(sorted(names)), "error": None}
+        endpoints = list(client.serving_endpoints.list())
+        names = sorted([e.name for e in endpoints if e.name])
+        return {"count": len(names), "names": _truncate_names(names), "error": None}
     except Exception as exc:
         logger.warning("Failed to list serving endpoints", exc_info=True)
-        return {"count": 0, "names": [], "error": str(exc)}
+        return {"count": 0, "names": [], "error": _sanitize_error(str(exc))}
+
+
+CHAT_CHECK_MODEL = "databricks-claude-haiku-4-5"
+
+
+def _chat_completion_check(client: WorkspaceClient) -> dict[str, Any]:
+    """Send a minimal chat completion to prove the identity can invoke a model."""
+    import httpx
+
+    try:
+        host = _get_host()
+        headers = client.config.authenticate()
+
+        resp = httpx.post(
+            f"{host}/serving-endpoints/{CHAT_CHECK_MODEL}/invocations",
+            headers=headers,
+            json={
+                "messages": [{"role": "user", "content": "Say hello in exactly 3 words."}],
+                "max_tokens": 20,
+            },
+            timeout=15.0,
+        )
+        if resp.status_code == 200:
+            body = resp.json()
+            content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"success": True, "model": CHAT_CHECK_MODEL, "response": content.strip(), "error": None}
+        else:
+            return {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": f"HTTP {resp.status_code}"}
+    except Exception as exc:
+        logger.warning("Chat completion check failed", exc_info=True)
+        return {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": _sanitize_error(str(exc))}
+
+
+_NO_TOKEN_ERROR = "No OBO token available"
+_NO_TOKEN_RESOURCE = {"count": 0, "names": [], "error": _NO_TOKEN_ERROR}
+_NO_TOKEN_USER = {"username": None, "display_name": None, "error": _NO_TOKEN_ERROR}
+_NO_TOKEN_CHAT = {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": _NO_TOKEN_ERROR}
 
 
 @router.get("/v1/permissions/comparison")
 async def permissions_comparison(
     x_forwarded_access_token: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    host = os.getenv("DATABRICKS_HOST", "")
-
     # OBO user results
     obo_results: dict[str, Any] = {}
     if x_forwarded_access_token:
-        obo_results["catalogs"] = await _list_catalogs(x_forwarded_access_token, host)
-        obo_results["warehouses"] = await _list_warehouses(x_forwarded_access_token, host)
-        obo_results["serving_endpoints"] = await _list_serving_endpoints(
-            x_forwarded_access_token, host
-        )
+        obo = _obo_client(x_forwarded_access_token)
+        obo_results["current_user"] = _get_current_user(obo)
+        obo_results["catalogs"] = _list_catalogs(obo)
+        obo_results["warehouses"] = _list_warehouses(obo)
+        obo_results["serving_endpoints"] = _list_serving_endpoints(obo)
+        obo_results["chat_completion"] = _chat_completion_check(obo)
     else:
-        no_token = {"count": 0, "names": [], "error": "No OBO token available"}
         obo_results = {
-            "catalogs": no_token,
-            "warehouses": no_token,
-            "serving_endpoints": no_token,
+            "current_user": _NO_TOKEN_USER,
+            "catalogs": _NO_TOKEN_RESOURCE,
+            "warehouses": _NO_TOKEN_RESOURCE,
+            "serving_endpoints": _NO_TOKEN_RESOURCE,
+            "chat_completion": _NO_TOKEN_CHAT,
         }
 
     # App SP results
     sp_results: dict[str, Any] = {}
     try:
-        sp_token = await _get_sp_token()
-        sp_results["catalogs"] = await _list_catalogs(sp_token, host)
-        sp_results["warehouses"] = await _list_warehouses(sp_token, host)
-        sp_results["serving_endpoints"] = await _list_serving_endpoints(sp_token, host)
+        sp = _sp_client()
+        sp_results["current_user"] = _get_current_user(sp)
+        sp_results["catalogs"] = _list_catalogs(sp)
+        sp_results["warehouses"] = _list_warehouses(sp)
+        sp_results["serving_endpoints"] = _list_serving_endpoints(sp)
+        sp_results["chat_completion"] = _chat_completion_check(sp)
     except Exception as exc:
-        sp_error = {"count": 0, "names": [], "error": str(exc)}
+        err = _sanitize_error(str(exc))
+        sp_error = {"count": 0, "names": [], "error": err}
         sp_results = {
+            "current_user": {"username": None, "display_name": None, "error": err},
             "catalogs": sp_error,
             "warehouses": sp_error,
             "serving_endpoints": sp_error,
+            "chat_completion": {"success": False, "model": CHAT_CHECK_MODEL, "response": None, "error": err},
         }
 
     return {"obo_user": obo_results, "app_sp": sp_results}

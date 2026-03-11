@@ -6,17 +6,30 @@ interface ResourceResult {
   error: string | null
 }
 
+interface CurrentUser {
+  username: string | null
+  display_name: string | null
+  error: string | null
+}
+
+interface ChatResult {
+  success: boolean
+  model: string
+  response: string | null
+  error: string | null
+}
+
+interface ActorResults {
+  current_user: CurrentUser
+  catalogs: ResourceResult
+  warehouses: ResourceResult
+  serving_endpoints: ResourceResult
+  chat_completion: ChatResult
+}
+
 interface ComparisonData {
-  obo_user: {
-    catalogs: ResourceResult
-    warehouses: ResourceResult
-    serving_endpoints: ResourceResult
-  }
-  app_sp: {
-    catalogs: ResourceResult
-    warehouses: ResourceResult
-    serving_endpoints: ResourceResult
-  }
+  obo_user: ActorResults
+  app_sp: ActorResults
 }
 
 type ResourceKey = 'catalogs' | 'warehouses' | 'serving_endpoints'
@@ -25,6 +38,25 @@ const RESOURCE_LABELS: Record<ResourceKey, string> = {
   catalogs: 'Unity Catalog Catalogs',
   warehouses: 'SQL Warehouses',
   serving_endpoints: 'Serving Endpoints',
+}
+
+function IdentityCell({ user }: { user: CurrentUser }) {
+  if (user.error) {
+    return (
+      <div className="perm-cell perm-error">
+        <span className="perm-count-badge perm-badge-error">Error</span>
+        <p className="perm-error-msg">{user.error}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="perm-cell">
+      <div className="perm-identity-name">{user.display_name || user.username || '—'}</div>
+      {user.display_name && user.username && (
+        <div className="perm-identity-sub">{user.username}</div>
+      )}
+    </div>
+  )
 }
 
 function ResourceCell({ result }: { result: ResourceResult }) {
@@ -48,6 +80,26 @@ function ResourceCell({ result }: { result: ResourceResult }) {
             <li key={i}>{name}</li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+function ChatCell({ result }: { result: ChatResult }) {
+  if (result.error) {
+    return (
+      <div className="perm-cell perm-error">
+        <span className="perm-count-badge perm-badge-error">Denied</span>
+        <p className="perm-error-msg">{result.error}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="perm-cell">
+      <span className="perm-count-badge perm-badge-ok">Success</span>
+      {result.response && (
+        <p className="perm-chat-response">"{result.response}"</p>
       )}
     </div>
   )
@@ -107,6 +159,13 @@ export function PermissionComparison() {
             <div className="perm-grid-col-header">Your Access (OBO)</div>
             <div className="perm-grid-col-header">App Service Principal</div>
           </div>
+          {/* Identity row */}
+          <div className="perm-grid-row">
+            <div className="perm-grid-label">Identity</div>
+            <IdentityCell user={data.obo_user.current_user} />
+            <IdentityCell user={data.app_sp.current_user} />
+          </div>
+          {/* Resource rows */}
           {(Object.keys(RESOURCE_LABELS) as ResourceKey[]).map((key) => (
             <div className="perm-grid-row" key={key}>
               <div className="perm-grid-label">{RESOURCE_LABELS[key]}</div>
@@ -114,6 +173,15 @@ export function PermissionComparison() {
               <ResourceCell result={data.app_sp[key]} />
             </div>
           ))}
+          {/* Chat completion check row */}
+          <div className="perm-grid-row">
+            <div className="perm-grid-label">
+              Chat Completion
+              <div className="perm-check-model">{data.obo_user.chat_completion.model}</div>
+            </div>
+            <ChatCell result={data.obo_user.chat_completion} />
+            <ChatCell result={data.app_sp.chat_completion} />
+          </div>
         </div>
       )}
     </div>

@@ -356,6 +356,34 @@ header h1 {
   padding: 0.1rem 0;
 }
 
+.perm-identity-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: #212529;
+}
+
+.perm-identity-sub {
+  font-size: 0.75rem;
+  color: #6c757d;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  word-break: break-all;
+}
+
+.perm-check-model {
+  font-weight: 400;
+  font-size: 0.7rem;
+  color: #6c757d;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  margin-top: 0.15rem;
+}
+
+.perm-chat-response {
+  font-size: 0.78rem;
+  color: #495057;
+  font-style: italic;
+  margin: 0.25rem 0 0;
+}
+
 .perm-error {
   background: #fff5f5;
 }

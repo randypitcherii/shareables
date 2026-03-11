@@ -18,9 +18,4 @@ def pytest_runtest_setup(item):
     except (ImportError, AttributeError):
         pass
 
-    try:
-        import server.routes.permissions as perm_mod
-        perm_mod._sp_token = None
-        perm_mod._sp_token_expires_at = 0.0
-    except (ImportError, AttributeError):
-        pass
+    # No global state to reset for permissions -- SDK clients are created per-request
