@@ -91,6 +91,14 @@ def available_model_sp(app_url: str, sp_headers: dict[str, str]) -> str:
     return _get_available_model(app_url, sp_headers)
 
 
+@pytest.fixture(scope="module")
+def models_data(app_url: str, sp_headers: dict[str, str]) -> dict:
+    """Fetch /api/v1/models once and return the full response dict."""
+    resp = httpx.get(f"{app_url}/api/v1/models", headers=sp_headers, timeout=TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ===========================================================================
 # PAT Auth Tests — Databricks Apps proxy rejects PATs (OAuth only)
 # ===========================================================================
@@ -151,3 +159,105 @@ def test_sp_chat_completion(
     data = resp.json()
     assert "choices" in data
     assert len(data["choices"]) > 0
+
+
+@pytest.mark.integration
+@skip_sp
+def test_sp_chat_all_latest_aliases(
+    app_url: str,
+    sp_headers: dict[str, str],
+    models_data: dict,
+):
+    """Hit every -latest alias with a simple chat completion."""
+    aliases = models_data.get("aliases", {})
+    assert aliases, "No aliases returned from /api/v1/models"
+
+    latest_aliases = [name for name in aliases if name.endswith("-latest")]
+    assert latest_aliases, "No -latest aliases found"
+
+    failures: list[str] = []
+    for alias in latest_aliases:
+        payload = {
+            "model": alias,
+            "messages": [{"role": "user", "content": "Say hello in one word."}],
+            "max_tokens": 10,
+        }
+        resp = httpx.post(
+            f"{app_url}/api/v1/chat/completions",
+            headers=sp_headers,
+            json=payload,
+            timeout=TIMEOUT,
+        )
+        if resp.status_code != 200:
+            failures.append(f"{alias}: HTTP {resp.status_code} — {resp.text[:200]}")
+            continue
+        data = resp.json()
+        if not data.get("choices"):
+            failures.append(f"{alias}: 200 but no choices in response")
+
+    assert not failures, "Failures for latest aliases:\n" + "\n".join(failures)
+
+
+SPECIFIC_MODELS = [
+    "databricks-claude-haiku-4-5",
+    "databricks-claude-sonnet-4-6",
+    "databricks-gpt-5-4",
+    "databricks-gemini-2-5-flash",
+]
+
+
+@pytest.mark.integration
+@skip_sp
+@pytest.mark.parametrize("model_name", SPECIFIC_MODELS)
+def test_sp_chat_specific_models(
+    app_url: str,
+    sp_headers: dict[str, str],
+    model_name: str,
+):
+    """Verify chat completions work for specific model versions."""
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": "Say hello in one word."}],
+        "max_tokens": 10,
+    }
+    resp = httpx.post(
+        f"{app_url}/api/v1/chat/completions",
+        headers=sp_headers,
+        json=payload,
+        timeout=TIMEOUT,
+    )
+    assert resp.status_code == 200, (
+        f"{model_name}: expected 200, got {resp.status_code} — {resp.text[:200]}"
+    )
+    data = resp.json()
+    assert data.get("choices"), f"{model_name}: 200 but no choices in response"
+
+
+@pytest.mark.integration
+@skip_sp
+def test_sp_latest_alias_resolves_to_real_endpoint(
+    models_data: dict,
+):
+    """Every -latest alias should map to a name that exists in the endpoints list."""
+    aliases = models_data.get("aliases", {})
+    endpoints = models_data.get("endpoints", [])
+    # endpoints may be a list of strings or a list of dicts with "name" keys
+    if endpoints and isinstance(endpoints[0], dict):
+        endpoint_names = {ep["name"] for ep in endpoints}
+    else:
+        endpoint_names = set(endpoints)
+
+    assert aliases, "No aliases returned from /api/v1/models"
+    assert endpoint_names, "No endpoints returned from /api/v1/models"
+
+    latest_aliases = {k: v for k, v in aliases.items() if k.endswith("-latest")}
+    assert latest_aliases, "No -latest aliases found"
+
+    missing: list[str] = []
+    for alias, target in latest_aliases.items():
+        if target not in endpoint_names:
+            missing.append(f"{alias} -> {target} (not in endpoints)")
+
+    assert not missing, (
+        "Aliases pointing to non-existent endpoints:\n" + "\n".join(missing)
+    )
