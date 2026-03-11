@@ -25,12 +25,13 @@ from dotenv import load_dotenv
 # ---------------------------------------------------------------------------
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-APP_URL = "https://better-agent-gateway-dev-977594739011404.aws.databricksapps.com"
-WORKSPACE_URL = "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
+APP_URL = os.getenv("GATEWAY_URL", "https://YOUR-APP.aws.databricksapps.com")
+WORKSPACE_URL = os.getenv("DATABRICKS_HOST", "https://YOUR-WORKSPACE.cloud.databricks.com")
 HEALTH_ENDPOINT = f"{APP_URL}/api/v1/healthz"
 
-# The OAuth client_id that the app proxy uses (visible in the redirect URL)
-APP_OAUTH_CLIENT_ID = "a3310cf2-ba94-4408-81b5-16eeff7e6d77"
+# The OAuth client_id that the app proxy uses (visible in the redirect URL).
+# Set via env var — find yours by inspecting the OAuth redirect when visiting the app.
+APP_OAUTH_CLIENT_ID = os.getenv("APP_OAUTH_CLIENT_ID", "")
 
 SEPARATOR = "\n" + "=" * 72
 

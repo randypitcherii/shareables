@@ -30,10 +30,12 @@ from databricks.sdk import WorkspaceClient
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DEFAULT_APP_URL = (
-    "https://better-agent-gateway-dev-3638734694769498.aws.databricksapps.com"
+DEFAULT_APP_URL = os.getenv(
+    "GATEWAY_URL", "https://YOUR-APP.aws.databricksapps.com"
 )
-DEFAULT_WORKSPACE_URL = "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
+DEFAULT_WORKSPACE_URL = os.getenv(
+    "DATABRICKS_HOST", "https://YOUR-WORKSPACE.cloud.databricks.com"
+)
 
 # ANSI colours
 GREEN = "\033[92m"

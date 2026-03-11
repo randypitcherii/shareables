@@ -245,8 +245,8 @@ def test_comparison_obo_sees_more_than_sp(client, monkeypatch):
         catalogs=[obo_catalog, obo_catalog2],
         warehouses=[obo_wh],
         endpoints=[obo_ep, obo_ep2],
-        user_name="randy@databricks.com",
-        display_name="Randy Pitcher",
+        user_name="user@example.com",
+        display_name="Example User",
     )
 
     # SP has limited access
@@ -269,8 +269,8 @@ def test_comparison_obo_sees_more_than_sp(client, monkeypatch):
     data = resp.json()
 
     # Verify different user identities
-    assert data["obo_user"]["current_user"]["username"] == "randy@databricks.com"
-    assert data["obo_user"]["current_user"]["display_name"] == "Randy Pitcher"
+    assert data["obo_user"]["current_user"]["username"] == "user@example.com"
+    assert data["obo_user"]["current_user"]["display_name"] == "Example User"
     assert data["obo_user"]["current_user"]["error"] is None
     assert data["app_sp"]["current_user"]["username"] == "app-sp-id-12345"
     assert data["app_sp"]["current_user"]["display_name"] == "better-agent-gateway SP"
