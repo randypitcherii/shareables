@@ -6,7 +6,6 @@ resources:
       source_code_path: ../..
       user_api_scopes:
         - serving.serving-endpoints
-        - sql
       config:
         command:
           - "bash"
