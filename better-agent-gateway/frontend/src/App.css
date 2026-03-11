@@ -153,6 +153,12 @@ header h1 {
   color: #6c757d;
 }
 
+.user-info-row .value.hint {
+  font-size: 0.82rem;
+  color: #6c757d;
+  font-style: italic;
+}
+
 .badge {
   display: inline-block;
   padding: 0.15rem 0.6rem;

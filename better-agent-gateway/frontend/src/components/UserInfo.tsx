@@ -6,13 +6,14 @@ interface AuthContext {
   email: string | null
   user_name: string | null
   obo_token_present: boolean
-  mode: string
+  auth_method: string
+  identity_source: string
+  scoped_permissions: string[]
 }
 
 export function UserInfo() {
   const [auth, setAuth] = useState<AuthContext | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
 
   const fetchAuth = useCallback(() => {
     fetch('/api/v1/auth/context')
@@ -27,17 +28,6 @@ export function UserInfo() {
   useEffect(() => {
     fetchAuth()
   }, [fetchAuth])
-
-  const handleRefreshConsent = () => {
-    setRefreshing(true)
-    // Clear browser-side caches that may hold stale OAuth state
-    if ('caches' in window) {
-      caches.keys().then((names) => names.forEach((name) => caches.delete(name)))
-    }
-    // Databricks Apps proxy exposes a logout endpoint that clears the
-    // OAuth session and forces re-authentication / re-consent on next visit.
-    window.location.href = '/_logout'
-  }
 
   if (error) return <div className="error">Failed to load user info: {error}</div>
   if (!auth) return <div className="user-info loading">Loading user info...</div>
@@ -64,32 +54,25 @@ export function UserInfo() {
           <span className="value mono">{identityValue}</span>
         </div>
         <div className="user-info-row">
-          <span className="label">OAuth Token</span>
+          <span className="label">Auth</span>
           <span className={`value badge ${auth.obo_token_present ? 'badge-ok' : 'badge-warn'}`}>
-            {auth.obo_token_present ? 'Active' : 'Missing'}
+            {auth.obo_token_present ? 'OBO Token (your identity)' : 'No token'}
           </span>
         </div>
         <div className="user-info-row">
-          <span className="label">Mode</span>
-          <span className="value mono">{auth.mode}</span>
+          <span className="label">How it works</span>
+          <span className="value hint">{auth.identity_source}</span>
         </div>
         <div className="user-info-row">
           <span className="label">Scoped Access</span>
           <span className="value">
-            <span className="scope-tag">serving-endpoints</span>
-            <span className="scope-tag">sql</span>
+            {(auth.scoped_permissions || []).map((scope) => (
+              <span key={scope} className="scope-tag">{scope}</span>
+            ))}
           </span>
         </div>
       </div>
       <div className="user-info-actions">
-        <button
-          className="refresh-btn"
-          onClick={handleRefreshConsent}
-          disabled={refreshing}
-          title="Clear cached OAuth state and re-trigger the consent flow"
-        >
-          {refreshing ? 'Redirecting...' : 'Refresh OAuth Consent'}
-        </button>
         <button
           className="refresh-btn secondary"
           onClick={fetchAuth}

@@ -66,11 +66,25 @@ async def auth_context(
             if resolved.get(key):
                 identity[key] = resolved[key]
 
+    # Explain how identity was resolved so the user understands what's happening
+    auth_method = "none"
+    if x_forwarded_access_token:
+        auth_method = "obo_token"  # User's own OAuth token forwarded by the Apps proxy
+    elif x_forwarded_user:
+        auth_method = "forwarded_header"
+
     return {
         "forwarded_user": x_forwarded_user,
         "display_name": identity["display_name"],
         "email": identity["email"],
         "user_name": identity["user_name"],
         "obo_token_present": bool(x_forwarded_access_token),
-        "mode": "databricks-app" if os.getenv("DATABRICKS_APP_NAME") else "local",
+        "auth_method": auth_method,
+        "identity_source": (
+            "Resolved via your OBO (on-behalf-of) token — this is YOUR identity, "
+            "not the app's service principal"
+            if x_forwarded_access_token
+            else "No OBO token available"
+        ),
+        "scoped_permissions": ["serving-endpoints", "sql"],
     }
