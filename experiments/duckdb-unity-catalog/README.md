@@ -24,7 +24,7 @@ Delta tables require UniForm (`delta.universalFormat.enabledFormats = 'iceberg'`
 | **Managed Iceberg** (native) | ❌¹ | ❌¹ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Foreign Iceberg** | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
-> ¹ Native Iceberg tables on VDM managed storage fail with S3 403 — credential vending returns empty `storage-credentials`. Delta+UniForm tables vend credentials correctly. This appears to be a Databricks-side gap in how VDM storage credentials are vended for native Iceberg vs UniForm tables.
+> ¹ Native Iceberg tables on VDM managed storage fail with S3 403 — credential vending returns empty `storage-credentials`. Delta+UniForm tables vend credentials correctly. This appears to be a Databricks-side gap in how VDM storage credentials are vended for native Iceberg vs UniForm tables. Validated across multiple AWS workspaces (fe-vm, e2-demo-field-eng) — same behavior on both.
 
 ### UC REST Connection (`uc_catalog` extension, Delta protocol)
 
@@ -54,6 +54,26 @@ Requires `GRANT EXTERNAL USE SCHEMA` on the target schema.
 ---
 
 **Legend:** ✅ works &nbsp;|&nbsp; ❌ fails &nbsp;|&nbsp; ⚠️ partial &nbsp;|&nbsp; 🚫 out of scope &nbsp;|&nbsp; — not applicable
+
+## Cross-Workspace Validation
+
+Tested on 3 workspaces (2026-03-11):
+
+| Path | fe-vm (AWS, VDM storage) | e2-demo-field-eng (AWS) | logfood (Azure) |
+|---|---|---|---|
+| Iceberg REST + Delta+UniForm | Full CRUD | Full CRUD | ADLS not supported by DuckDB |
+| Iceberg REST + Native Iceberg | Reads fail (empty creds), writes work | Reads fail (same), writes work | ADLS not supported by DuckDB |
+| uc_catalog + Delta+UniForm | Bad Request on temp-creds API | Reads work, writes fail | Permission denied (untested) |
+| uc_catalog + Native Iceberg | Read + predicate work, writes fail | Read + predicate work, writes fail | Permission denied (untested) |
+
+**Key cross-workspace observations:**
+
+- Native Iceberg read failure via Iceberg REST **reproduces across both AWS workspaces** — confirms this is a Databricks-side credential vending gap, not workspace-specific
+- uc_catalog reads work for Delta+UniForm on e2-demo but fail with "Bad Request" on fe-vm — behavior varies by workspace/config
+- DuckDB's iceberg extension does not support ADLS storage (Azure), only S3
+- uc_catalog write failures are consistent: `columnMapping` not supported by DeltaKernel, UPDATE/DELETE blocked by DuckDB binder
+
+---
 
 ## Key Findings
 
