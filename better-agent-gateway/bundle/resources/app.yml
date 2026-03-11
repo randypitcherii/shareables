@@ -1,0 +1,6 @@
+resources:
+  apps:
+    better-agent-gateway:
+      name: better-agent-gateway
+      description: "Scoped OAuth LLM gateway with automatic -latest model resolution"
+      source_code_path: .
