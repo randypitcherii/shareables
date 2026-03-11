@@ -17,3 +17,10 @@ def pytest_runtest_setup(item):
         audit_mod._store = None
     except (ImportError, AttributeError):
         pass
+
+    try:
+        import server.routes.permissions as perm_mod
+        perm_mod._sp_token = None
+        perm_mod._sp_token_expires_at = 0.0
+    except (ImportError, AttributeError):
+        pass

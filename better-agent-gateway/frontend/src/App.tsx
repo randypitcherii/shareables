@@ -1,6 +1,7 @@
 import { ModelTable } from './components/ModelTable'
 import { HealthBadge } from './components/HealthBadge'
 import { UserInfo } from './components/UserInfo'
+import { PermissionComparison } from './components/PermissionComparison'
 import './App.css'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           </p>
         </section>
         <UserInfo />
+        <PermissionComparison />
         <ModelTable />
       </main>
     </div>

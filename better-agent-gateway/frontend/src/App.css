@@ -224,3 +224,138 @@ header h1 {
 .refresh-btn.secondary:hover:not(:disabled) {
   background: #e7f1ff;
 }
+
+/* --- PermissionComparison --- */
+
+.perm-comparison {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.perm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.perm-header h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.perm-description {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin: 0 0 1rem;
+}
+
+.perm-loading {
+  color: #856404;
+  background: #fff3cd;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.perm-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr 1fr;
+  gap: 0;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.perm-grid-header {
+  display: contents;
+}
+
+.perm-grid-header .perm-grid-label,
+.perm-grid-header .perm-grid-col-header {
+  background: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.perm-grid-row {
+  display: contents;
+}
+
+.perm-grid-label {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #495057;
+  padding: 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+
+.perm-cell {
+  padding: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+  border-left: 1px solid #f0f0f0;
+}
+
+.perm-count-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.perm-badge-ok {
+  background: #d4edda;
+  color: #155724;
+}
+
+.perm-badge-limited {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.perm-badge-none {
+  background: #e2e3e5;
+  color: #495057;
+}
+
+.perm-badge-error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.perm-error-msg {
+  font-size: 0.78rem;
+  color: #721c24;
+  margin: 0.25rem 0 0;
+  word-break: break-word;
+}
+
+.perm-name-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.perm-name-list li {
+  font-size: 0.78rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #495057;
+  padding: 0.1rem 0;
+}
+
+.perm-error {
+  background: #fff5f5;
+}
