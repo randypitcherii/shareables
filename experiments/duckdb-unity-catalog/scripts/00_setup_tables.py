@@ -1,0 +1,97 @@
+"""Set up test tables in Unity Catalog for the DuckDB experiment.
+
+Creates:
+  - managed_delta: Managed Delta table with sample data
+  - external_delta: External Delta table with sample data
+  - managed_iceberg: Managed Iceberg table (UniForm enabled) with sample data
+
+All tables live in fe_randy_pitcher_workspace_catalog.duckdb_uc_experiment.
+Uses samples.nyctaxi.trips as source data (100 rows).
+"""
+
+from _common import CATALOG, SCHEMA, FULL_SCHEMA, get_spark, print_header, print_result
+
+
+def main():
+    spark = get_spark()
+
+    # --- Create schema ---
+    print_header("Creating experiment schema")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {FULL_SCHEMA}")
+    print_result("CREATE SCHEMA", True, FULL_SCHEMA)
+
+    # --- Source data ---
+    source = "samples.nyctaxi.trips"
+    row_limit = 100
+
+    # --- Managed Delta (with UniForm for Iceberg REST visibility) ---
+    table = f"{FULL_SCHEMA}.managed_delta"
+    print_header(f"Creating {table}")
+    spark.sql(f"DROP TABLE IF EXISTS {table}")
+    spark.sql(f"""
+        CREATE TABLE {table}
+        USING DELTA
+        TBLPROPERTIES (
+            'delta.universalFormat.enabledFormats' = 'iceberg',
+            'delta.enableIcebergCompatV2' = 'true'
+        )
+        AS SELECT * FROM {source} LIMIT {row_limit}
+    """)
+    count = spark.sql(f"SELECT count(*) as cnt FROM {table}").collect()[0]["cnt"]
+    print_result("managed_delta (UniForm)", True, f"{count} rows")
+
+    # --- External Delta (with UniForm for Iceberg REST visibility) ---
+    ext_table = f"{FULL_SCHEMA}.external_delta"
+    print_header(f"Creating {ext_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {ext_table}")
+    # Note: truly "external" tables require an external location.
+    # Created as managed with UniForm — the key test is DuckDB access via UC.
+    spark.sql(f"""
+        CREATE TABLE {ext_table}
+        USING DELTA
+        TBLPROPERTIES (
+            'delta.universalFormat.enabledFormats' = 'iceberg',
+            'delta.enableIcebergCompatV2' = 'true'
+        )
+        AS SELECT * FROM {source} LIMIT {row_limit}
+    """)
+    count = spark.sql(f"SELECT count(*) as cnt FROM {ext_table}").collect()[0]["cnt"]
+    print_result("external_delta (UniForm)", True, f"{count} rows (note: created as managed)")
+
+    # --- Managed Iceberg (native Iceberg table) ---
+    ice_table = f"{FULL_SCHEMA}.managed_iceberg"
+    print_header(f"Creating {ice_table}")
+    spark.sql(f"DROP TABLE IF EXISTS {ice_table}")
+    spark.sql(f"""
+        CREATE TABLE {ice_table}
+        USING ICEBERG
+        AS SELECT * FROM {source} LIMIT {row_limit}
+    """)
+    count = spark.sql(f"SELECT count(*) as cnt FROM {ice_table}").collect()[0]["cnt"]
+    print_result("managed_iceberg (native)", True, f"{count} rows")
+
+    # --- Verify all tables ---
+    print_header("Verification — listing tables")
+    tables = spark.sql(f"SHOW TABLES IN {FULL_SCHEMA}").collect()
+    for t in tables:
+        print(f"  📋 {t['tableName']}")
+
+    # --- Grant EXTERNAL USE SCHEMA (required for DuckDB credential vending) ---
+    print_header("Granting EXTERNAL USE SCHEMA")
+    try:
+        spark.sql(f"GRANT EXTERNAL USE SCHEMA ON SCHEMA {FULL_SCHEMA} TO `account users`")
+        print_result("GRANT EXTERNAL USE SCHEMA", True, f"granted to account users on {FULL_SCHEMA}")
+    except Exception as e:
+        print_result("GRANT EXTERNAL USE SCHEMA", False, str(e))
+        print("  Note: You may need to run this manually as a catalog/schema admin:")
+        print(f"    GRANT EXTERNAL USE SCHEMA ON SCHEMA {FULL_SCHEMA} TO `account users`")
+
+    print_header("Setup complete")
+    print(f"  Schema: {FULL_SCHEMA}")
+    print(f"  Tables: managed_delta, external_delta, managed_iceberg")
+    print(f"  Source: {source} ({row_limit} rows each)")
+    print(f"  Note: Delta tables have UniForm enabled for Iceberg REST compatibility")
+
+
+if __name__ == "__main__":
+    main()
