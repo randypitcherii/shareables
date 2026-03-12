@@ -40,6 +40,8 @@ Requires `GRANT EXTERNAL USE SCHEMA` on the target schema.
 | **Managed Iceberg** (native) | ✅ | ✅ | ❌⁴ | ❌⁵ | ❌⁵ | — | — |
 | **Foreign Iceberg** | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
+> **Verified** 2026-03-12 via `pytest tests/test_uc_rest.py` — 2 passed, 13 xfailed (all results match expectations)
+
 > ³ Delta+UniForm tables fail with "Bad Request" on the `temporary-table-credentials` API
 > ⁴ DeltaKernel error: "Unsupported: Unknown feature 'icebergWriterCompatV1'"
 > ⁵ "Can only update/delete from base table"
@@ -131,6 +133,7 @@ CREATE TABLE ... USING ICEBERG
 | `scripts/02_delta_uc_rest.py` | Tests Delta Sharing REST + delta_scan direct storage paths |
 | `scripts/iceberg_rest_eval.py` | **Isolated** Iceberg REST evaluation — self-contained, no shared imports, tests Reads/DML/DDL for Managed Iceberg + Managed Delta |
 | `tests/test_iceberg_rest.py` | **Pytest** Iceberg REST evaluation — proper test suite with xfail markers, DDL verified via Databricks SDK |
+| `tests/test_uc_rest.py` | **Pytest** UC REST evaluation — proper test suite with xfail markers for uc_catalog extension |
 
 ## Running
 
@@ -140,6 +143,7 @@ uv run python scripts/00_setup_tables.py    # Create test tables
 uv run python scripts/01_iceberg_rest.py     # Test Iceberg REST path
 uv run python scripts/02_delta_uc_rest.py    # Test Delta / UC REST path
 uv run pytest tests/test_iceberg_rest.py -v  # Pytest eval (recommended)
+uv run pytest tests/test_uc_rest.py -v     # Pytest UC REST eval
 ```
 
 ## DuckDB Connection Examples

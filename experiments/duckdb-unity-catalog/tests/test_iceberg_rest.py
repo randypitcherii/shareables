@@ -29,8 +29,10 @@ CATALOG = "fe_randy_pitcher_workspace_catalog"
 SCHEMA = "duckdb_uc_experiment"
 ENDPOINT = f"https://{WORKSPACE}/api/2.1/unity-catalog/iceberg-rest"
 
-# Pre-existing test tables
-TABLE_TYPES = ["managed_iceberg", "managed_delta"]
+# Table types tested via Iceberg REST path
+TABLE_MANAGED_ICEBERG = "managed_iceberg"
+TABLE_MANAGED_DELTA = "managed_delta"
+TABLE_TYPES = [TABLE_MANAGED_ICEBERG, TABLE_MANAGED_DELTA]
 
 # ---------------------------------------------------------------------------
 # Custom markers
@@ -39,6 +41,17 @@ TABLE_TYPES = ["managed_iceberg", "managed_delta"]
 pytest.mark.reads = pytest.mark.reads
 pytest.mark.dml = pytest.mark.dml
 pytest.mark.ddl = pytest.mark.ddl
+
+# ---------------------------------------------------------------------------
+# xfail reasons (from README findings)
+# ---------------------------------------------------------------------------
+
+XFAIL_CREDENTIAL_SCOPE = pytest.mark.xfail(
+    reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
+)
+XFAIL_DELTA_READ_ONLY = pytest.mark.xfail(
+    reason="Delta tables are read-only via Iceberg REST"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -132,31 +145,6 @@ def workspace_client():
 
 
 # ---------------------------------------------------------------------------
-# xfail conditions by (table_type, category)
-# ---------------------------------------------------------------------------
-
-_XFAIL = {
-    ("managed_iceberg", "reads"): pytest.mark.xfail(
-        reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-    ),
-    ("managed_iceberg", "dml"): pytest.mark.xfail(
-        reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-    ),
-    ("managed_delta", "dml"): pytest.mark.xfail(
-        reason="Delta tables are read-only via Iceberg REST"
-    ),
-}
-
-
-def _apply_xfail(table_type: str, category: str):
-    """Return the xfail marker if this combo is expected to fail, else empty list."""
-    key = (table_type, category)
-    if key in _XFAIL:
-        return [_XFAIL[key]]
-    return []
-
-
-# ---------------------------------------------------------------------------
 # READS
 # ---------------------------------------------------------------------------
 
@@ -164,14 +152,12 @@ def _apply_xfail(table_type: str, category: str):
 @pytest.mark.parametrize(
     "table_type",
     [
-        pytest.param("managed_iceberg", marks=pytest.mark.xfail(
-            reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-        )),
-        pytest.param("managed_delta"),
+        pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_CREDENTIAL_SCOPE),
+        pytest.param(TABLE_MANAGED_DELTA),
     ],
 )
 def test_select(duckdb_con, table_type):
-    """SELECT * LIMIT 5 from each table type."""
+    """SELECT * LIMIT 5 from each table type via Iceberg REST."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     rows = duckdb_con.execute(f"SELECT * FROM {fqn} LIMIT 5").fetchall()
     cols = [desc[0] for desc in duckdb_con.description]
@@ -187,12 +173,8 @@ def test_select(duckdb_con, table_type):
 @pytest.mark.parametrize(
     "table_type",
     [
-        pytest.param("managed_iceberg", marks=pytest.mark.xfail(
-            reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-        )),
-        pytest.param("managed_delta", marks=pytest.mark.xfail(
-            reason="Delta tables are read-only via Iceberg REST"
-        )),
+        pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_CREDENTIAL_SCOPE),
+        pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_DELTA_READ_ONLY),
     ],
 )
 def test_insert(duckdb_con, table_type):
@@ -206,16 +188,12 @@ def test_insert(duckdb_con, table_type):
 @pytest.mark.parametrize(
     "table_type",
     [
-        pytest.param("managed_iceberg", marks=pytest.mark.xfail(
-            reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-        )),
-        pytest.param("managed_delta", marks=pytest.mark.xfail(
-            reason="Delta tables are read-only via Iceberg REST"
-        )),
+        pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_CREDENTIAL_SCOPE),
+        pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_DELTA_READ_ONLY),
     ],
 )
 def test_update(duckdb_con, table_type):
-    """Identity UPDATE on one row -- exercises the full write path."""
+    """Identity UPDATE on one row — exercises the full write path via Iceberg REST."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     duckdb_con.execute(f"""
         UPDATE {fqn}
@@ -228,16 +206,12 @@ def test_update(duckdb_con, table_type):
 @pytest.mark.parametrize(
     "table_type",
     [
-        pytest.param("managed_iceberg", marks=pytest.mark.xfail(
-            reason="Credential scope bug: vended creds metadata_path scope doesn't cover data file paths"
-        )),
-        pytest.param("managed_delta", marks=pytest.mark.xfail(
-            reason="Delta tables are read-only via Iceberg REST"
-        )),
+        pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_CREDENTIAL_SCOPE),
+        pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_DELTA_READ_ONLY),
     ],
 )
 def test_delete(duckdb_con, table_type):
-    """DELETE rows with max trip_distance."""
+    """DELETE rows — exercises the delete path via Iceberg REST."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     before = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
     duckdb_con.execute(f"""
