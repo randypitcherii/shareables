@@ -1,0 +1,20 @@
+[project]
+name = "duckdb-unity-catalog"
+version = "0.1.0"
+description = "Experiment: DuckDB interaction with Databricks Unity Catalog across Delta and Iceberg tables"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "databricks-sdk",
+    "databricks-connect",
+    "duckdb>=1.4.0",
+    "requests",
+    "pytest",
+    "pytz",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "reads: SELECT / read operations",
+    "dml: INSERT, UPDATE, DELETE operations",
+    "ddl: CREATE TABLE, DROP TABLE operations",
+]
