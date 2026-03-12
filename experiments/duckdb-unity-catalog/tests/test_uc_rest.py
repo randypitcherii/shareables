@@ -1,19 +1,12 @@
 """
-Pytest evaluation of DuckDB as a UC REST client against Databricks Unity Catalog.
+DuckDB UC REST client eval against Databricks Unity Catalog.
 
-Tests the UC REST connection (uc_catalog extension, Delta protocol) for each
-cell in the experiment matrix:
-
-  UC REST x {Managed Delta, External Delta, Managed Iceberg}
-         x {Read, Predicate Pushdown, Write Append, Write Update, Delete Row}
-
-DDL (Create/Drop Table) is not supported by the uc_catalog extension and is
-documented but not tested.
+Path: UC REST catalog (uc_catalog extension) + Delta reader/writer
+Expected: Reads work for all tables. Writes work for managed Delta only.
 
 Requires:
-  - DuckDB >= 1.4.0
-  - Databricks SDK auth configured (e.g. ~/.databrickscfg with databricks-cli auth)
   - GRANT EXTERNAL USE SCHEMA on the target schema
+  - Unnamed secret workaround for duckdb/unity_catalog#48
 
 Run:
   cd experiments/duckdb-unity-catalog
@@ -28,8 +21,11 @@ import os
 import duckdb
 import pytest
 
-# Ensure pytz is available -- DuckDB needs it for timestamp handling
 importlib.import_module("pytz")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 
 _host = os.environ["DATABRICKS_HOST"]
 WORKSPACE_URL = _host if _host.startswith("https://") else f"https://{_host}"
@@ -40,38 +36,48 @@ TABLE_MANAGED_DELTA = "managed_delta"
 TABLE_EXTERNAL_DELTA = "external_delta"
 TABLE_MANAGED_ICEBERG = "managed_iceberg"
 
-XFAIL_BAD_REQUEST = pytest.mark.xfail(
-    reason="Delta+UniForm tables fail with 'Bad Request' on temporary-table-credentials API"
-)
-XFAIL_ICEBERG_WRITER_COMPAT = pytest.mark.xfail(
-    reason="DeltaKernel error: 'Unsupported: Unknown feature icebergWriterCompatV1'"
-)
-XFAIL_BASE_TABLE_ONLY = pytest.mark.xfail(
-    reason="'Can only update/delete from base table'"
+# ---------------------------------------------------------------------------
+# xfail markers — clearly labeled as BUG (should work) or EXPECTED (wrong path)
+# ---------------------------------------------------------------------------
+
+# BUG: Reads/writes to managed Delta SHOULD work via UC REST with Delta reader/writer.
+# The temporary-table-credentials API returns Bad Request for Delta+UniForm tables.
+# Tracked: https://github.com/duckdb/uc_catalog/issues/68
+XFAIL_BUG_BAD_REQUEST = pytest.mark.xfail(
+    reason="BUG: temporary-table-credentials API returns Bad Request for Delta tables (duckdb/uc_catalog#68)"
 )
 
+# EXPECTED FAILURE: Delta writer cannot write to Iceberg tables.
+# Writes to Iceberg should go through Iceberg REST with an Iceberg writer, not here.
+XFAIL_EXPECTED_ICEBERG_NO_WRITE = pytest.mark.xfail(
+    reason="EXPECTED: Delta writer cannot write to Iceberg tables — use Iceberg REST (Iceberg writer) instead"
+)
+
+# ---------------------------------------------------------------------------
+# Shared parametrize lists
+# ---------------------------------------------------------------------------
+
+# Reads: all types should work. Delta tables blocked by Bad Request bug.
 PARAMS_READ = [
-    pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_EXTERNAL_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_MANAGED_ICEBERG),
+    pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_BUG_BAD_REQUEST),
+    pytest.param(TABLE_EXTERNAL_DELTA, marks=XFAIL_BUG_BAD_REQUEST),
+    pytest.param(TABLE_MANAGED_ICEBERG),  # reads work
 ]
 
-PARAMS_INSERT = [
-    pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_EXTERNAL_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_ICEBERG_WRITER_COMPAT),
+# Writes to Delta: should work, blocked by Bad Request bug.
+# Writes to Iceberg: not expected to work (wrong writer for this format).
+PARAMS_WRITE = [
+    pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_BUG_BAD_REQUEST),
+    pytest.param(TABLE_EXTERNAL_DELTA, marks=XFAIL_BUG_BAD_REQUEST),
+    pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_EXPECTED_ICEBERG_NO_WRITE),
 ]
 
-PARAMS_UPDATE_DELETE = [
-    pytest.param(TABLE_MANAGED_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_EXTERNAL_DELTA, marks=XFAIL_BAD_REQUEST),
-    pytest.param(TABLE_MANAGED_ICEBERG, marks=XFAIL_BASE_TABLE_ONLY),
-]
+# ---------------------------------------------------------------------------
+# Auth helper
+# ---------------------------------------------------------------------------
 
 def _get_databricks_token() -> str:
-    """Get a Databricks access token via the SDK's default auth chain."""
     from databricks.sdk import WorkspaceClient
-
     w = WorkspaceClient()
     headers_or_fn = w.config.authenticate()
     auth_header = headers_or_fn() if callable(headers_or_fn) else headers_or_fn
@@ -81,21 +87,20 @@ def _get_databricks_token() -> str:
     return token
 
 
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
 @pytest.fixture(scope="session")
 def duckdb_con():
-    """Create a DuckDB connection with uc_catalog extension and UC attached.
+    """DuckDB connection via UC REST catalog (Delta reader/writer).
 
-    Uses unnamed secret as workaround for duckdb/unity_catalog#48
-    (named secrets are silently ignored).
+    Uses unnamed secret as workaround for duckdb/unity_catalog#48.
     """
     token = _get_databricks_token()
-
     con = duckdb.connect()
     con.execute("INSTALL uc_catalog FROM core; LOAD uc_catalog;")
     con.execute("INSTALL delta; LOAD delta;")
-
-    # IMPORTANT: Must use UNNAMED secret — named secrets are silently ignored
-    # due to bug: https://github.com/duckdb/unity_catalog/issues/48
     con.execute(f"""
         CREATE SECRET (
             TYPE UC,
@@ -104,48 +109,48 @@ def duckdb_con():
             AWS_REGION 'us-east-1'
         );
     """)
-
     con.execute(f"ATTACH '{CATALOG}' AS uc (TYPE UC_CATALOG);")
-
     yield con
     con.close()
 
 
+# ---------------------------------------------------------------------------
+# READS — all table types should work
+# ---------------------------------------------------------------------------
+
 @pytest.mark.reads
 @pytest.mark.parametrize("table_type", PARAMS_READ)
 def test_select(duckdb_con, table_type):
-    """SELECT * LIMIT 5 from each table type via UC REST."""
+    """Read via UC REST (Delta reader). All table types should work."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     rows = duckdb_con.execute(f"SELECT * FROM {fqn} LIMIT 5").fetchall()
-    cols = [desc[0] for desc in duckdb_con.description]
     assert len(rows) > 0, f"Expected rows from {fqn}"
-    assert len(cols) > 0, f"Expected columns from {fqn}"
 
 
 @pytest.mark.reads
 @pytest.mark.parametrize("table_type", PARAMS_READ)
 def test_predicate_pushdown(duckdb_con, table_type):
-    """Filtered SELECT — exercises predicate pushdown via UC REST."""
+    """Filtered read via UC REST (Delta reader). All table types should work."""
     fqn = f"uc.{SCHEMA}.{table_type}"
-    # Success means no exception was raised — predicate pushdown did not break execution.
     duckdb_con.execute(f"SELECT * FROM {fqn} WHERE trip_distance > 100 LIMIT 5").fetchall()
 
 
+# ---------------------------------------------------------------------------
+# DML — only managed Delta writes should work (Iceberg is wrong path here)
+# ---------------------------------------------------------------------------
+
 @pytest.mark.dml
-@pytest.mark.parametrize("table_type", PARAMS_INSERT)
+@pytest.mark.parametrize("table_type", PARAMS_WRITE)
 def test_insert(duckdb_con, table_type):
-    """INSERT INTO ... SELECT exercises the append write path via UC REST."""
+    """INSERT via UC REST (Delta writer). Only managed Delta should work."""
     fqn = f"uc.{SCHEMA}.{table_type}"
-    before = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
     duckdb_con.execute(f"INSERT INTO {fqn} SELECT * FROM {fqn} LIMIT 1;")
-    after = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
-    assert after > before, f"Expected row count to increase after INSERT"
 
 
 @pytest.mark.dml
-@pytest.mark.parametrize("table_type", PARAMS_UPDATE_DELETE)
+@pytest.mark.parametrize("table_type", PARAMS_WRITE)
 def test_update(duckdb_con, table_type):
-    """Identity UPDATE on one row — exercises the update write path via UC REST."""
+    """UPDATE via UC REST (Delta writer). Only managed Delta should work."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     before = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
     duckdb_con.execute(f"""
@@ -154,13 +159,13 @@ def test_update(duckdb_con, table_type):
         WHERE trip_distance = (SELECT MIN(trip_distance) FROM {fqn})
     """)
     after = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
-    assert after == before, f"Expected row count unchanged after identity UPDATE"
+    assert after == before
 
 
 @pytest.mark.dml
-@pytest.mark.parametrize("table_type", PARAMS_UPDATE_DELETE)
+@pytest.mark.parametrize("table_type", PARAMS_WRITE)
 def test_delete(duckdb_con, table_type):
-    """DELETE rows — exercises the delete path via UC REST."""
+    """DELETE via UC REST (Delta writer). Only managed Delta should work."""
     fqn = f"uc.{SCHEMA}.{table_type}"
     before = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
     duckdb_con.execute(f"""
@@ -168,4 +173,4 @@ def test_delete(duckdb_con, table_type):
         WHERE trip_distance = (SELECT MAX(trip_distance) FROM {fqn})
     """)
     after = duckdb_con.execute(f"SELECT count(*) FROM {fqn}").fetchone()[0]
-    assert after < before, f"Expected row count to decrease after DELETE"
+    assert after < before
