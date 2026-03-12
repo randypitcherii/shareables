@@ -21,11 +21,12 @@ Delta tables require UniForm (`delta.universalFormat.enabledFormats = 'iceberg'`
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Managed Delta** (UniForm) | ✅ | ✅ | ❌¹ | ❌¹ | ❌¹ | — | — |
 | **External Delta** (UniForm) | ✅ | ✅ | ❌¹ | ❌¹ | ❌¹ | — | — |
-| **Managed Iceberg** (native) | ❌² | ✅ | ❌² | ❌² | ❌² | ✅ | ✅ |
+| **Managed Iceberg** (native) | ❌² | ✅ | ❌² | ❌² | ❌² | ✅⁸ | ✅⁸ |
 | **Foreign Iceberg** | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
 > ¹ Delta+UniForm tables are read-only via Iceberg REST — Databricks does not support writes to Delta tables through the Iceberg REST API, even with UniForm enabled. Write attempts fail with S3 403.
 > ² Native Iceberg tables on VDM managed storage fail with S3 403 — credential vending returns valid credentials (confirmed via raw API inspection), but DuckDB fails to use them for data file access. PyIceberg reads the same tables successfully. Create/Drop DDL works because it goes through the catalog API, not direct storage access.
+> ⁸ CREATE/DROP TABLE via Iceberg REST works as catalog API operations. **However**, UC actually creates Delta tables (with UniForm/Iceberg compatibility) even when created through the Iceberg REST endpoint — verified via Databricks SDK `tables.get()` which reports `data_source_format=DELTA`.
 
 ### UC REST Connection (`uc_catalog` extension, Delta protocol)
 
@@ -129,6 +130,7 @@ CREATE TABLE ... USING ICEBERG
 | `scripts/01_iceberg_rest.py` | Tests all operations via Iceberg REST catalog endpoint |
 | `scripts/02_delta_uc_rest.py` | Tests Delta Sharing REST + delta_scan direct storage paths |
 | `scripts/iceberg_rest_eval.py` | **Isolated** Iceberg REST evaluation — self-contained, no shared imports, tests Reads/DML/DDL for Managed Iceberg + Managed Delta |
+| `tests/test_iceberg_rest.py` | **Pytest** Iceberg REST evaluation — proper test suite with xfail markers, DDL verified via Databricks SDK |
 
 ## Running
 
@@ -137,6 +139,7 @@ uv sync
 uv run python scripts/00_setup_tables.py    # Create test tables
 uv run python scripts/01_iceberg_rest.py     # Test Iceberg REST path
 uv run python scripts/02_delta_uc_rest.py    # Test Delta / UC REST path
+uv run pytest tests/test_iceberg_rest.py -v  # Pytest eval (recommended)
 ```
 
 ## DuckDB Connection Examples
