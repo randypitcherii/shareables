@@ -8,4 +8,13 @@ dependencies = [
     "databricks-connect",
     "duckdb>=1.4.0",
     "requests",
+    "pytest",
+    "pytz",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "reads: SELECT / read operations",
+    "dml: INSERT, UPDATE, DELETE operations",
+    "ddl: CREATE TABLE, DROP TABLE operations",
 ]
