@@ -128,6 +128,7 @@ CREATE TABLE ... USING ICEBERG
 | `scripts/00_setup_tables.py` | Creates test tables via Databricks Connect (serverless) |
 | `scripts/01_iceberg_rest.py` | Tests all operations via Iceberg REST catalog endpoint |
 | `scripts/02_delta_uc_rest.py` | Tests Delta Sharing REST + delta_scan direct storage paths |
+| `scripts/iceberg_rest_eval.py` | **Isolated** Iceberg REST evaluation — self-contained, no shared imports, tests Reads/DML/DDL for Managed Iceberg + Managed Delta |
 
 ## Running
 
