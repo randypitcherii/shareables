@@ -5,9 +5,7 @@ description = "Experiment: DuckDB interaction with Databricks Unity Catalog acro
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "databricks-sdk",
-    "databricks-connect",
     "duckdb>=1.4.0",
-    "requests",
     "pytest",
     "pytz",
 ]

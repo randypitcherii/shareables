@@ -15,7 +15,6 @@ import importlib
 import os
 import uuid
 
-import duckdb
 import pytest
 
 # Ensure pytz is available -- DuckDB needs it for timestamp handling
@@ -34,14 +33,6 @@ ENDPOINT = f"https://{WORKSPACE}/api/2.1/unity-catalog/iceberg-rest"
 TABLE_MANAGED_ICEBERG = "managed_iceberg"
 TABLE_MANAGED_DELTA = "managed_delta"
 TABLE_TYPES = [TABLE_MANAGED_ICEBERG, TABLE_MANAGED_DELTA]
-
-# ---------------------------------------------------------------------------
-# Custom markers
-# ---------------------------------------------------------------------------
-
-pytest.mark.reads = pytest.mark.reads
-pytest.mark.dml = pytest.mark.dml
-pytest.mark.ddl = pytest.mark.ddl
 
 # ---------------------------------------------------------------------------
 # xfail reasons (from README findings)
