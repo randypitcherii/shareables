@@ -5,7 +5,7 @@ Creates:
   - external_delta: External Delta table with sample data
   - managed_iceberg: Managed Iceberg table (UniForm enabled) with sample data
 
-All tables live in fe_randy_pitcher_workspace_catalog.duckdb_uc_experiment.
+All tables live in $DATABRICKS_CATALOG.$DATABRICKS_SCHEMA (default: duckdb_uc_experiment).
 Uses samples.nyctaxi.trips as source data (100 rows).
 """
 
