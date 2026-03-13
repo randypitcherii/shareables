@@ -9,11 +9,22 @@ def _get_alias_registry():
 
 
 def _get_gateway_base_url(request: Request) -> str:
-    """Derive the public-facing gateway URL, respecting reverse proxy headers."""
+    """Derive the public-facing gateway URL.
+
+    Priority: DATABRICKS_APP_URL env var (set by the Databricks App runtime),
+    then X-Forwarded-Host proxy header, then the request's own base URL.
+    """
+    import os
+
+    app_url = os.getenv("DATABRICKS_APP_URL")
+    if app_url:
+        return app_url.rstrip("/")
+
     forwarded_host = request.headers.get("x-forwarded-host")
     forwarded_proto = request.headers.get("x-forwarded-proto", "https")
     if forwarded_host:
         return f"{forwarded_proto}://{forwarded_host}"
+
     base = request.base_url
     return f"{base.scheme}://{base.netloc}"
 

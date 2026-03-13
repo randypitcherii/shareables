@@ -46,6 +46,14 @@ def test_get_cursor_config_base_url_respects_forwarded_headers():
     assert base_url == "https://my-gateway.aws.databricksapps.com/api/v1"
 
 
+def test_get_cursor_config_base_url_prefers_databricks_app_url(monkeypatch):
+    monkeypatch.setenv("DATABRICKS_APP_URL", "https://my-app.aws.databricksapps.com")
+    response = client.get("/api/v1/config/cursor")
+    assert response.status_code == 200
+    base_url = response.json()["config"]["baseUrl"]
+    assert base_url == "https://my-app.aws.databricksapps.com/api/v1"
+
+
 def test_get_cursor_config_notes_is_list():
     response = client.get("/api/v1/config/cursor")
     assert response.status_code == 200
