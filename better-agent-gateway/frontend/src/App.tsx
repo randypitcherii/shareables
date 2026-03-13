@@ -2,6 +2,7 @@ import { ModelTable } from './components/ModelTable'
 import { HealthBadge } from './components/HealthBadge'
 import { UserInfo } from './components/UserInfo'
 import { PermissionComparison } from './components/PermissionComparison'
+import { CursorConfig } from './components/CursorConfig'
 import './App.css'
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         </section>
         <UserInfo />
         <PermissionComparison />
+        <CursorConfig />
         <ModelTable />
       </main>
     </div>
