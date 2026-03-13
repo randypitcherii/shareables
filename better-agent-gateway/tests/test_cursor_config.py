@@ -33,6 +33,19 @@ def test_get_cursor_config_base_url_uses_request_host():
     assert base_url.startswith("http")
 
 
+def test_get_cursor_config_base_url_respects_forwarded_headers():
+    response = client.get(
+        "/api/v1/config/cursor",
+        headers={
+            "x-forwarded-host": "my-gateway.aws.databricksapps.com",
+            "x-forwarded-proto": "https",
+        },
+    )
+    assert response.status_code == 200
+    base_url = response.json()["config"]["baseUrl"]
+    assert base_url == "https://my-gateway.aws.databricksapps.com/api/v1"
+
+
 def test_get_cursor_config_notes_is_list():
     response = client.get("/api/v1/config/cursor")
     assert response.status_code == 200

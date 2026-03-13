@@ -9,6 +9,11 @@ def _get_alias_registry():
 
 
 def _get_gateway_base_url(request: Request) -> str:
+    """Derive the public-facing gateway URL, respecting reverse proxy headers."""
+    forwarded_host = request.headers.get("x-forwarded-host")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "https")
+    if forwarded_host:
+        return f"{forwarded_proto}://{forwarded_host}"
     base = request.base_url
     return f"{base.scheme}://{base.netloc}"
 
