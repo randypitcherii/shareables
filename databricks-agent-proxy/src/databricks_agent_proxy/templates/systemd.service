@@ -1,0 +1,13 @@
+[Unit]
+Description=Databricks Agent Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${uvx_path} databricks-agent-proxy start --gateway-url ${gateway_url} --port ${port}
+Restart=always
+RestartSec=5
+Environment=HOME=${home}
+
+[Install]
+WantedBy=default.target

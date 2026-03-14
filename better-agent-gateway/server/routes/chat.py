@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field
 from ..audit import get_audit_store
 from ..auth import RequestContext, get_request_context
 from ..proxy import ServingEndpointProxy
+from ..request_log import create_log_entry, log_request_async
 from ..utils import sanitize_error
 
 _VALID_MODEL_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
@@ -70,6 +72,7 @@ async def chat_completions(
         },
     )
 
+    start_time = time.monotonic()
     try:
         proxy = _get_proxy()
         result = await proxy.chat_completion(
@@ -80,8 +83,33 @@ async def chat_completions(
             temperature=payload.temperature,
             stream=payload.stream,
         )
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        entry = create_log_entry(
+            user_id=context.user_id,
+            model_requested=payload.model,
+            model_resolved=resolved_endpoint,
+            latency_ms=latency_ms,
+            status_code=200,
+            response_body=result,
+        )
+        await log_request_async(entry)
+
         return result
+    except HTTPException:
+        raise
     except Exception as exc:
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        entry = create_log_entry(
+            user_id=context.user_id,
+            model_requested=payload.model,
+            model_resolved=resolved_endpoint,
+            latency_ms=latency_ms,
+            status_code=502,
+        )
+        await log_request_async(entry)
+
         get_audit_store().add(
             user_id=context.user_id,
             action="chat_completion_error",
