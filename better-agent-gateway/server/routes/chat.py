@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..audit import get_audit_store
@@ -72,6 +73,17 @@ async def chat_completions(
         },
     )
 
+    if payload.stream:
+        return await _handle_streaming(payload, context, resolved_endpoint)
+    else:
+        return await _handle_non_streaming(payload, context, resolved_endpoint)
+
+
+async def _handle_non_streaming(
+    payload: ChatCompletionRequest,
+    context: RequestContext,
+    resolved_endpoint: str,
+) -> dict[str, Any]:
     start_time = time.monotonic()
     try:
         proxy = _get_proxy()
@@ -81,7 +93,6 @@ async def chat_completions(
             messages=payload.messages,
             max_tokens=payload.max_tokens,
             temperature=payload.temperature,
-            stream=payload.stream,
         )
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -121,3 +132,67 @@ async def chat_completions(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Serving endpoint error: {sanitize_error(str(exc))}",
         ) from exc
+
+
+async def _handle_streaming(
+    payload: ChatCompletionRequest,
+    context: RequestContext,
+    resolved_endpoint: str,
+) -> StreamingResponse:
+    start_time = time.monotonic()
+    try:
+        proxy = _get_proxy()
+        upstream_resp = await proxy.chat_completion_stream(
+            endpoint_name=resolved_endpoint,
+            access_token=context.access_token,
+            messages=payload.messages,
+            max_tokens=payload.max_tokens,
+            temperature=payload.temperature,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        entry = create_log_entry(
+            user_id=context.user_id,
+            model_requested=payload.model,
+            model_resolved=resolved_endpoint,
+            latency_ms=latency_ms,
+            status_code=502,
+        )
+        await log_request_async(entry)
+
+        get_audit_store().add(
+            user_id=context.user_id,
+            action="chat_completion_error",
+            decision="error",
+            reason=str(exc)[:200],
+            metadata={"endpoint": resolved_endpoint},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Serving endpoint error: {sanitize_error(str(exc))}",
+        ) from exc
+
+    async def event_generator():
+        try:
+            async for chunk in upstream_resp.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream_resp.aclose()
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            entry = create_log_entry(
+                user_id=context.user_id,
+                model_requested=payload.model,
+                model_resolved=resolved_endpoint,
+                latency_ms=latency_ms,
+                status_code=200,
+            )
+            await log_request_async(entry)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
