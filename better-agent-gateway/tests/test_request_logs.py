@@ -160,6 +160,104 @@ def test_logs_summary_endpoint_empty():
     assert body["total_requests"] == 0
 
 
+def test_post_single_log_entry():
+    """POST a single log entry to /api/v1/logs."""
+    response = client.post(
+        "/api/v1/logs",
+        headers={"authorization": "Bearer test-token"},
+        json={
+            "model_requested": "claude-sonnet-latest",
+            "model_resolved": "databricks-claude-sonnet-4-6",
+            "latency_ms": 120,
+            "status_code": 200,
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["count"] == 1
+    entry = body["entries"][0]
+    assert entry["model_requested"] == "claude-sonnet-latest"
+    assert entry["total_tokens"] == 30
+    # user_id falls back to auth context
+    assert entry["user_id"] == "bearer-user"
+
+
+def test_post_log_entry_with_explicit_user_and_timestamp():
+    """POST with explicit user_id and timestamp uses provided values."""
+    response = client.post(
+        "/api/v1/logs",
+        headers={"authorization": "Bearer test-token"},
+        json={
+            "timestamp": "2026-01-01T00:00:00+00:00",
+            "user_id": "proxy-user@co.com",
+            "model_requested": "gpt-4o",
+            "model_resolved": "databricks-gpt-4o",
+            "latency_ms": 200,
+            "status_code": 200,
+        },
+    )
+    assert response.status_code == 201
+    entry = response.json()["entries"][0]
+    assert entry["user_id"] == "proxy-user@co.com"
+    assert entry["timestamp"] == "2026-01-01T00:00:00+00:00"
+
+
+def test_post_batch_log_entries():
+    """POST an array of log entries."""
+    entries = [
+        {
+            "model_requested": f"model-{i}",
+            "model_resolved": f"resolved-{i}",
+            "latency_ms": 100 + i,
+            "status_code": 200,
+        }
+        for i in range(3)
+    ]
+    response = client.post(
+        "/api/v1/logs",
+        headers={"authorization": "Bearer test-token"},
+        json=entries,
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["count"] == 3
+
+
+def test_post_log_entry_appears_in_get():
+    """Posted entries appear in GET /api/v1/logs."""
+    client.post(
+        "/api/v1/logs",
+        headers={"authorization": "Bearer test-token"},
+        json={
+            "model_requested": "test-model",
+            "model_resolved": "test-resolved",
+            "latency_ms": 50,
+            "status_code": 200,
+        },
+    )
+    logs_response = client.get("/api/v1/logs")
+    body = logs_response.json()
+    assert body["total"] >= 1
+    assert any(l["model_requested"] == "test-model" for l in body["logs"])
+
+
+def test_post_log_entry_requires_auth():
+    """POST without auth returns 401."""
+    response = client.post(
+        "/api/v1/logs",
+        json={
+            "model_requested": "m",
+            "model_resolved": "m",
+            "latency_ms": 100,
+            "status_code": 200,
+        },
+    )
+    assert response.status_code == 401
+
+
 def test_chat_completion_creates_log_entry():
     """Verify that a successful chat completion creates a request log."""
     mock_result = {

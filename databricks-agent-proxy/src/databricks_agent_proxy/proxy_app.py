@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -79,13 +82,58 @@ def create_app(settings: Settings, token_provider: TokenProvider | None = None) 
 
         body = await request.json()
         is_streaming = body.get("stream", False)
+        user_id = request.headers.get("x-user-id", "proxy-user")
 
         if is_streaming:
-            return await _stream_response(client, settings.gateway_url, headers, body)
+            return await _stream_response(client, settings.gateway_url, headers, body, user_id=user_id)
         else:
-            return await _non_stream_response(client, settings.gateway_url, headers, body)
+            return await _non_stream_response(client, settings.gateway_url, headers, body, user_id=user_id)
 
     return app
+
+
+async def _report_log(
+    client: httpx.AsyncClient,
+    gateway_url: str,
+    headers: dict[str, str],
+    log_entry: dict[str, Any],
+) -> None:
+    """Fire-and-forget: POST a log entry to the gateway. Never raises."""
+    try:
+        log_headers = {k: v for k, v in headers.items() if k.lower() == "authorization"}
+        log_headers["Content-Type"] = "application/json"
+        await client.post(
+            f"{gateway_url}/api/v1/logs",
+            headers=log_headers,
+            json=log_entry,
+        )
+    except Exception:
+        logger.debug("Failed to report log to gateway", exc_info=True)
+
+
+def _build_log_entry(
+    *,
+    model_requested: str,
+    model_resolved: str,
+    latency_ms: float,
+    status_code: int,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    user_id: str = "proxy-user",
+) -> dict[str, Any]:
+    """Build a structured log entry dict."""
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_id": user_id,
+        "model_requested": model_requested,
+        "model_resolved": model_resolved,
+        "latency_ms": round(latency_ms, 2),
+        "status_code": status_code,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
 
 
 async def _non_stream_response(
@@ -93,16 +141,42 @@ async def _non_stream_response(
     gateway_url: str,
     headers: dict[str, str],
     body: dict[str, Any],
+    user_id: str = "proxy-user",
 ) -> JSONResponse:
     """Forward a non-streaming request and return the JSON response."""
+    start = time.monotonic()
     resp = await client.post(
         f"{gateway_url}/api/v1/chat/completions",
         headers=headers,
         json=body,
     )
+    latency_ms = (time.monotonic() - start) * 1000
+
     if not resp.is_success:
+        log_entry = _build_log_entry(
+            model_requested=body.get("model", ""),
+            model_resolved="",
+            latency_ms=latency_ms,
+            status_code=resp.status_code,
+            user_id=user_id,
+        )
+        asyncio.create_task(_report_log(client, gateway_url, headers, log_entry))
         return _forward_error(resp)
-    return JSONResponse(content=resp.json())
+
+    resp_json = resp.json()
+    usage = resp_json.get("usage", {})
+    log_entry = _build_log_entry(
+        model_requested=body.get("model", ""),
+        model_resolved=resp_json.get("model", body.get("model", "")),
+        latency_ms=latency_ms,
+        status_code=resp.status_code,
+        prompt_tokens=usage.get("prompt_tokens", 0),
+        completion_tokens=usage.get("completion_tokens", 0),
+        total_tokens=usage.get("total_tokens", 0),
+        user_id=user_id,
+    )
+    asyncio.create_task(_report_log(client, gateway_url, headers, log_entry))
+    return JSONResponse(content=resp_json)
 
 
 async def _stream_response(
@@ -110,6 +184,7 @@ async def _stream_response(
     gateway_url: str,
     headers: dict[str, str],
     body: dict[str, Any],
+    user_id: str = "proxy-user",
 ) -> Response:
     """Forward a streaming request and relay SSE chunks.
 
@@ -117,6 +192,7 @@ async def _stream_response(
     then returns a StreamingResponse so errors are caught before we commit
     to a 200.
     """
+    start = time.monotonic()
     req = client.build_request(
         "POST",
         f"{gateway_url}/api/v1/chat/completions",
@@ -126,8 +202,17 @@ async def _stream_response(
     resp = await client.send(req, stream=True)
 
     if not resp.is_success:
+        latency_ms = (time.monotonic() - start) * 1000
         body_bytes = await resp.aread()
         await resp.aclose()
+        log_entry = _build_log_entry(
+            model_requested=body.get("model", ""),
+            model_resolved="",
+            latency_ms=latency_ms,
+            status_code=resp.status_code,
+            user_id=user_id,
+        )
+        asyncio.create_task(_report_log(client, gateway_url, headers, log_entry))
         try:
             import json
 
@@ -142,6 +227,15 @@ async def _stream_response(
                 yield chunk
         finally:
             await resp.aclose()
+            latency_ms = (time.monotonic() - start) * 1000
+            log_entry = _build_log_entry(
+                model_requested=body.get("model", ""),
+                model_resolved=body.get("model", ""),
+                latency_ms=latency_ms,
+                status_code=200,
+                user_id=user_id,
+            )
+            asyncio.create_task(_report_log(client, gateway_url, headers, log_entry))
 
     return StreamingResponse(
         event_generator(),
