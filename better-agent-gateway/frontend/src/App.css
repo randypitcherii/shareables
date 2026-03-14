@@ -40,6 +40,40 @@ header h1 {
   margin-bottom: 2rem;
 }
 
+/* --- Page Tabs --- */
+
+.page-tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.page-tab {
+  padding: 0.6rem 1.5rem;
+  border: none;
+  background: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+
+.page-tab:hover {
+  color: #212529;
+}
+
+.page-tab.active {
+  color: #0d6efd;
+  border-bottom-color: #0d6efd;
+}
+
+.page-tab-content {
+  animation: fadeIn 0.15s ease;
+}
+
 .info-banner code {
   background: #e0e8ff;
   padding: 0.15em 0.4em;
