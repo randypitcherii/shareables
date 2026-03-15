@@ -89,6 +89,22 @@ def create_app(settings: Settings, token_provider: TokenProvider | None = None) 
         else:
             return await _non_stream_response(client, settings.gateway_url, headers, body, user_id=user_id)
 
+    @app.post("/v1/messages")
+    async def messages(request: Request) -> Response:
+        client: httpx.AsyncClient = app.state.http_client
+        tp: TokenProvider = app.state.token_provider
+        headers = tp.get_auth_headers()
+        headers["Content-Type"] = "application/json"
+
+        body = await request.json()
+        is_streaming = body.get("stream", False)
+        user_id = request.headers.get("x-user-id", "proxy-user")
+
+        if is_streaming:
+            return await _stream_response(client, settings.gateway_url, headers, body, user_id=user_id, gateway_path="/api/v1/messages")
+        else:
+            return await _non_stream_response(client, settings.gateway_url, headers, body, user_id=user_id, gateway_path="/api/v1/messages")
+
     return app
 
 
@@ -142,11 +158,12 @@ async def _non_stream_response(
     headers: dict[str, str],
     body: dict[str, Any],
     user_id: str = "proxy-user",
+    gateway_path: str = "/api/v1/chat/completions",
 ) -> JSONResponse:
     """Forward a non-streaming request and return the JSON response."""
     start = time.monotonic()
     resp = await client.post(
-        f"{gateway_url}/api/v1/chat/completions",
+        f"{gateway_url}{gateway_path}",
         headers=headers,
         json=body,
     )
@@ -170,8 +187,8 @@ async def _non_stream_response(
         model_resolved=resp_json.get("model", body.get("model", "")),
         latency_ms=latency_ms,
         status_code=resp.status_code,
-        prompt_tokens=usage.get("prompt_tokens", 0),
-        completion_tokens=usage.get("completion_tokens", 0),
+        prompt_tokens=usage.get("prompt_tokens", usage.get("input_tokens", 0)),
+        completion_tokens=usage.get("completion_tokens", usage.get("output_tokens", 0)),
         total_tokens=usage.get("total_tokens", 0),
         user_id=user_id,
     )
@@ -185,6 +202,7 @@ async def _stream_response(
     headers: dict[str, str],
     body: dict[str, Any],
     user_id: str = "proxy-user",
+    gateway_path: str = "/api/v1/chat/completions",
 ) -> Response:
     """Forward a streaming request and relay SSE chunks.
 
@@ -195,7 +213,7 @@ async def _stream_response(
     start = time.monotonic()
     req = client.build_request(
         "POST",
-        f"{gateway_url}/api/v1/chat/completions",
+        f"{gateway_url}{gateway_path}",
         headers=headers,
         json=body,
     )
