@@ -463,6 +463,7 @@ header h1 {
 
 .setup-tabs {
   display: flex;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
   border-bottom: 2px solid #dee2e6;
 }

@@ -48,4 +48,31 @@ def get_proxy_setup(request: Request):
         "version": version_string(),
         "git_hash": git_hash or "main",
         "model_aliases": sorted(get_registry().list_aliases().keys()),
+        "tool_configs": {
+            "claude_code": {
+                "name": "Claude Code",
+                "description": "Anthropic's AI coding CLI",
+                "env_vars": {
+                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+                    "ANTHROPIC_API_KEY": "unused",
+                },
+            },
+            "codex": {
+                "name": "Codex",
+                "description": "OpenAI's AI coding CLI",
+                "env_vars": {
+                    "OPENAI_BASE_URL": "http://127.0.0.1:8787/v1",
+                    "OPENAI_API_KEY": "unused",
+                },
+            },
+            "opencode": {
+                "name": "OpenCode",
+                "description": "Open-source AI coding tool",
+                "env_vars": {
+                    "OPENAI_BASE_URL": "http://127.0.0.1:8787/v1",
+                    "OPENAI_API_KEY": "unused",
+                },
+                "config_file": "~/.config/opencode/opencode.jsonc",
+            },
+        },
     }
