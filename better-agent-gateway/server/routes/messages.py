@@ -13,7 +13,7 @@ from ..utils import sanitize_error
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_DEFAULT_TIMEOUT = httpx.Timeout(300.0, connect=10.0)
 
 # Module-level httpx client singleton (initialized lazily)
 _client: httpx.AsyncClient | None = None
