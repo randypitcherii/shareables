@@ -490,6 +490,10 @@ header h1 {
   border-bottom-color: #0d6efd;
 }
 
+.tab-icon {
+  margin-right: 0.25rem;
+}
+
 .setup-tab-content {
   animation: fadeIn 0.15s ease;
 }

@@ -21,13 +21,19 @@ interface SetupInfo {
   tool_configs: Record<string, ToolConfig>
 }
 
-type Tab = 'claude-code' | 'codex' | 'opencode' | 'agent'
+const TOOL_ICONS: Record<string, string> = {
+  'claude-code': '\u2728',  // sparkles
+  'codex': '\u{1F4AC}',     // speech balloon
+  'opencode': '\u{1F310}',  // globe
+}
+
+type ToolTab = 'claude-code' | 'codex' | 'opencode'
 
 export function ProxySetup() {
   const [info, setInfo] = useState<SetupInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('claude-code')
+  const [tab, setTab] = useState<ToolTab>('claude-code')
 
   useEffect(() => {
     fetch('/api/v1/proxy-setup')
@@ -49,7 +55,7 @@ export function ProxySetup() {
   if (error) return <div className="error">Failed to load setup info: {error}</div>
   if (!info) return <div className="proxy-setup loading">Loading setup info...</div>
 
-  const agentPrompt = buildAgentPrompt(info)
+  const universalPrompt = buildUniversalAgentPrompt(info)
 
   return (
     <section className="proxy-setup">
@@ -59,56 +65,42 @@ export function ProxySetup() {
         to this gateway. The proxy runs on localhost, handles OAuth automatically, and forwards requests here.
       </p>
 
-      <div className="setup-tabs">
+      <div className="agent-prompt-cta">
         <button
-          className={`setup-tab ${tab === 'claude-code' ? 'active' : ''}`}
-          onClick={() => setTab('claude-code')}
+          className="agent-prompt-btn"
+          onClick={() => copyToClipboard(universalPrompt, 'universal')}
         >
-          Claude Code
+          {copied === 'universal' ? 'Copied!' : 'Copy setup prompt for your agent'}
         </button>
-        <button
-          className={`setup-tab ${tab === 'codex' ? 'active' : ''}`}
-          onClick={() => setTab('codex')}
-        >
-          Codex
-        </button>
-        <button
-          className={`setup-tab ${tab === 'opencode' ? 'active' : ''}`}
-          onClick={() => setTab('opencode')}
-        >
-          OpenCode
-        </button>
-        <button
-          className={`setup-tab ${tab === 'agent' ? 'active' : ''}`}
-          onClick={() => setTab('agent')}
-        >
-          Agent Prompt
-        </button>
+        <span className="agent-prompt-hint">
+          Paste into any AI coding agent — it will ask which tools to configure and handle the rest
+        </span>
       </div>
 
-      {tab === 'agent' ? (
-        <div className="setup-tab-content">
-          <p className="tab-hint">
-            Copy this prompt and paste it into any devtools agent to automate setup.
-          </p>
-          <div className="command-block agent-block">
-            <pre>{agentPrompt}</pre>
+      <p className="manual-steps-label">Or follow these steps manually for a specific tool:</p>
+
+      <div className="setup-tabs">
+        {(['claude-code', 'codex', 'opencode'] as ToolTab[]).map(t => {
+          const configKey = t === 'claude-code' ? 'claude_code' : t
+          const name = info.tool_configs?.[configKey]?.name ?? t
+          return (
             <button
-              className="copy-btn"
-              onClick={() => copyToClipboard(agentPrompt, 'agent')}
+              key={t}
+              className={`setup-tab ${tab === t ? 'active' : ''}`}
+              onClick={() => setTab(t)}
             >
-              {copied === 'agent' ? 'Copied' : 'Copy'}
+              <span className="tab-icon">{TOOL_ICONS[t]}</span> {name}
             </button>
-          </div>
-        </div>
-      ) : (
-        <ToolSetupTab
-          tab={tab}
-          info={info}
-          copied={copied}
-          copyToClipboard={copyToClipboard}
-        />
-      )}
+          )
+        })}
+      </div>
+
+      <ToolSetupTab
+        tab={tab}
+        info={info}
+        copied={copied}
+        copyToClipboard={copyToClipboard}
+      />
     </section>
   )
 }
@@ -119,7 +111,7 @@ function ToolSetupTab({
   copied,
   copyToClipboard,
 }: {
-  tab: 'claude-code' | 'codex' | 'opencode'
+  tab: ToolTab
   info: SetupInfo
   copied: string | null
   copyToClipboard: (text: string, label: string) => void
@@ -135,17 +127,6 @@ function ToolSetupTab({
 
   return (
     <div className="setup-tab-content">
-      <div className="agent-prompt-cta">
-        <button
-          className="agent-prompt-btn"
-          onClick={() => copyToClipboard(buildToolAgentPrompt(tab, info), 'tool-agent')}
-        >
-          {copied === 'tool-agent' ? 'Copied!' : 'Copy setup prompt for your agent'}
-        </button>
-        <span className="agent-prompt-hint">Paste into {toolConfig?.name ?? tab} or any AI agent to handle setup automatically</span>
-      </div>
-
-      <p className="manual-steps-label">Or follow these steps manually:</p>
       <div className="setup-steps">
         <div className="setup-step">
           <div className="step-number">1</div>
@@ -232,47 +213,73 @@ function ToolSetupTab({
           </div>
         </div>
       </div>
-
     </div>
   )
 }
 
-function buildToolAgentPrompt(tab: 'claude-code' | 'codex' | 'opencode', info: SetupInfo): string {
+function buildUniversalAgentPrompt(info: SetupInfo): string {
   const models = info.model_aliases.length > 0
     ? info.model_aliases.join(', ')
     : 'claude-sonnet-latest, gpt-latest, gemini-latest'
 
-  const configKey = tab === 'claude-code' ? 'claude_code' : tab
-  const toolConfig = info.tool_configs?.[configKey]
-  const toolName = toolConfig?.name ?? tab
+  return `Set up the databricks-agent-proxy so local AI coding tools can use Databricks-hosted LLMs through the Better Agent Gateway.
 
-  const envVars = toolConfig?.env_vars
-    ? Object.entries(toolConfig.env_vars)
-        .map(([k, v]) => `export ${k}=${v}`)
-        .join('\n')
-    : ''
+First, ask the user which tools they want to configure. The supported tools are:
+- Claude Code (Anthropic's AI coding CLI)
+- Codex (OpenAI's AI coding CLI)
+- OpenCode (open-source AI coding tool)
 
-  let configSection = `## Configure ${toolName}
+The user may want one or more of these. Proceed with their selection.
 
-Set these environment variables in your shell profile or project .env:
+## Step 1 — Install and authenticate the proxy
 
-${envVars}`
+Run this command:
 
-  if (tab === 'codex') {
-    configSection += `
+${info.setup_command}
 
-Alternatively, write this to ~/.codex/config.toml:
+This opens a browser for Databricks OAuth login. The user must complete the login. The proxy then tests gateway connectivity and installs itself as a background service.
+
+## Step 2 — Verify the proxy is running
+
+${info.status_command}
+
+Expected output should show: status ok, authenticated true, gateway_url ${info.gateway_url}
+
+## Step 3 — Configure the selected tools
+
+Apply the configuration below ONLY for the tools the user selected.
+
+### Claude Code
+
+Claude Code uses the Anthropic Messages API through the proxy. Set these environment variables:
+
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export ANTHROPIC_API_KEY=unused
+
+Add these to the user's shell profile (~/.zshrc, ~/.bashrc) or project .env file.
+
+### Codex
+
+Codex uses the OpenAI-compatible API through the proxy. Set these environment variables:
+
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export OPENAI_API_KEY=unused
+
+Or write this to ~/.codex/config.toml:
 
 [provider]
 base_url = "http://127.0.0.1:8787/v1"
 env_key = "OPENAI_API_KEY"
-wire_api = "chat"`
-  }
+wire_api = "chat"
 
-  if (tab === 'opencode') {
-    configSection += `
+### OpenCode
 
-Alternatively, write this to ~/.config/opencode/opencode.jsonc:
+OpenCode uses the OpenAI-compatible API through the proxy. Set these environment variables:
+
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export OPENAI_API_KEY=unused
+
+Or write this to ~/.config/opencode/opencode.jsonc:
 
 {
   "provider": {
@@ -281,26 +288,7 @@ Alternatively, write this to ~/.config/opencode/opencode.jsonc:
       "baseURL": "http://127.0.0.1:8787/v1"
     }
   }
-}`
-  }
-
-  return `Set up the databricks-agent-proxy so ${toolName} can use Databricks-hosted LLMs through the Better Agent Gateway.
-
-## Step 1 — Install and authenticate the proxy
-
-${info.setup_command}
-
-This will open a browser for Databricks OAuth login. Complete the login, then the proxy will test gateway connectivity and install itself as a background service.
-
-## Step 2 — Verify the proxy is running
-
-${info.status_command}
-
-Expected: status ok, authenticated true, gateway_url ${info.gateway_url}
-
-## Step 3 — Configure ${toolName}
-
-${configSection}
+}
 
 ## Step 4 — Test the connection
 
@@ -312,46 +300,5 @@ Expected: {"status": "ok", "authenticated": true, ...}
 
 ${models}
 
-After setup, open a new terminal and run ${toolName} — it should connect through the proxy automatically.`
-}
-
-function buildAgentPrompt(info: SetupInfo): string {
-  const models = info.model_aliases.length > 0
-    ? info.model_aliases.join(', ')
-    : 'claude-sonnet-latest, gpt-latest, gemini-latest'
-
-  return `Set up the databricks-agent-proxy so AI coding tools (Claude Code, Codex, OpenCode) can use Databricks-hosted LLMs through the Better Agent Gateway.
-
-## Install and configure
-
-${info.setup_command}
-
-This will open a browser for Databricks OAuth login. Complete the login, then the proxy will test gateway connectivity and install itself as a background service.
-
-## Verify
-
-${info.status_command}
-
-Expected: status ok, authenticated true, gateway_url ${info.gateway_url}
-
-## Tool Configuration
-
-### Claude Code (Anthropic Messages API)
-export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
-export ANTHROPIC_API_KEY=unused
-
-### Codex (OpenAI-compatible)
-export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-export OPENAI_API_KEY=unused
-
-### OpenCode (OpenAI-compatible)
-export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-export OPENAI_API_KEY=unused
-
-## Available models
-${models}
-
-## Test
-
-curl ${info.health_url}`
+After setup, the user should open a new terminal and run their tool — it will connect through the proxy automatically.`
 }
