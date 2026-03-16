@@ -570,6 +570,37 @@ header h1 {
   margin-top: 0.35rem;
 }
 
+.agent-prompt-cta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.agent-prompt-btn {
+  padding: 0.5rem 1rem;
+  background: #0d6efd;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.agent-prompt-btn:hover {
+  background: #0b5ed7;
+}
+
+.agent-prompt-hint {
+  font-size: 0.78rem;
+  color: #6c757d;
+}
+
 .step-detail ol {
   margin: 0.25rem 0;
   padding-left: 1.25rem;

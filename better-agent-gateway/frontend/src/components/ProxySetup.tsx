@@ -223,8 +223,96 @@ function ToolSetupTab({
           </div>
         </div>
       </div>
+
+      <div className="agent-prompt-cta">
+        <button
+          className="agent-prompt-btn"
+          onClick={() => copyToClipboard(buildToolAgentPrompt(tab, info), 'tool-agent')}
+        >
+          {copied === 'tool-agent' ? 'Copied!' : 'Copy instructions as agent prompt'}
+        </button>
+        <span className="agent-prompt-hint">Paste into any AI coding agent to automate all setup steps</span>
+      </div>
     </div>
   )
+}
+
+function buildToolAgentPrompt(tab: 'claude-code' | 'codex' | 'opencode', info: SetupInfo): string {
+  const models = info.model_aliases.length > 0
+    ? info.model_aliases.join(', ')
+    : 'claude-sonnet-latest, gpt-latest, gemini-latest'
+
+  const configKey = tab === 'claude-code' ? 'claude_code' : tab
+  const toolConfig = info.tool_configs?.[configKey]
+  const toolName = toolConfig?.name ?? tab
+
+  const envVars = toolConfig?.env_vars
+    ? Object.entries(toolConfig.env_vars)
+        .map(([k, v]) => `export ${k}=${v}`)
+        .join('\n')
+    : ''
+
+  let configSection = `## Configure ${toolName}
+
+Set these environment variables in your shell profile or project .env:
+
+${envVars}`
+
+  if (tab === 'codex') {
+    configSection += `
+
+Alternatively, write this to ~/.codex/config.toml:
+
+[provider]
+base_url = "http://127.0.0.1:8787/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "chat"`
+  }
+
+  if (tab === 'opencode') {
+    configSection += `
+
+Alternatively, write this to ~/.config/opencode/opencode.jsonc:
+
+{
+  "provider": {
+    "openai-compatible": {
+      "apiKey": "unused",
+      "baseURL": "http://127.0.0.1:8787/v1"
+    }
+  }
+}`
+  }
+
+  return `Set up the databricks-agent-proxy so ${toolName} can use Databricks-hosted LLMs through the Better Agent Gateway.
+
+## Step 1 — Install and authenticate the proxy
+
+${info.setup_command}
+
+This will open a browser for Databricks OAuth login. Complete the login, then the proxy will test gateway connectivity and install itself as a background service.
+
+## Step 2 — Verify the proxy is running
+
+${info.status_command}
+
+Expected: status ok, authenticated true, gateway_url ${info.gateway_url}
+
+## Step 3 — Configure ${toolName}
+
+${configSection}
+
+## Step 4 — Test the connection
+
+curl ${info.health_url}
+
+Expected: {"status": "ok", "authenticated": true, ...}
+
+## Available models
+
+${models}
+
+After setup, open a new terminal and run ${toolName} — it should connect through the proxy automatically.`
 }
 
 function buildAgentPrompt(info: SetupInfo): string {
