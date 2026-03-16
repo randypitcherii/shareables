@@ -23,8 +23,12 @@ verify: test
 
 deploy-dev: verify
 	databricks bundle deploy -t dev
-	@echo "Deployed to dev. Check app status with: databricks apps get better-agent-gateway-dev"
+	$(eval SRC := $(shell databricks bundle validate -t dev --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('workspace',{}).get('file_path',''))"))
+	databricks apps deploy better-agent-gateway-dev --source-code-path $(SRC)
+	@echo "Deployed and restarted dev app."
 
 deploy-prod: verify
 	databricks bundle deploy -t prod
-	@echo "Deployed to prod. Check app status with: databricks apps get better-agent-gateway-prod"
+	$(eval SRC := $(shell databricks bundle validate -t prod --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('workspace',{}).get('file_path',''))"))
+	databricks apps deploy better-agent-gateway-prod --source-code-path $(SRC)
+	@echo "Deployed and restarted prod app."
