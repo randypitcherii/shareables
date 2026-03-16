@@ -60,7 +60,7 @@ Cursor is an Electron app, so Playwright cannot directly control it. You would n
 ## Key Findings
 
 ### Cursor CLI
-- **Exists** at `/Users/randy.pitcher/.local/bin/cursor` (v2.6.19)
+- **Exists** at `~/.local/bin/cursor` (v2.6.19)
 - Based on VS Code CLI, supports: `--diff`, `--merge`, `--goto`, `--new-window`, etc.
 - **No config validation commands.** No `cursor validate`, `cursor test-connection`, or similar.
 - Cannot list models or test API connections from CLI.
