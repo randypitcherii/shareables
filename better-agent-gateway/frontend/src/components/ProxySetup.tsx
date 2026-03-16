@@ -21,10 +21,15 @@ interface SetupInfo {
   tool_configs: Record<string, ToolConfig>
 }
 
-const TOOL_ICONS: Record<string, string> = {
-  'claude-code': '\u2728',  // sparkles
-  'codex': '\u{1F4AC}',     // speech balloon
-  'opencode': '\u{1F310}',  // globe
+function ToolIcon({ tool }: { tool: string }) {
+  if (tool === 'claude-code') {
+    return <img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/claude.svg" alt="" className="tab-icon" />
+  }
+  if (tool === 'codex') {
+    return <img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt="" className="tab-icon" />
+  }
+  // OpenCode uses the delta character as their logo
+  return <span className="tab-icon tab-icon-text">{'\u2334'}</span>
 }
 
 type ToolTab = 'claude-code' | 'codex' | 'opencode'
@@ -89,7 +94,7 @@ export function ProxySetup() {
               className={`setup-tab ${tab === t ? 'active' : ''}`}
               onClick={() => setTab(t)}
             >
-              <span className="tab-icon">{TOOL_ICONS[t]}</span> {name}
+              <ToolIcon tool={t} /> {name}
             </button>
           )
         })}

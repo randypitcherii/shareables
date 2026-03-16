@@ -491,7 +491,23 @@ header h1 {
 }
 
 .tab-icon {
-  margin-right: 0.25rem;
+  width: 14px;
+  height: 14px;
+  vertical-align: -1px;
+  margin-right: 0.3rem;
+  opacity: 0.7;
+}
+
+.setup-tab.active .tab-icon {
+  opacity: 1;
+}
+
+.tab-icon-text {
+  display: inline;
+  width: auto;
+  height: auto;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .setup-tab-content {
