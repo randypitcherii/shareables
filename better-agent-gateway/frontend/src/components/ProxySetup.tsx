@@ -126,7 +126,6 @@ function ToolSetupTab({
 }) {
   const configKey = tab === 'claude-code' ? 'claude_code' : tab
   const toolConfig = info.tool_configs?.[configKey]
-  const toolDescription = toolConfig?.description ?? ''
 
   const envVarSnippet = toolConfig?.env_vars
     ? Object.entries(toolConfig.env_vars)
@@ -136,7 +135,17 @@ function ToolSetupTab({
 
   return (
     <div className="setup-tab-content">
-      <p className="tab-hint">{toolDescription}. Uses the local proxy for OAuth-authenticated requests.</p>
+      <div className="agent-prompt-cta">
+        <button
+          className="agent-prompt-btn"
+          onClick={() => copyToClipboard(buildToolAgentPrompt(tab, info), 'tool-agent')}
+        >
+          {copied === 'tool-agent' ? 'Copied!' : 'Copy setup prompt for your agent'}
+        </button>
+        <span className="agent-prompt-hint">Paste into {toolConfig?.name ?? tab} or any AI agent to handle setup automatically</span>
+      </div>
+
+      <p className="manual-steps-label">Or follow these steps manually:</p>
       <div className="setup-steps">
         <div className="setup-step">
           <div className="step-number">1</div>
@@ -224,15 +233,6 @@ function ToolSetupTab({
         </div>
       </div>
 
-      <div className="agent-prompt-cta">
-        <button
-          className="agent-prompt-btn"
-          onClick={() => copyToClipboard(buildToolAgentPrompt(tab, info), 'tool-agent')}
-        >
-          {copied === 'tool-agent' ? 'Copied!' : 'Copy instructions as agent prompt'}
-        </button>
-        <span className="agent-prompt-hint">Paste into any AI coding agent to automate all setup steps</span>
-      </div>
     </div>
   )
 }
