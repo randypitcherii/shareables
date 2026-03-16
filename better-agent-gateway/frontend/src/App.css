@@ -387,3 +387,132 @@ header h1 {
 .perm-error {
   background: #fff5f5;
 }
+
+/* --- CursorConfig --- */
+
+.cursor-config {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.cursor-config h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.cursor-config-steps {
+  font-size: 0.9rem;
+  color: #495057;
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+  line-height: 1.7;
+}
+
+.cursor-config-steps code {
+  background: #f0f0f0;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.cursor-config-code {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 0 0 1rem;
+  white-space: pre;
+}
+
+.cursor-config-code code {
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0;
+}
+
+.cursor-config-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.copy-btn {
+  padding: 0.4rem 1rem;
+  border: 1px solid #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.copy-btn:hover {
+  background: #0b5ed7;
+}
+
+.copy-btn.copied {
+  background: #155724;
+  border-color: #155724;
+}
+
+.cursor-config-validation {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cursor-config-check {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.cursor-config-check .check-icon {
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 1em;
+  text-align: center;
+}
+
+.cursor-config-check .check-name {
+  font-weight: 600;
+}
+
+.cursor-config-check .check-message {
+  color: inherit;
+  opacity: 0.85;
+  font-size: 0.85em;
+}
+
+.cursor-config-check.pass {
+  background: #d4edda;
+  color: #155724;
+}
+
+.cursor-config-check.fail {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.cursor-config-check.info {
+  background: #f0f4ff;
+  color: #1a3a6b;
+}
