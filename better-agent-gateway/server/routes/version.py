@@ -48,31 +48,51 @@ def get_proxy_setup(request: Request):
         "version": version_string(),
         "git_hash": git_hash or "main",
         "model_aliases": sorted(get_registry().list_aliases().keys()),
+        "proxy_base_url": "http://127.0.0.1:8787",
         "tool_configs": {
             "claude_code": {
                 "name": "Claude Code",
                 "description": "Anthropic's AI coding CLI",
-                "env_vars": {
-                    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
-                    "ANTHROPIC_API_KEY": "unused",
+                "config_file": ".claude/settings.local.json",
+                "config_content": {
+                    "env": {
+                        "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+                        "ANTHROPIC_API_KEY": "unused",
+                    }
                 },
+                "config_hint": "Scoped to Claude Code only — does not affect other tools.",
             },
             "codex": {
                 "name": "Codex",
                 "description": "OpenAI's AI coding CLI",
-                "env_vars": {
-                    "OPENAI_BASE_URL": "http://127.0.0.1:8787/v1",
-                    "OPENAI_API_KEY": "unused",
+                "config_file": "~/.codex/config.json",
+                "config_content": {
+                    "model": "claude-sonnet-latest",
+                    "provider": "databricks-proxy",
+                    "providers": {
+                        "databricks-proxy": {
+                            "name": "Databricks Proxy",
+                            "baseURL": "http://127.0.0.1:8787/v1",
+                            "envKey": "CODEX_PROXY_KEY",
+                        }
+                    },
                 },
+                "config_hint": "Uses a named provider — does not override OPENAI_BASE_URL.",
             },
-            "opencode": {
-                "name": "OpenCode",
-                "description": "Open-source AI coding tool",
-                "env_vars": {
-                    "OPENAI_BASE_URL": "http://127.0.0.1:8787/v1",
-                    "OPENAI_API_KEY": "unused",
+            "crush": {
+                "name": "Crush",
+                "description": "Charmbracelet's AI coding CLI (formerly OpenCode)",
+                "config_file": ".crush.json",
+                "config_content": {
+                    "providers": {
+                        "databricks-proxy": {
+                            "type": "openai-compat",
+                            "base_url": "http://127.0.0.1:8787/v1",
+                            "api_key": "unused",
+                        }
+                    },
                 },
-                "config_file": "~/.config/opencode/opencode.jsonc",
+                "config_hint": "Project-level config — does not affect global settings.",
             },
         },
     }

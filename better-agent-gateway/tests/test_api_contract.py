@@ -32,11 +32,18 @@ def test_proxy_setup_includes_tool_configs():
     assert response.status_code == 200
     body = response.json()
     assert "tool_configs" in body
+    assert "proxy_base_url" in body
     configs = body["tool_configs"]
     assert "claude_code" in configs
     assert "codex" in configs
-    assert "opencode" in configs
-    # Claude Code uses Anthropic API format
-    assert configs["claude_code"]["env_vars"]["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8787"
-    # Codex uses OpenAI format
-    assert configs["codex"]["env_vars"]["OPENAI_BASE_URL"] == "http://127.0.0.1:8787/v1"
+    assert "crush" in configs
+    # Each tool has settings-file config, not global env vars
+    assert "config_file" in configs["claude_code"]
+    assert "config_content" in configs["claude_code"]
+    assert "config_hint" in configs["claude_code"]
+    # Claude Code uses scoped settings.local.json
+    assert configs["claude_code"]["config_file"] == ".claude/settings.local.json"
+    # Codex uses named provider config
+    assert "providers" in configs["codex"]["config_content"]
+    # Crush uses project-level config
+    assert configs["crush"]["config_file"] == ".crush.json"

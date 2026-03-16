@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 interface ToolConfig {
   name: string
   description: string
-  env_vars: Record<string, string>
-  config_file?: string
+  config_file: string
+  config_content: Record<string, unknown>
+  config_hint: string
 }
 
 interface SetupInfo {
@@ -15,6 +16,7 @@ interface SetupInfo {
   status_command: string
   health_url: string
   cursor_base_url: string
+  proxy_base_url: string
   version: string
   git_hash: string
   model_aliases: string[]
@@ -28,11 +30,16 @@ function ToolIcon({ tool }: { tool: string }) {
   if (tool === 'codex') {
     return <img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/openai.svg" alt="" className="tab-icon" />
   }
-  // OpenCode uses the delta character as their logo
   return <span className="tab-icon tab-icon-text">{'\u2334'}</span>
 }
 
-type ToolTab = 'claude-code' | 'codex' | 'opencode'
+type ToolTab = 'claude-code' | 'codex' | 'crush'
+
+const TAB_CONFIG_KEYS: Record<ToolTab, string> = {
+  'claude-code': 'claude_code',
+  'codex': 'codex',
+  'crush': 'crush',
+}
 
 export function ProxySetup() {
   const [info, setInfo] = useState<SetupInfo | null>(null)
@@ -85,8 +92,8 @@ export function ProxySetup() {
       <p className="manual-steps-label">Or follow these steps manually for a specific tool:</p>
 
       <div className="setup-tabs">
-        {(['claude-code', 'codex', 'opencode'] as ToolTab[]).map(t => {
-          const configKey = t === 'claude-code' ? 'claude_code' : t
+        {(['claude-code', 'codex', 'crush'] as ToolTab[]).map(t => {
+          const configKey = TAB_CONFIG_KEYS[t]
           const name = info.tool_configs?.[configKey]?.name ?? t
           return (
             <button
@@ -121,13 +128,11 @@ function ToolSetupTab({
   copied: string | null
   copyToClipboard: (text: string, label: string) => void
 }) {
-  const configKey = tab === 'claude-code' ? 'claude_code' : tab
+  const configKey = TAB_CONFIG_KEYS[tab]
   const toolConfig = info.tool_configs?.[configKey]
 
-  const envVarSnippet = toolConfig?.env_vars
-    ? Object.entries(toolConfig.env_vars)
-        .map(([k, v]) => `export ${k}=${v}`)
-        .join('\n')
+  const configJson = toolConfig?.config_content
+    ? JSON.stringify(toolConfig.config_content, null, 2)
     : ''
 
   return (
@@ -157,43 +162,20 @@ function ToolSetupTab({
           <div className="step-content">
             <div className="step-label">Configure {toolConfig?.name ?? tab}</div>
             <div className="step-detail">
-              <p>Set environment variables (e.g. in your shell profile or project <code>.env</code>):</p>
+              <p>
+                Write to <code>{toolConfig?.config_file}</code>:
+              </p>
               <div className="command-block">
-                <code>{envVarSnippet}</code>
+                <code>{configJson}</code>
                 <button
                   className="copy-btn"
-                  onClick={() => copyToClipboard(envVarSnippet, 'env')}
+                  onClick={() => copyToClipboard(configJson, 'config')}
                 >
-                  {copied === 'env' ? 'Copied' : 'Copy'}
+                  {copied === 'config' ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              {tab === 'codex' && (
-                <>
-                  <p>Or add to <code>~/.codex/config.toml</code>:</p>
-                  <div className="command-block">
-                    <code>{`[provider]\nbase_url = "http://127.0.0.1:8787/v1"\nenv_key = "OPENAI_API_KEY"\nwire_api = "chat"`}</code>
-                    <button
-                      className="copy-btn"
-                      onClick={() => copyToClipboard(`[provider]\nbase_url = "http://127.0.0.1:8787/v1"\nenv_key = "OPENAI_API_KEY"\nwire_api = "chat"`, 'toml')}
-                    >
-                      {copied === 'toml' ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </>
-              )}
-              {tab === 'opencode' && (
-                <>
-                  <p>Or add to <code>~/.config/opencode/opencode.jsonc</code>:</p>
-                  <div className="command-block">
-                    <code>{`{\n  "provider": {\n    "openai-compatible": {\n      "apiKey": "unused",\n      "baseURL": "http://127.0.0.1:8787/v1"\n    }\n  }\n}`}</code>
-                    <button
-                      className="copy-btn"
-                      onClick={() => copyToClipboard(`{\n  "provider": {\n    "openai-compatible": {\n      "apiKey": "unused",\n      "baseURL": "http://127.0.0.1:8787/v1"\n    }\n  }\n}`, 'jsonc')}
-                    >
-                      {copied === 'jsonc' ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </>
+              {toolConfig?.config_hint && (
+                <div className="step-hint">{toolConfig.config_hint}</div>
               )}
             </div>
           </div>
@@ -227,12 +209,18 @@ function buildUniversalAgentPrompt(info: SetupInfo): string {
     ? info.model_aliases.join(', ')
     : 'claude-sonnet-latest, gpt-latest, gemini-latest'
 
+  const proxyBase = info.proxy_base_url || 'http://127.0.0.1:8787'
+
+  const claudeConfig = info.tool_configs?.claude_code
+  const codexConfig = info.tool_configs?.codex
+  const crushConfig = info.tool_configs?.crush
+
   return `Set up the databricks-agent-proxy so local AI coding tools can use Databricks-hosted LLMs through the Better Agent Gateway.
 
 First, ask the user which tools they want to configure. The supported tools are:
 - Claude Code (Anthropic's AI coding CLI)
 - Codex (OpenAI's AI coding CLI)
-- OpenCode (open-source AI coding tool)
+- Crush (Charmbracelet's AI coding CLI, formerly OpenCode)
 
 The user may want one or more of these. Proceed with their selection.
 
@@ -252,48 +240,59 @@ Expected output should show: status ok, authenticated true, gateway_url ${info.g
 
 ## Step 3 — Configure the selected tools
 
+IMPORTANT: Use settings files, NOT global environment variables. Global env vars like OPENAI_BASE_URL or ANTHROPIC_BASE_URL will break other tools. The configs below are scoped to each tool only.
+
 Apply the configuration below ONLY for the tools the user selected.
 
 ### Claude Code
 
-Claude Code uses the Anthropic Messages API through the proxy. Set these environment variables:
+Write to \`${claudeConfig?.config_file || '.claude/settings.local.json'}\`:
 
-export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
-export ANTHROPIC_API_KEY=unused
+${claudeConfig ? JSON.stringify(claudeConfig.config_content, null, 2) : `{
+  "env": {
+    "ANTHROPIC_BASE_URL": "${proxyBase}",
+    "ANTHROPIC_API_KEY": "unused"
+  }
+}`}
 
-Add these to the user's shell profile (~/.zshrc, ~/.bashrc) or project .env file.
+This is scoped to Claude Code only — it does not affect other tools or global env vars. The file is gitignored by default.
 
 ### Codex
 
-Codex uses the OpenAI-compatible API through the proxy. Set these environment variables:
+Write to \`${codexConfig?.config_file || '~/.codex/config.json'}\`:
 
-export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-export OPENAI_API_KEY=unused
-
-Or write this to ~/.codex/config.toml:
-
-[provider]
-base_url = "http://127.0.0.1:8787/v1"
-env_key = "OPENAI_API_KEY"
-wire_api = "chat"
-
-### OpenCode
-
-OpenCode uses the OpenAI-compatible API through the proxy. Set these environment variables:
-
-export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-export OPENAI_API_KEY=unused
-
-Or write this to ~/.config/opencode/opencode.jsonc:
-
-{
-  "provider": {
-    "openai-compatible": {
-      "apiKey": "unused",
-      "baseURL": "http://127.0.0.1:8787/v1"
+${codexConfig ? JSON.stringify(codexConfig.config_content, null, 2) : `{
+  "model": "claude-sonnet-latest",
+  "provider": "databricks-proxy",
+  "providers": {
+    "databricks-proxy": {
+      "name": "Databricks Proxy",
+      "baseURL": "${proxyBase}/v1",
+      "envKey": "CODEX_PROXY_KEY"
     }
   }
-}
+}`}
+
+Also create a .env file in the project root (or export in shell) with:
+CODEX_PROXY_KEY=unused
+
+Uses a named provider — does not override OPENAI_BASE_URL.
+
+### Crush (formerly OpenCode)
+
+Write to \`${crushConfig?.config_file || '.crush.json'}\` in the project root:
+
+${crushConfig ? JSON.stringify(crushConfig.config_content, null, 2) : `{
+  "providers": {
+    "databricks-proxy": {
+      "type": "openai-compat",
+      "base_url": "${proxyBase}/v1",
+      "api_key": "unused"
+    }
+  }
+}`}
+
+Project-level config — does not affect global settings.
 
 ## Step 4 — Test the connection
 
