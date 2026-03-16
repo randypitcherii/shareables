@@ -7,6 +7,7 @@ from server.version import get_git_info, version_dict, version_string
 
 GITHUB_REPO = "randypitcherii/shareables"
 PROXY_SUBDIRECTORY = "databricks-agent-proxy"
+PROXY_BASE_URL = "http://127.0.0.1:8787"
 
 router = APIRouter()
 
@@ -43,12 +44,12 @@ def get_proxy_setup(request: Request):
         "setup_command": f"uvx --from {from_spec} databricks-agent-proxy setup --gateway-url {gateway_url}",
         "start_command": f"uvx --from {from_spec} databricks-agent-proxy start --gateway-url {gateway_url}",
         "status_command": f"uvx --from {from_spec} databricks-agent-proxy status",
-        "health_url": "http://127.0.0.1:8787/health",
-        "cursor_base_url": "http://127.0.0.1:8787/v1",
+        "health_url": f"{PROXY_BASE_URL}/health",
+        "cursor_base_url": f"{PROXY_BASE_URL}/v1",
         "version": version_string(),
         "git_hash": git_hash or "main",
         "model_aliases": sorted(get_registry().list_aliases().keys()),
-        "proxy_base_url": "http://127.0.0.1:8787",
+        "proxy_base_url": PROXY_BASE_URL,
         "tool_configs": {
             "claude_code": {
                 "name": "Claude Code",
@@ -56,11 +57,11 @@ def get_proxy_setup(request: Request):
                 "config_file": ".claude/settings.local.json",
                 "config_content": {
                     "env": {
-                        "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+                        "ANTHROPIC_BASE_URL": PROXY_BASE_URL,
                         "ANTHROPIC_API_KEY": "unused",
                     }
                 },
-                "config_hint": "Scoped to Claude Code only — does not affect other tools.",
+                "config_hint": "Scoped to Claude Code only \u2014 does not affect other tools.",
             },
             "codex": {
                 "name": "Codex",
@@ -72,12 +73,12 @@ def get_proxy_setup(request: Request):
                     "providers": {
                         "databricks-proxy": {
                             "name": "Databricks Proxy",
-                            "baseURL": "http://127.0.0.1:8787/v1",
+                            "baseURL": f"{PROXY_BASE_URL}/v1",
                             "envKey": "CODEX_PROXY_KEY",
                         }
                     },
                 },
-                "config_hint": "Uses a named provider — does not override OPENAI_BASE_URL.",
+                "config_hint": "Uses a named provider \u2014 does not override OPENAI_BASE_URL.",
             },
             "crush": {
                 "name": "Crush",
@@ -87,12 +88,12 @@ def get_proxy_setup(request: Request):
                     "providers": {
                         "databricks-proxy": {
                             "type": "openai-compat",
-                            "base_url": "http://127.0.0.1:8787/v1",
+                            "base_url": f"{PROXY_BASE_URL}/v1",
                             "api_key": "unused",
                         }
                     },
                 },
-                "config_hint": "Project-level config — does not affect global settings.",
+                "config_hint": "Project-level config \u2014 does not affect global settings.",
             },
         },
     }

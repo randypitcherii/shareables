@@ -22,6 +22,56 @@ def test_messages_requires_auth():
     assert response.status_code == 401
 
 
+def test_messages_rejects_invalid_model_name():
+    response = client.post(
+        "/api/v1/messages",
+        headers={
+            "x-forwarded-access-token": "user-token",
+            "x-forwarded-user-id": "user@co.com",
+        },
+        json={
+            "model": "../etc/passwd",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    assert response.status_code == 400
+    assert "Invalid model name" in response.json()["detail"]
+
+
+def test_messages_rejects_missing_max_tokens():
+    response = client.post(
+        "/api/v1/messages",
+        headers={
+            "x-forwarded-access-token": "user-token",
+            "x-forwarded-user-id": "user@co.com",
+        },
+        json={
+            "model": "claude-sonnet-latest",
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    assert response.status_code == 400
+    assert "max_tokens" in response.json()["detail"]
+
+
+def test_messages_rejects_empty_messages():
+    response = client.post(
+        "/api/v1/messages",
+        headers={
+            "x-forwarded-access-token": "user-token",
+            "x-forwarded-user-id": "user@co.com",
+        },
+        json={
+            "model": "claude-sonnet-latest",
+            "max_tokens": 1024,
+            "messages": [],
+        },
+    )
+    assert response.status_code == 400
+    assert "messages" in response.json()["detail"]
+
+
 def test_messages_resolves_alias_and_proxies():
     mock_response_body = {
         "id": "msg_123",
