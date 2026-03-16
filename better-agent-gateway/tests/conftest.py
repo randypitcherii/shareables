@@ -18,4 +18,10 @@ def pytest_runtest_setup(item):
     except (ImportError, AttributeError):
         pass
 
+    try:
+        import server.request_log as log_mod
+        log_mod._log_store = None
+    except (ImportError, AttributeError):
+        pass
+
     # No global state to reset for permissions -- SDK clients are created per-request
