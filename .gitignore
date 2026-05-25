@@ -82,12 +82,8 @@ tfplan
 
 # Claude Code
 .claude/
-.beads/
 .worktrees/
 
 # System Files
 .DS_Store
 Thumbs.db 
-
-# Dolt database files (added by bd init)
-.dolt/
