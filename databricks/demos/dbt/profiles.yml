@@ -1,0 +1,49 @@
+# ===========================================================================
+# This profiles.yml is INTENTIONALLY committed to version control.
+#
+#   * The `dev` target uses interactive SSO (OAuth U2M). It stores NO secret, so
+#     it is safe to commit. A first-time contributor just runs `dbt build` and a
+#     browser opens for login -- no `dbt init`, no copying a template.
+#   * The `ci` / `prod` targets read EVERY value from environment variables,
+#     including M2M OAuth client credentials. No secret ever lands on disk.
+#
+# Override any dev default by exporting the matching env var before running dbt.
+# Tell dbt to use this file with `--profiles-dir .` (or `export DBT_PROFILES_DIR=$PWD`).
+# ===========================================================================
+fe_randy_pitcher_workspace:
+  target: dev
+  outputs:
+
+    # ---- development: SSO browser login, no stored secret -------------------
+    dev:
+      type: databricks
+      host: "{{ env_var('DBT_HOST', 'fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com') }}"
+      http_path: "{{ env_var('DBT_HTTP_PATH', '/sql/1.0/warehouses/d5981ed73594e8ea') }}"
+      catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'fe_randy_pitcher_workspace_catalog') }}"
+      schema: "{{ env_var('DBT_DEFAULT_SCHEMA', 'dbt') }}"
+      auth_type: oauth          # U2M: opens a browser for SSO; nothing stored in the repo
+      threads: 8
+
+    # ---- ci: M2M service principal, everything from env ---------------------
+    ci:
+      type: databricks
+      host: "{{ env_var('DBT_HOST') }}"
+      http_path: "{{ env_var('DBT_HTTP_PATH') }}"
+      catalog: "{{ env_var('DBT_DEFAULT_CATALOG') }}"
+      schema: "{{ env_var('DBT_DEFAULT_SCHEMA') }}"
+      auth_type: oauth          # M2M: client credentials, injected by the CI runtime
+      client_id: "{{ env_var('DBT_CLIENT_ID') }}"
+      client_secret: "{{ env_var('DBT_CLIENT_SECRET') }}"
+      threads: 8
+
+    # ---- prod: M2M service principal, everything from env -------------------
+    prod:
+      type: databricks
+      host: "{{ env_var('DBT_HOST') }}"
+      http_path: "{{ env_var('DBT_HTTP_PATH') }}"
+      catalog: "{{ env_var('DBT_DEFAULT_CATALOG') }}"
+      schema: "{{ env_var('DBT_DEFAULT_SCHEMA') }}"
+      auth_type: oauth          # M2M: client credentials, injected by the prod runtime
+      client_id: "{{ env_var('DBT_CLIENT_ID') }}"
+      client_secret: "{{ env_var('DBT_CLIENT_SECRET') }}"
+      threads: 16

@@ -1,0 +1,33 @@
+version: 2
+
+sources:
+  - name: system_billing
+    database: system          # Unity Catalog catalog
+    schema: billing
+    description: >
+      Databricks system billing tables. The schema is IDENTICAL on every workspace
+      and every cloud (AWS / Azure / GCP), and the data updates continuously -- which
+      is exactly what makes these models portable to any Databricks account.
+    tables:
+      - name: usage
+        description: >
+          Billable usage records (DBUs and other units), one row per usage event.
+          See https://docs.databricks.com/admin/system-tables/billing.html
+        loaded_at_field: "cast(ingestion_date as timestamp)"
+        freshness:
+          # system.billing.usage has real ingestion latency -- keep thresholds generous.
+          warn_after: {count: 24, period: hour}
+          error_after: {count: 48, period: hour}
+        columns:
+          - name: record_id
+            description: "Unique ID for this usage record."
+          - name: usage_quantity
+            description: "Number of units (e.g. DBUs) consumed for this record."
+
+      - name: list_prices
+        description: >
+          Effective-dated published list prices per SKU. Join to usage on
+          sku_name + cloud where usage_end_time falls in [price_start_time, price_end_time).
+        columns:
+          - name: pricing
+            description: "Struct of list / promotional / effective_list prices."
