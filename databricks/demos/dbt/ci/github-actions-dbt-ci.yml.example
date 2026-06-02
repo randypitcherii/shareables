@@ -39,9 +39,10 @@ jobs:
       DBT_HTTP_PATH: ${{ vars.DBT_HTTP_PATH }}
       DBT_DEFAULT_CATALOG: ${{ vars.DBT_DEFAULT_CATALOG }}
 
-      # --- M2M OAuth service principal (secrets) ---------------------------
+      # --- M2M OAuth service principal -------------------------------------
       DBT_CLIENT_ID: ${{ secrets.DBT_CLIENT_ID }}
-      DBT_CLIENT_SECRET: ${{ secrets.DBT_CLIENT_SECRET }}
+      # DBT_ENV_SECRET_ prefix => dbt masks it in logs and forbids it outside profiles.yml
+      DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_CLIENT_SECRET }}
 
     steps:
       - uses: actions/checkout@v4

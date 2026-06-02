@@ -106,8 +106,12 @@ Non-dev deployments inject the real values via environment variables.
 **2. A committed `profiles.yml`** (yes, in the repo):
 - `dev` target → **SSO OAuth (U2M)**. Stores **no secret**, so it is safe to commit. First run
   opens a browser for login (or reuses your `databricks auth login` session).
-- `ci` / `prod` targets → **M2M OAuth**, every value (host, warehouse, client id/secret) read
-  from env vars. Nothing sensitive is ever written to disk.
+- `ci` / `prod` targets → **M2M OAuth**, every value read from env vars. Nothing sensitive on disk.
+- **`host` and `http_path` have NO in-repo fallback** — they're workspace-specific and are internal
+  infra identifiers we don't publish, so you must set `DBT_HOST` / `DBT_HTTP_PATH` (copy
+  `template.env` → `.env`). `catalog` / `schema` keep dev fallbacks so schema routing stays zero-config.
+- The M2M client secret uses the **`DBT_ENV_SECRET_`** prefix, so dbt masks it in logs and forbids
+  it outside `profiles.yml` (it can never leak into compiled SQL or the warehouse).
 
 **3. A `generate_schema_name` override** keyed on `deployment_environment`:
 
@@ -136,9 +140,14 @@ uv sync                 # creates .venv with dbt-databricks
 uv run dbt deps         # installs dbt packages (dbt_utils, dbt_expectations, dbt_date)
 ```
 
-### 2. Authenticate (dev = SSO, one time)
+### 2. Configure the connection + authenticate (dev = SSO, one time)
+
+Set the two required connection vars (no in-repo fallback), then log in:
 
 ```bash
+cp template.env .env           # then edit DBT_HOST + DBT_HTTP_PATH
+set -a; source .env; set +a    # dbt 1.12+/Fusion auto-load .env; on 1.10 source it yourself
+
 databricks auth login --profile DEFAULT     # opens a browser for SSO
 ```
 
