@@ -27,7 +27,7 @@ fe_randy_pitcher_workspace:
       type: databricks
       host: "{{ env_var('DBT_HOST') }}"             # REQUIRED, no fallback (workspace-specific)
       http_path: "{{ env_var('DBT_HTTP_PATH') }}"   # REQUIRED, no fallback (workspace-specific)
-      catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'fe_randy_pitcher_workspace_catalog') }}"
+      catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'analytics_dev') }}"
       schema: "{{ env_var('DBT_DEFAULT_SCHEMA', 'dbt') }}"
       auth_type: oauth          # U2M: opens a browser for SSO; nothing stored in the repo
       threads: 8

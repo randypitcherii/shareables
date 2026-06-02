@@ -1,6 +1,6 @@
 {#-
   Route models to the catalog named by the `default_catalog` var (sourced from the
-  DBT_DEFAULT_CATALOG env var, default fe_randy_pitcher_workspace_catalog), unless a
+  DBT_DEFAULT_CATALOG env var, default analytics_dev), unless a
   model declares an explicit +catalog / +database, which is then honored as-is.
 
   This makes `default_catalog` the single, env-overridable source of truth for

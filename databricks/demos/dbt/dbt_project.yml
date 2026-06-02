@@ -19,7 +19,7 @@ profile: 'fe_randy_pitcher_workspace'
 vars:
   # one of: development | ci_testing | production
   deployment_environment: "{{ env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development') }}"
-  default_catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'fe_randy_pitcher_workspace_catalog') }}"
+  default_catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'analytics_dev') }}"
   default_schema: "{{ env_var('DBT_DEFAULT_SCHEMA', 'dbt') }}"
   # full-refresh history window for system.billing.usage; incremental runs scan only
   # recent data regardless. Keep small for quick demo builds, raise for real backfills.

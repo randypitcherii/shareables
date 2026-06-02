@@ -97,7 +97,7 @@ This project is configured so a brand-new contributor can clone it and run `dbt 
 | var | env var | dev fallback |
 |-----|---------|--------------|
 | `deployment_environment` | `DBT_DEPLOYMENT_ENVIRONMENT` | `development` |
-| `default_catalog` | `DBT_DEFAULT_CATALOG` | `fe_randy_pitcher_workspace_catalog` |
+| `default_catalog` | `DBT_DEFAULT_CATALOG` | `analytics_dev` |
 | `default_schema` | `DBT_DEFAULT_SCHEMA` | `dbt` |
 
 The dev fallbacks live in source control (publicly visible) — in exchange, dev "just works".

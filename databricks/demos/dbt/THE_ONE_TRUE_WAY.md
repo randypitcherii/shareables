@@ -127,12 +127,16 @@ self-documenting. (Grants-as-code via `+grants`/post-hooks is a natural next add
 
 ## Provenance & status
 
-- "The One True Way" is an **internal label**; the literal phrase does not appear in any
-  public source found so far. The *philosophy*, however, is consistent across the public
-  corpus (a dbt Labs "Overriding Schema Generation" session recap, the
-  `databricks/dbt-databricks#1144` issue, and several public dbt projects).
-- A sweep of internal writing (Glean) is still **pending re-authentication** and will be
-  folded in before this is considered final.
-- This draft is synthesized alongside the reference implementation in this folder — treat
-  the code as the source of truth and this document as the explanation, until both are
-  finalized together for publishing.
+"The One True Way" is the author's own term for this framework. It is used consistently in
+internal Databricks field work — where it is framed as a **healthy Databricks deployment
+lifecycle** built on environment isolation and management (the upgrade over the common
+"simulate dev with folder isolation in the workspace" workaround). It is **not yet published**;
+turning it into public writing + training is an active effort.
+
+The *philosophy* is also visible in the public corpus — e.g. a dbt Labs "Overriding Schema
+Generation" session and the `databricks/dbt-databricks#1144` issue.
+
+This draft is synthesized alongside the reference implementation in this folder. Treat the
+code as the source of truth and this document as the explanation, until both are finalized
+together for publishing. (Internal source citations are tracked separately, outside this
+public repo.)

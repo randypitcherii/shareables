@@ -55,9 +55,9 @@ gh issue close <number>                          # Complete work
 - Once approved to open a PR, you are also authorized to squash-merge it
 - After merging, pull latest main and clean up local feature branches
 
-**Creating PRs** — use the GitHub API directly (`gh pr create` fails due to EMU restrictions):
+**Creating PRs:**
 ```bash
-gh api repos/{owner}/{repo}/pulls -f title="..." -f head="..." -f base="main" -f body="..."
+gh pr create --title "..." --body "..." --base main
 ```
 
 **Merging PRs:**
