@@ -14,10 +14,16 @@ Databricks so that it is **safe to clone, trivial to onboard, impossible to step
 teammate, and ruthless about correctness** — without anyone needing to run `dbt init`,
 copy a secret, or read a wiki first.
 
-The thesis: **environment isolation and zero-config onboarding are not advanced topics
-you bolt on later. They are the foundation you start from.** Get the schema-routing
-macro and the committed, env-driven config right on day one, and everything else
-(testing, CI, docs, grants) has a clean place to live.
+The north star is **release confidence, not release hesitation**: anyone — a new hire or
+an AI agent — should be able to make a change and trust the path from dev → CI → prod,
+because isolation and testing are built in, not bolted on.
+
+The thesis: **environment isolation and zero-config onboarding are not advanced topics you
+bolt on later. They are the foundation you start from.** Environments map to dev / test /
+prod (Unity Catalog catalogs, typically within a single workspace); the schema-routing macro
+keeps everyone out of each other's way; and dbt deployed via Databricks Asset Bundles (DABs)
+is the delivery mechanism. Get that right on day one and everything else (testing, CI, docs,
+grants) has a clean place to live.
 
 ---
 
