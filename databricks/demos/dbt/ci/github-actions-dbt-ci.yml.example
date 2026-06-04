@@ -1,0 +1,69 @@
+# =============================================================================
+# Example GitHub Actions workflow: build & test this dbt project on every PR,
+# fully isolated in a per-PR, per-build schema.
+#
+# This is a `.example` so it does NOT auto-run. To use it, copy to
+# `.github/workflows/dbt-ci.yml` at the repo root and add the repo secrets below.
+#
+# The isolation trick: `generate_schema_name` uses `default_schema` UNMODIFIED in
+# the `ci_testing` environment, so we just inject a build-scoped schema name. The
+# name carries both the PR number and the run number, so a re-run after a fix
+# builds completely separately from the previous attempt.
+# =============================================================================
+name: dbt CI
+
+on:
+  pull_request:
+    paths:
+      - "databricks/demos/dbt/**"
+
+# cancel superseded runs on the same PR
+concurrency:
+  group: dbt-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: databricks/demos/dbt
+    env:
+      # --- environment selection -------------------------------------------
+      DBT_DEPLOYMENT_ENVIRONMENT: ci_testing
+      # per-PR, per-build schema -> fully isolated, disposable namespace
+      DBT_DEFAULT_SCHEMA: dbt_randy_pitcher_workspace_pr${{ github.event.pull_request.number }}_build${{ github.run_number }}
+
+      # --- connection (non-secret) -----------------------------------------
+      DBT_HOST: ${{ vars.DBT_HOST }}
+      DBT_HTTP_PATH: ${{ vars.DBT_HTTP_PATH }}
+      DBT_DEFAULT_CATALOG: ${{ vars.DBT_DEFAULT_CATALOG }}
+
+      # --- M2M OAuth service principal -------------------------------------
+      DBT_CLIENT_ID: ${{ secrets.DBT_CLIENT_ID }}
+      # DBT_ENV_SECRET_ prefix => dbt masks it in logs and forbids it outside profiles.yml
+      DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_CLIENT_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv run dbt deps --profiles-dir .
+
+      - name: Build & test (isolated CI schema)
+        run: |
+          echo "Building into schema: $DBT_DEFAULT_SCHEMA"
+          uv run dbt build --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+
+      # Optional: tear down the ephemeral schema after the PR build.
+      # Requires a `drop_ci_schema` operation/macro, or use the Databricks CLI:
+      #   databricks schemas delete "${DBT_DEFAULT_CATALOG}.${DBT_DEFAULT_SCHEMA}" --force
+      - name: Drop ephemeral CI schema
+        if: always()
+        run: |
+          uv run dbt run-operation drop_schema --args "{schema: $DBT_DEFAULT_SCHEMA}" --target ci --profiles-dir . || true

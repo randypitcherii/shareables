@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: cost_daily
+    description: "Daily list cost and usage by cloud -- the headline cost-monitoring rollup."
+    columns:
+      - name: usage_date
+        data_tests:
+          - not_null
+      - name: list_cost
+        description: "Total daily list cost (not invoiced spend)."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                row_condition: "list_cost is not null"
+
+  - name: cost_by_workspace
+    description: "Daily list cost by workspace."
+    columns:
+      - name: workspace_id
+        data_tests:
+          - not_null
+
+  - name: cost_by_sku
+    description: "Daily list cost by SKU and billing_origin_product."
+    columns:
+      - name: sku_name
+        data_tests:
+          - not_null
+
+  - name: cost_by_product
+    description: "Daily list cost by Databricks product (Jobs, SQL, Model Serving, DLT, ...)."
+    columns:
+      - name: billing_origin_product
+        data_tests:
+          - not_null
+
+  - name: cost_by_tag
+    description: "Showback: daily list cost attributed to the `Owner` custom tag."
+    columns:
+      - name: owner
+        data_tests:
+          - not_null

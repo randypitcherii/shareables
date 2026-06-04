@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From system tables to cost analytics</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-family: ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    padding: 40px 20px 60px;
+    min-height: 100vh;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 10px;
+  }
+  .header p {
+    font-size: 13px;
+    font-style: italic;
+    color: #333;
+    line-height: 1.5;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  .diagram-wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>From system tables to cost analytics</h1>
+  <p>The README's ASCII tree is flat — you can't see materializations, the incremental priced fact, or the join that actually produces list_cost.</p>
+</div>
+
+<div class="diagram-wrap">
+<svg
+  viewBox="0 0 1100 660"
+  width="1100"
+  height="660"
+  xmlns="http://www.w3.org/2000/svg"
+  style="display:block; font-family: ui-monospace,'SF Mono',Menlo,Consolas,monospace;"
+>
+<defs>
+  <!-- Standard black arrowhead -->
+  <marker id="arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="strokeWidth">
+    <polygon points="0 0, 9 3.5, 0 7" fill="#000"/>
+  </marker>
+
+  <!-- Neon gradient for int_usage_priced -->
+  <linearGradient id="neonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%"   stop-color="#00E5FF"/>
+    <stop offset="50%"  stop-color="#B14EFF"/>
+    <stop offset="100%" stop-color="#FF2E93"/>
+  </linearGradient>
+
+  <!-- Glow filter for int_usage_priced -->
+  <filter id="neonGlow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#00E5FF" flood-opacity="0.7"/>
+    <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#B14EFF" flood-opacity="0.5"/>
+    <feDropShadow dx="0" dy="0" stdDeviation="14" flood-color="#FF2E93" flood-opacity="0.4"/>
+  </filter>
+
+  <!-- Subtle view tag: light blue-grey -->
+  <!-- Subtle table tag: light warm grey -->
+</defs>
+
+<!-- ══════════════════════════════════════════════
+     COLUMN HEADERS
+══════════════════════════════════════════════ -->
+
+<!-- Col 1: SOURCES -->
+<text x="100" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">SOURCES</text>
+<text x="100" y="46" text-anchor="middle" font-size="10" fill="#555" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">system catalog</text>
+
+<!-- Col 2: STAGING -->
+<text x="330" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">STAGING</text>
+<rect x="270" y="36" width="120" height="18" rx="3" fill="#E8F4FD" stroke="none"/>
+<text x="330" y="48" text-anchor="middle" font-size="9" font-weight="700" fill="#2060A0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">view</text>
+
+<!-- Col 3: MODELED -->
+<text x="620" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">MODELED</text>
+<rect x="540" y="36" width="160" height="18" rx="3" fill="#F0E8FF" stroke="none"/>
+<text x="620" y="48" text-anchor="middle" font-size="9" font-weight="700" fill="#7030C0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">incremental table</text>
+
+<!-- Col 4: MARTS -->
+<text x="940" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">MARTS</text>
+<rect x="890" y="36" width="100" height="18" rx="3" fill="#F5F5F5" stroke="none"/>
+<text x="940" y="48" text-anchor="middle" font-size="9" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">table</text>
+
+<!-- Column dividers -->
+<line x1="210" y1="20" x2="210" y2="640" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4"/>
+<line x1="450" y1="20" x2="450" y2="640" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4"/>
+<line x1="790" y1="20" x2="790" y2="640" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4,4"/>
+
+
+<!-- ══════════════════════════════════════════════
+     SOURCES — cylinders (ellipse top + rect + ellipse bottom)
+══════════════════════════════════════════════ -->
+
+<!-- system.billing.usage  (top source) -->
+<!-- cylinder body -->
+<rect x="20" y="185" width="160" height="52" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<!-- cylinder top ellipse -->
+<ellipse cx="100" cy="185" rx="80" ry="13" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<!-- cylinder bottom ellipse (just the top half arc) -->
+<path d="M 20 237 Q 100 250 180 237" fill="none" stroke="#000" stroke-width="1.25"/>
+<!-- label -->
+<text x="100" y="206" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">system.billing</text>
+<text x="100" y="220" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">.usage</text>
+
+<!-- system.billing.list_prices  (bottom source) -->
+<rect x="20" y="385" width="160" height="52" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<ellipse cx="100" cy="385" rx="80" ry="13" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<path d="M 20 437 Q 100 450 180 437" fill="none" stroke="#000" stroke-width="1.25"/>
+<text x="100" y="406" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">system.billing</text>
+<text x="100" y="420" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">.list_prices</text>
+
+<!-- Sources layer note -->
+<text x="100" y="480" text-anchor="middle" font-size="9" fill="#666" font-style="italic" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">read-only · shared ·</text>
+<text x="100" y="492" text-anchor="middle" font-size="9" fill="#666" font-style="italic" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">identical on every</text>
+<text x="100" y="504" text-anchor="middle" font-size="9" fill="#666" font-style="italic" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">workspace &amp; cloud</text>
+
+
+<!-- ══════════════════════════════════════════════
+     STAGING nodes (views)
+══════════════════════════════════════════════ -->
+
+<!-- stg_billing__usage -->
+<rect x="245" y="170" width="170" height="52" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<!-- view tag -->
+<rect x="245" y="170" width="170" height="16" rx="4" fill="#E8F4FD" stroke="#000" stroke-width="1.25"/>
+<rect x="245" y="179" width="170" height="7" rx="0" fill="#E8F4FD" stroke="none"/>
+<text x="330" y="181" text-anchor="middle" font-size="8" font-weight="700" fill="#2060A0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">VIEW</text>
+<text x="330" y="202" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">stg_billing</text>
+<text x="330" y="215" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">__usage</text>
+
+<!-- stg_billing__list_prices -->
+<rect x="245" y="370" width="170" height="52" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="245" y="370" width="170" height="16" rx="4" fill="#E8F4FD" stroke="#000" stroke-width="1.25"/>
+<rect x="245" y="379" width="170" height="7" rx="0" fill="#E8F4FD" stroke="none"/>
+<text x="330" y="381" text-anchor="middle" font-size="8" font-weight="700" fill="#2060A0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">VIEW</text>
+<text x="330" y="402" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">stg_billing</text>
+<text x="330" y="415" text-anchor="middle" font-size="10" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">__list_prices</text>
+
+
+<!-- ══════════════════════════════════════════════
+     int_usage_priced — NEON HERO NODE
+══════════════════════════════════════════════ -->
+
+<!-- Node with neon gradient stroke + glow -->
+<rect x="490" y="268" width="260" height="104" rx="4"
+      fill="#fff"
+      stroke="url(#neonGrad)"
+      stroke-width="2.5"
+      filter="url(#neonGlow)"/>
+
+<!-- Materialization tag -->
+<rect x="490" y="268" width="260" height="18" rx="4" fill="url(#neonGrad)" stroke="none" filter="url(#neonGlow)"/>
+<rect x="490" y="278" width="260" height="8" rx="0" fill="url(#neonGrad)" stroke="none"/>
+<text x="620" y="281" text-anchor="middle" font-size="8" font-weight="700" fill="#fff" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">INCREMENTAL TABLE</text>
+
+<!-- Node name -->
+<text x="620" y="302" text-anchor="middle" font-size="12" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">int_usage_priced</text>
+
+<!-- Badge -->
+<rect x="510" y="312" width="220" height="18" rx="3" fill="#f5f0ff" stroke="#B14EFF" stroke-width="1"/>
+<text x="620" y="324" text-anchor="middle" font-size="8" font-weight="700" fill="#7030C0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">INCREMENTAL · merge on record_id</text>
+
+<!-- Annotation below badge -->
+<text x="620" y="348" text-anchor="middle" font-size="8" fill="#333" font-style="italic" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">usage_quantity × effective_list_price</text>
+<text x="620" y="360" text-anchor="middle" font-size="8" fill="#333" font-style="italic" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">→ list_cost  (LIST price, not invoiced spend)</text>
+
+
+<!-- ══════════════════════════════════════════════
+     MARTS nodes (tables)
+══════════════════════════════════════════════ -->
+
+<!-- Helper macro: table tag fill #F5F5F5 -->
+
+<!-- cost_daily  y=88 -->
+<rect x="830" y="88" width="190" height="48" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="88" width="190" height="15" rx="4" fill="#F0F0F0" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="96" width="190" height="7" rx="0" fill="#F0F0F0" stroke="none"/>
+<text x="925" y="98" text-anchor="middle" font-size="8" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">TABLE</text>
+<text x="925" y="118" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">cost_daily</text>
+
+<!-- cost_by_workspace  y=178 -->
+<rect x="830" y="183" width="190" height="48" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="183" width="190" height="15" rx="4" fill="#F0F0F0" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="191" width="190" height="7" rx="0" fill="#F0F0F0" stroke="none"/>
+<text x="925" y="193" text-anchor="middle" font-size="8" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">TABLE</text>
+<text x="925" y="213" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">cost_by_workspace</text>
+
+<!-- cost_by_sku  y=268 -->
+<rect x="830" y="278" width="190" height="48" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="278" width="190" height="15" rx="4" fill="#F0F0F0" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="286" width="190" height="7" rx="0" fill="#F0F0F0" stroke="none"/>
+<text x="925" y="288" text-anchor="middle" font-size="8" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">TABLE</text>
+<text x="925" y="308" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">cost_by_sku</text>
+
+<!-- cost_by_product  y=373 -->
+<rect x="830" y="373" width="190" height="48" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="373" width="190" height="15" rx="4" fill="#F0F0F0" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="381" width="190" height="7" rx="0" fill="#F0F0F0" stroke="none"/>
+<text x="925" y="383" text-anchor="middle" font-size="8" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">TABLE</text>
+<text x="925" y="403" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">cost_by_product</text>
+
+<!-- cost_by_tag  y=463 -->
+<rect x="830" y="468" width="190" height="48" rx="4" fill="#fff" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="468" width="190" height="15" rx="4" fill="#F0F0F0" stroke="#000" stroke-width="1.25"/>
+<rect x="830" y="476" width="190" height="7" rx="0" fill="#F0F0F0" stroke="none"/>
+<text x="925" y="478" text-anchor="middle" font-size="8" font-weight="700" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">TABLE</text>
+<text x="925" y="498" text-anchor="middle" font-size="11" font-weight="700" fill="#000" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">cost_by_tag</text>
+
+
+<!-- ══════════════════════════════════════════════
+     EDGES
+══════════════════════════════════════════════ -->
+
+<!-- 1. system.billing.usage → stg_billing__usage -->
+<!-- source right edge: x=180, y=211 (mid of cylinder body 185+52/2=211) -->
+<!-- target left edge: x=245, y=196 (170+52/2=196) -->
+<path d="M 180 211 C 215 211 215 196 245 196"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- 2. system.billing.list_prices → stg_billing__list_prices -->
+<!-- source right: x=180, y=411. target left: x=245, y=396 -->
+<path d="M 180 411 C 215 411 215 396 245 396"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- 3. stg_billing__usage → int_usage_priced -->
+<!-- source right: x=415, y=196. target left: x=490, y=320 -->
+<path d="M 415 196 C 455 196 455 320 490 320"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- 4. stg_billing__list_prices → int_usage_priced -->
+<!-- source right: x=415, y=396. target left: x=490, y=320 -->
+<path d="M 415 396 C 455 396 455 320 490 320"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- Fan-out: int_usage_priced → 5 marts -->
+<!-- int right edge: x=750, y=320 (268+104/2) -->
+
+<!-- → cost_daily: target left x=830, y=112 (88+48/2) -->
+<path d="M 750 320 C 790 320 790 112 830 112"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- → cost_by_workspace: target left x=830, y=207 (183+48/2) -->
+<path d="M 750 320 C 792 320 792 207 830 207"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- → cost_by_sku: target left x=830, y=302 (278+48/2) — straight -->
+<path d="M 750 320 C 790 320 790 302 830 302"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- → cost_by_product: target left x=830, y=397 (373+48/2) -->
+<path d="M 750 320 C 790 320 790 397 830 397"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+<!-- → cost_by_tag: target left x=830, y=492 (468+48/2) -->
+<path d="M 750 320 C 790 320 790 492 830 492"
+      fill="none" stroke="#000" stroke-width="1.25" marker-end="url(#arrow)"/>
+
+
+<!-- ══════════════════════════════════════════════
+     JOIN ANNOTATION on the converging arrows
+══════════════════════════════════════════════ -->
+<!-- Small annotation label near the midpoint of stg→int_usage_priced convergence -->
+<rect x="448" y="285" width="4" height="70" rx="1" fill="#B14EFF" opacity="0.25"/>
+
+
+<!-- ══════════════════════════════════════════════
+     COLUMN FOOTER LABELS (materialization legend)
+══════════════════════════════════════════════ -->
+<text x="100" y="540" text-anchor="middle" font-size="9" fill="#888" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">system catalog</text>
+<text x="330" y="540" text-anchor="middle" font-size="9" fill="#2060A0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">materialized: view</text>
+<text x="620" y="540" text-anchor="middle" font-size="9" fill="#7030C0" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">materialized: incremental</text>
+<text x="940" y="540" text-anchor="middle" font-size="9" fill="#444" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace">materialized: table</text>
+
+</svg>
+</div>
+
+</body>
+</html>

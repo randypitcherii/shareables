@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: int_usage_priced
+    description: >
+      Incremental, record-grain usage joined to the effective list price, producing
+      `list_cost` (usage_quantity * effective list price). LIST price, NOT discounted
+      or invoiced spend. Incremental runs scan only recent usage; full refresh is
+      bounded by the `usage_history_days` var.
+    columns:
+      - name: record_id
+        description: "Unique usage record id; the incremental merge key."
+        data_tests:
+          - not_null
+          - unique
+      - name: cloud
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['AWS', 'AZURE', 'GCP']
+      - name: list_cost
+        description: "usage_quantity * effective list price, expressed in `currency_code`. List price, not invoiced spend."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                row_condition: "list_cost is not null"
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: 1

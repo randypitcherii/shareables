@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zero-config, except the two things only you can know</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    padding: 48px 24px 64px;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    line-height: 1.3;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    font-size: 13px;
+    font-style: italic;
+    color: #444;
+    max-width: 680px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* ── Table ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1.25px solid #000;
+    border-radius: 4px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    background: #000;
+    color: #fff;
+    font-weight: 700;
+    text-align: left;
+    padding: 10px 14px;
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  thead th:first-child { border-radius: 0; }
+
+  tbody tr {
+    border-bottom: 1.25px solid #000;
+  }
+  tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  tbody td {
+    padding: 11px 14px;
+    vertical-align: middle;
+    line-height: 1.45;
+  }
+
+  /* Column widths */
+  col.c-var    { width: 18%; }
+  col.c-env    { width: 26%; }
+  col.c-ifset  { width: 14%; }
+  col.c-else   { width: 14%; }
+  col.c-out    { width: 28%; }
+
+  /* Variable name */
+  .varname {
+    font-weight: 700;
+    font-size: 12.5px;
+  }
+
+  /* env var badge */
+  .envbadge {
+    display: inline-block;
+    background: #f0f0f0;
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 2px 7px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  /* if-set / else values */
+  .val {
+    font-size: 12px;
+    color: #333;
+  }
+  code {
+    font-family: inherit;
+    background: #f5f5f5;
+    border: 1.25px solid #ccc;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 12px;
+  }
+  .none-val {
+    color: #999;
+    font-style: italic;
+    font-size: 12px;
+  }
+
+  /* ── Outcome chips ── */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1.25px solid;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .chip-ok {
+    border-color: #00C853;
+    color: #007a30;
+    background: #f0fff5;
+  }
+
+  .chip-required {
+    border-color: #FF2E93;
+    color: #c0005a;
+    background: #fff0f7;
+  }
+
+  .chip-secret {
+    border-color: #555;
+    color: #333;
+    background: #f8f8f8;
+  }
+
+  /* ── Required row highlight + glow ── */
+  tr.row-required {
+    background: #fff8fb;
+  }
+
+  tr.row-required td:last-child {
+    /* neon glow on the chip cell */
+  }
+
+  tr.row-required .chip-required {
+    box-shadow: 0 0 0 2px rgba(255,46,147,0.18), 0 0 10px rgba(255,46,147,0.22);
+  }
+
+  /* ── Path strip ── */
+  .path-strip {
+    margin-top: 32px;
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 18px 22px;
+  }
+
+  .path-strip h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    color: #555;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .flow-step {
+    display: inline-block;
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 5px 11px;
+    font-size: 12.5px;
+    background: #fff;
+    white-space: nowrap;
+  }
+
+  .flow-step.highlight {
+    border-color: #FF2E93;
+    color: #c0005a;
+    background: #fff0f7;
+    box-shadow: 0 0 0 2px rgba(255,46,147,0.15), 0 0 8px rgba(255,46,147,0.2);
+  }
+
+  .flow-step.success {
+    border-color: #00C853;
+    color: #007a30;
+    background: #f0fff5;
+  }
+
+  .arrow {
+    font-size: 16px;
+    color: #666;
+    font-weight: 400;
+  }
+
+  .or-divider {
+    font-size: 11px;
+    color: #888;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 4px;
+  }
+
+  .error-block {
+    margin-top: 4px;
+    border: 1.25px solid #FF2E93;
+    border-radius: 4px;
+    padding: 10px 14px;
+    background: #fff0f7;
+    box-shadow: 0 0 0 2px rgba(255,46,147,0.12), 0 0 10px rgba(255,46,147,0.15);
+  }
+
+  .error-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #FF2E93;
+    margin-bottom: 5px;
+  }
+
+  .error-msg {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #c0005a;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    margin-top: 20px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: #555;
+    align-items: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1.25px solid;
+    flex-shrink: 0;
+  }
+
+  .dot-ok    { background: #f0fff5; border-color: #00C853; }
+  .dot-req   { background: #fff0f7; border-color: #FF2E93; }
+  .dot-sec   { background: #f8f8f8; border-color: #555; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Zero-config, except the two things only you can know</h1>
+    <p>Every variable has a safe fallback — except <code>host</code> and <code>warehouse http_path</code>, which are cluster-specific. You can't tell what works out-of-the-box vs. what errors until you hit it.</p>
+  </div>
+
+  <!-- Resolution table -->
+  <div class="table-wrap">
+    <table>
+      <colgroup>
+        <col class="c-var">
+        <col class="c-env">
+        <col class="c-ifset">
+        <col class="c-else">
+        <col class="c-out">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Variable</th>
+          <th>Env Var</th>
+          <th>If Set</th>
+          <th>Else Fallback</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><span class="varname">deployment_environment</span></td>
+          <td><span class="envbadge">DBT_DEPLOYMENT_ENVIRONMENT</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><code>development</code></td>
+          <td><span class="chip chip-ok">✅ zero-config</span></td>
+        </tr>
+
+        <tr>
+          <td><span class="varname">default_catalog</span></td>
+          <td><span class="envbadge">DBT_DEFAULT_CATALOG</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><code>analytics_dev</code></td>
+          <td><span class="chip chip-ok">✅ zero-config</span></td>
+        </tr>
+
+        <tr>
+          <td><span class="varname">default_schema</span></td>
+          <td><span class="envbadge">DBT_DEFAULT_SCHEMA</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><code>dbt</code></td>
+          <td><span class="chip chip-ok">✅ zero-config</span></td>
+        </tr>
+
+        <tr>
+          <td><span class="varname">usage_history_days</span></td>
+          <td><span class="envbadge">DBT_USAGE_HISTORY_DAYS</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><code>90</code></td>
+          <td><span class="chip chip-ok">✅ zero-config</span></td>
+        </tr>
+
+        <tr class="row-required">
+          <td><span class="varname">host</span></td>
+          <td><span class="envbadge">DBT_HOST</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><span class="none-val">(none)</span></td>
+          <td><span class="chip chip-required">❌ REQUIRED — errors if unset</span></td>
+        </tr>
+
+        <tr class="row-required">
+          <td><span class="varname">warehouse http_path</span></td>
+          <td><span class="envbadge">DBT_HTTP_PATH</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><span class="none-val">(none)</span></td>
+          <td><span class="chip chip-required">❌ REQUIRED — errors if unset</span></td>
+        </tr>
+
+        <tr>
+          <td><span class="varname">ci/prod client secret</span></td>
+          <td><span class="envbadge">DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET</span></td>
+          <td><span class="val">use env value</span></td>
+          <td><span class="none-val">(none)</span></td>
+          <td><span class="chip chip-secret">🔒 secret · masked · profiles.yml only</span></td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Path strip -->
+  <div class="path-strip">
+    <h3>Happy path</h3>
+    <div class="flow-row">
+      <span class="flow-step">git clone</span>
+      <span class="arrow">→</span>
+      <span class="flow-step highlight">set DBT_HOST + DBT_HTTP_PATH</span>
+      <span class="or-divider">OR</span>
+      <span class="flow-step highlight">cp template.env .env</span>
+      <span class="arrow">→</span>
+      <span class="flow-step">dbt build</span>
+      <span class="arrow">→</span>
+      <span class="flow-step success">✅</span>
+    </div>
+
+    <div class="error-block">
+      <div class="error-label">Clean failure when unset</div>
+      <div class="error-msg">Parsing Error: Env var required but not provided: 'DBT_HOST'</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <span style="font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#333;">Legend</span>
+    <span class="legend-item"><span class="legend-dot dot-ok"></span>Has a safe fallback — works out of the box</span>
+    <span class="legend-item"><span class="legend-dot dot-req"></span>No fallback — must be set before <code>dbt build</code></span>
+    <span class="legend-item"><span class="legend-dot dot-sec"></span>Secret value — masked at runtime, only in profiles.yml</span>
+  </div>
+
+</div>
+</body>
+</html>

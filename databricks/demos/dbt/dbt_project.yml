@@ -3,35 +3,56 @@ version: '1.0.0'
 
 profile: 'fe_randy_pitcher_workspace'
 
+# ---------------------------------------------------------------------------
+# Environment-driven configuration (the portable-onboarding pattern)
+#
+# Each value reads an environment variable when set, else falls back to a public
+# dev default that lives in source control. The trade-off: dev fallbacks are
+# visible to anyone reading the repo -- in exchange, a brand-new contributor can
+# clone and `dbt build` with ZERO configuration (no `dbt init`, no secrets) and
+# land safely in their own isolated dev schema.
+#
+# Non-dev deployments (CI / prod) inject the real values via environment variables;
+# nothing sensitive is ever committed. See macros/config/generate_schema_name.sql
+# for how `deployment_environment` routes schemas.
+# ---------------------------------------------------------------------------
+vars:
+  # one of: development | ci_testing | production
+  deployment_environment: "{{ env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development') }}"
+  default_catalog: "{{ env_var('DBT_DEFAULT_CATALOG', 'analytics_dev') }}"
+  default_schema: "{{ env_var('DBT_DEFAULT_SCHEMA', 'dbt') }}"
+  # full-refresh history window for system.billing.usage; incremental runs scan only
+  # recent data regardless. Keep small for quick demo builds, raise for real backfills.
+  usage_history_days: "{{ env_var('DBT_USAGE_HISTORY_DAYS', 90) }}"
+
 flags:
   use_managed_iceberg: true
 
-vars:
-  deployment_environment: "{{target.name}}"
-
 models:
   randy_pitcher_workspace:
-    # These configurations apply to all models in the project
+    # defaults for every model in the project
     +materialized: view
-    +auto_liquid_cluster: true
     +persist_docs:
       relation: true
       columns: true
 
-    # Configurations for specific subdirectories
+    # ---- layer-specific configuration ----
     staging:
       +tags: staging
       +schema: staging
+      +materialized: view
 
     modeled:
-      +materialized: table
       +tags: modeled
       +schema: modeled
+      +materialized: table
+      +auto_liquid_cluster: true
 
     marts:
-      +materialized: table
       +tags: mart
       +schema: mart
+      +materialized: table
+      +auto_liquid_cluster: true
 
     managed_iceberg_examples:
       +materialized: table
