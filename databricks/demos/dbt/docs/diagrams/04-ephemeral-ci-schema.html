@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Every build gets a disposable schema</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 64px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+    max-width: 1100px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin-bottom: 10px;
+  }
+
+  .header p {
+    font-size: 13px;
+    font-style: italic;
+    color: #333;
+    font-weight: 400;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  .timeline-wrapper {
+    width: 100%;
+    max-width: 1100px;
+    overflow-x: auto;
+  }
+
+  .timeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 960px;
+    padding: 16px 0 32px;
+    position: relative;
+  }
+
+  /* Horizontal connector line through middle of stations */
+  .timeline::before {
+    content: '';
+    position: absolute;
+    top: 108px;
+    left: 0;
+    right: 0;
+    height: 1.25px;
+    background: #000;
+    z-index: 0;
+  }
+
+  .station {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Station dot */
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #000;
+    border: 1.25px solid #000;
+    margin-bottom: 10px;
+    margin-top: 101px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+
+  .dot.red   { background: #FF2E93; border-color: #FF2E93; }
+  .dot.green { background: #00C853; border-color: #00C853; }
+  .dot.merge { background: #000; }
+  .dot.drop  { background: #fff; border: 1.25px solid #000; }
+
+  /* Connector arrow between stations */
+  .connector {
+    flex: 0 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 101px;
+    height: 14px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .connector::before {
+    content: '▶';
+    font-size: 10px;
+    color: #000;
+    line-height: 1;
+  }
+
+  /* Labels below dot */
+  .station-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 10px;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  /* Schema box floating above the timeline */
+  .schema-box {
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 10px 14px 12px;
+    margin-bottom: 0;
+    width: 100%;
+    max-width: 200px;
+    position: relative;
+  }
+
+  .schema-box.fail {
+    border-color: #FF2E93;
+    box-shadow: 0 0 0 1px rgba(255,46,147,0.15);
+  }
+
+  .schema-box.pass {
+    border-color: #00C853;
+    box-shadow: 0 0 0 1px rgba(0,200,83,0.12);
+  }
+
+  .schema-box-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+    opacity: 0.55;
+  }
+
+  .schema-name {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    word-break: break-all;
+  }
+
+  .schema-prefix { color: #000; }
+
+  /* Neon glow on the build-number suffix (isolation key) */
+  .isolation-key {
+    background: linear-gradient(90deg, #00E5FF, #B14EFF, #FF2E93);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 4px rgba(177,78,255,0.55));
+    font-weight: 700;
+  }
+
+  .schema-result {
+    margin-top: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .schema-result.fail { color: #FF2E93; }
+  .schema-result.pass { color: #00C853; }
+
+  .schema-models {
+    margin-top: 6px;
+    font-size: 9.5px;
+    color: #555;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+
+  /* Down connector from schema box to dot */
+  .down-connector {
+    width: 1.25px;
+    height: 20px;
+    background: #000;
+    flex-shrink: 0;
+  }
+
+  .down-connector.red   { background: #FF2E93; }
+  .down-connector.green { background: #00C853; }
+
+  /* Empty spacer so non-schema stations align */
+  .schema-spacer {
+    height: 100px; /* schema-box ~82px + down-connector 20px */
+    visibility: hidden;
+  }
+
+  /* Drop note */
+  .drop-note {
+    border: 1.25px dashed #000;
+    border-radius: 4px;
+    padding: 9px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    max-width: 160px;
+    line-height: 1.4;
+    color: #000;
+    background: #fafafa;
+  }
+
+  .drop-note .cmd {
+    font-size: 9px;
+    font-weight: 400;
+    color: #555;
+    margin-top: 4px;
+  }
+
+  /* Rule note at bottom */
+  .rule-note {
+    margin-top: 52px;
+    max-width: 1100px;
+    width: 100%;
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 14px 20px;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.6;
+    background: #fafafa;
+  }
+
+  .rule-note strong {
+    font-weight: 700;
+  }
+
+  .rule-note .rule-title {
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+    opacity: 0.55;
+  }
+
+  code {
+    background: #f0f0f0;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 10.5px;
+  }
+
+  /* PR label */
+  .pr-badge {
+    display: inline-block;
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 48px;
+    letter-spacing: 0.3px;
+  }
+
+  /* "separate" annotation */
+  .separate-note {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    color: #888;
+    text-transform: uppercase;
+  }
+
+  .builds-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    max-width: 1100px;
+    margin-bottom: 40px;
+    position: relative;
+  }
+
+  .vs-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    margin-top: 32px;
+  }
+
+  .vs-line {
+    width: 1.25px;
+    height: 30px;
+    background: #000;
+  }
+
+  .vs-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    padding: 2px 0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Every build gets a disposable schema</h1>
+  <p>A re-run after a fix builds <em>separately</em> from the previous attempt — each run gets its own schema, so a fix never inherits a broken prior state.</p>
+</div>
+
+<div class="pr-badge">PR #42</div>
+
+<!-- Timeline -->
+<div class="timeline-wrapper">
+  <div class="timeline">
+
+    <!-- Station: Open PR -->
+    <div class="station" style="flex: 0.7;">
+      <div class="schema-spacer" style="height:100px;"></div>
+      <div class="dot"></div>
+      <div class="station-label">open<br>PR #42</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Station: Build 1 -->
+    <div class="station" style="flex: 1.3;">
+      <div class="schema-box fail">
+        <div class="schema-box-label">Isolated schema</div>
+        <div class="schema-name">
+          <span class="schema-prefix">dbt_proj_pr42</span><span class="isolation-key">_build1</span>
+        </div>
+        <div class="schema-result fail">❌ test fails</div>
+        <div class="schema-models">models materialized<br>tests run → 1 failure</div>
+      </div>
+      <div class="down-connector red"></div>
+      <div class="dot red"></div>
+      <div class="station-label">Build 1<br><span style="font-weight:400;font-size:10px;color:#FF2E93;">CI run #1</span></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Station: Push fix -->
+    <div class="station" style="flex: 0.7;">
+      <div class="schema-spacer" style="height:100px;"></div>
+      <div class="dot"></div>
+      <div class="station-label">push<br>fix</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Station: Build 2 -->
+    <div class="station" style="flex: 1.3;">
+      <div class="schema-box pass">
+        <div class="schema-box-label">Isolated schema</div>
+        <div class="schema-name">
+          <span class="schema-prefix">dbt_proj_pr42</span><span class="isolation-key">_build2</span>
+        </div>
+        <div class="schema-result pass">✅ all tests pass</div>
+        <div class="schema-models">fresh materialization<br>clean slate — no prior state</div>
+      </div>
+      <div class="down-connector green"></div>
+      <div class="dot green"></div>
+      <div class="station-label">Build 2<br><span style="font-weight:400;font-size:10px;color:#00C853;">CI run #2</span></div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Station: Merge -->
+    <div class="station" style="flex: 0.8;">
+      <div class="schema-spacer" style="height:100px;"></div>
+      <div class="dot merge"></div>
+      <div class="station-label">merge<br>to main</div>
+    </div>
+
+    <div class="connector"></div>
+
+    <!-- Station: Drop schemas -->
+    <div class="station" style="flex: 1.2;">
+      <div class="drop-note">
+        🗑️ ephemeral schemas<br>dropped
+        <div class="cmd">dbt run-operation drop_schema</div>
+      </div>
+      <div class="down-connector"></div>
+      <div class="dot drop"></div>
+      <div class="station-label">cleanup</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Separation callout -->
+<div style="display:flex;align-items:center;gap:16px;margin-top:-8px;margin-bottom:20px;max-width:1100px;width:100%;">
+  <div style="flex:1;height:1.25px;background:repeating-linear-gradient(90deg,#000 0,#000 6px,transparent 6px,transparent 12px);opacity:0.18;"></div>
+  <div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;white-space:nowrap;color:#888;">Build 1 and Build 2 schemas are completely separate — no shared state</div>
+  <div style="flex:1;height:1.25px;background:repeating-linear-gradient(90deg,#000 0,#000 6px,transparent 6px,transparent 12px);opacity:0.18;"></div>
+</div>
+
+<!-- Schema name comparison -->
+<div class="builds-row">
+
+  <div style="border:1.25px solid #FF2E93;border-radius:4px;padding:14px 20px;min-width:260px;background:#fff;">
+    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#FF2E93;margin-bottom:8px;">Build 1 — failed</div>
+    <div style="font-size:13px;font-weight:700;">dbt_proj_pr42<span class="isolation-key">_build1</span></div>
+    <div style="font-size:10px;color:#555;margin-top:6px;line-height:1.5;">
+      materialized at: CI run #1<br>
+      status: ❌ abandoned — test failure<br>
+      fate: dropped after PR close
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0 8px;margin-top:16px;">
+    <div style="width:1.25px;height:24px;background:#000;"></div>
+    <div style="font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">≠</div>
+    <div style="font-size:8px;font-weight:400;color:#888;white-space:nowrap;">separate</div>
+    <div style="width:1.25px;height:24px;background:#000;"></div>
+  </div>
+
+  <div style="border:1.25px solid #00C853;border-radius:4px;padding:14px 20px;min-width:260px;background:#fff;">
+    <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#00C853;margin-bottom:8px;">Build 2 — passed</div>
+    <div style="font-size:13px;font-weight:700;">dbt_proj_pr42<span class="isolation-key">_build2</span></div>
+    <div style="font-size:10px;color:#555;margin-top:6px;line-height:1.5;">
+      materialized at: CI run #2 (after fix)<br>
+      status: ✅ green — merged<br>
+      fate: dropped after merge
+    </div>
+  </div>
+
+</div>
+
+<!-- Rule note -->
+<div class="rule-note">
+  <div class="rule-title">Naming Rule</div>
+  <strong>target: ci_testing</strong> → <code>default_schema</code> used unmodified →
+  CI injects <code>DBT_DEFAULT_SCHEMA = dbt_&lt;project&gt;_pr&lt;n&gt;_build&lt;run&gt;</code>
+  &nbsp;·&nbsp; Each run is a fresh, isolated workspace &nbsp;·&nbsp;
+  No cross-run contamination &nbsp;·&nbsp; Schemas are disposable by design
+</div>
+
+</body>
+</html>

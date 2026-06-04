@@ -27,6 +27,12 @@ grants) has a clean place to live.
 
 ---
 
+## Diagrams (draft)
+
+Browser-openable visuals for the concepts below live in [`docs/diagrams/`](docs/diagrams/)
+(open the `.html` files locally). Flagship: **One model, three environments** — the deployment
+lifecycle. These are drafts, refined alongside this document.
+
 ## The principles
 
 ### 1. Configuration is environment-driven, with public dev fallbacks

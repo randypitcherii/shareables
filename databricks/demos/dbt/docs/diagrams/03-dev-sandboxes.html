@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Everyone in their own sandbox</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #ffffff;
+    color: #000000;
+    font-family: ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    padding: 48px 24px 64px;
+    min-height: 100vh;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 14px;
+    font-style: italic;
+    color: #333;
+    margin-bottom: 48px;
+    font-weight: 400;
+  }
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .panel {
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 28px 24px 24px;
+  }
+  .panel-header {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1.25px solid #000;
+    padding-bottom: 12px;
+    margin-bottom: 28px;
+  }
+  /* ── LEFT PANEL ── */
+  .panel-left .panel-header { color: #000; }
+
+  .devs-left {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dev-box {
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+  }
+  .dev-icon { font-size: 16px; }
+
+  /* collision zone */
+  .collision-zone {
+    border: 1.25px solid #FF2E93;
+    border-radius: 4px;
+    padding: 16px 14px;
+    background: #fff0f5;
+    position: relative;
+  }
+  .collision-zone-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #FF2E93;
+    margin-bottom: 10px;
+  }
+  .collision-target {
+    background: #fff;
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .collision-target span {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    color: #555;
+    margin-top: 3px;
+  }
+  .clashes {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .clash-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+  .clash-mark {
+    color: #FF2E93;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .clash-model {
+    font-weight: 700;
+    color: #000;
+  }
+  .clash-note {
+    color: #FF2E93;
+    font-style: italic;
+    font-size: 10px;
+  }
+  /* arrows left */
+  .arrows-left {
+    display: flex;
+    justify-content: center;
+    margin: 14px 0;
+  }
+  .arrows-left svg { display: block; }
+
+  .caption {
+    margin-top: 20px;
+    font-size: 11px;
+    font-style: italic;
+    color: #555;
+    text-align: center;
+    border-top: 1.25px solid #ddd;
+    padding-top: 12px;
+  }
+  .caption strong { color: #000; font-style: normal; }
+
+  /* ── RIGHT PANEL ── */
+  .panel-right {
+    border: 1.25px solid #000;
+    border-radius: 4px;
+    padding: 28px 24px 24px;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel-right::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 4px;
+    box-shadow:
+      0 0 0 1.25px #000,
+      0 0 24px 4px rgba(0,229,255,0.18),
+      0 0 48px 8px rgba(177,78,255,0.12),
+      0 0 72px 12px rgba(255,46,147,0.08);
+    pointer-events: none;
+  }
+  .panel-right .panel-header { color: #000; }
+
+  .devs-right {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .dev-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .dev-label {
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #fff;
+    white-space: nowrap;
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .arrow-right {
+    font-size: 18px;
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+  }
+  .schema-box {
+    flex: 1;
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    position: relative;
+    background: #fff;
+  }
+  .schema-name {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: -0.2px;
+  }
+  .schema-alice .schema-name  { color: #00bcd4; }
+  .schema-bob .schema-name    { color: #9c27b0; }
+  .schema-randy .schema-name  { color: #e91e8c; }
+
+  /* gradient glow accent on schema boxes */
+  .schema-alice {
+    border-color: #00E5FF;
+    box-shadow: 0 0 8px 1px rgba(0,229,255,0.30);
+  }
+  .schema-bob {
+    border-color: #B14EFF;
+    box-shadow: 0 0 8px 1px rgba(177,78,255,0.25);
+  }
+  .schema-randy {
+    border-color: #FF2E93;
+    box-shadow: 0 0 8px 1px rgba(255,46,147,0.22);
+  }
+
+  .models-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .model-chip {
+    border: 1.25px solid currentColor;
+    border-radius: 2px;
+    padding: 2px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    background: #fff;
+  }
+  .schema-alice .model-chip { color: #00bcd4; }
+  .schema-bob .model-chip   { color: #9c27b0; }
+  .schema-randy .model-chip { color: #c2185b; }
+
+  .check-mark {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 14px;
+    color: #22c55e;
+    font-weight: 700;
+  }
+
+  .catalog-badge {
+    display: inline-block;
+    border: 1.25px solid #000;
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: #f9f9f9;
+    margin-bottom: 18px;
+    color: #000;
+  }
+  .catalog-badge-label {
+    font-size: 10px;
+    font-weight: 400;
+    color: #666;
+    display: inline;
+    margin-right: 4px;
+  }
+
+  .env-note {
+    margin-top: 10px;
+    font-size: 10px;
+    color: #888;
+    font-style: italic;
+    text-align: right;
+    letter-spacing: 0.03em;
+  }
+
+  .caption-right {
+    margin-top: 20px;
+    font-size: 11px;
+    font-style: italic;
+    color: #555;
+    text-align: center;
+    border-top: 1.25px solid #ddd;
+    padding-top: 12px;
+  }
+  .caption-right strong { color: #000; font-style: normal; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="title">Everyone in their own sandbox</div>
+  <div class="subtitle">everyone builds the same models but never collides — folder isolation on a shared workspace hides the blast radius until someone's deploy overwrites yours</div>
+
+  <div class="panels">
+
+    <!-- ===== LEFT PANEL ===== -->
+    <div class="panel panel-left">
+      <div class="panel-header">❌ release HESITATION</div>
+
+      <div class="devs-left">
+        <div class="dev-box"><span class="dev-icon">👤</span> Alice</div>
+        <div class="dev-box"><span class="dev-icon">👤</span> Bob</div>
+        <div class="dev-box"><span class="dev-icon">👤</span> Randy</div>
+      </div>
+
+      <!-- SVG arrows converging to one target -->
+      <div class="arrows-left">
+        <svg width="200" height="64" viewBox="0 0 200 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- three lines from top converging to bottom center -->
+          <line x1="40" y1="0" x2="100" y2="60" stroke="#FF2E93" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line x1="100" y1="0" x2="100" y2="60" stroke="#FF2E93" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <line x1="160" y1="0" x2="100" y2="60" stroke="#FF2E93" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <!-- arrowhead -->
+          <polygon points="100,64 95,54 105,54" fill="#FF2E93"/>
+          <!-- collision sparks -->
+          <text x="34" y="36" fill="#FF2E93" font-size="12" font-family="monospace" font-weight="700">✗</text>
+          <text x="148" y="36" fill="#FF2E93" font-size="12" font-family="monospace" font-weight="700">✗</text>
+        </svg>
+      </div>
+
+      <div class="collision-zone">
+        <div class="collision-zone-label">⚠ single shared target</div>
+        <div class="collision-target">
+          prod.analytics (or folder-isolated workspace)
+          <span>one shared UC schema · no developer isolation</span>
+        </div>
+        <div class="clashes">
+          <div class="clash-row">
+            <span class="clash-mark">✗</span>
+            <span class="clash-model">cost_daily</span>
+            <span class="clash-note">overwritten by Bob's run</span>
+          </div>
+          <div class="clash-row">
+            <span class="clash-mark">✗</span>
+            <span class="clash-model">spend_by_sku</span>
+            <span class="clash-note">Alice's WIP clobbered Randy's</span>
+          </div>
+          <div class="clash-row">
+            <span class="clash-mark">✗</span>
+            <span class="clash-model">usage_trends</span>
+            <span class="clash-note">stale schema left by last night's run</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="caption">
+        <strong>no isolation → accidents → fear of deploying</strong><br>
+        "is it safe to run dbt right now?"
+      </div>
+    </div>
+
+    <!-- ===== RIGHT PANEL ===== -->
+    <div class="panel panel-right">
+      <div class="panel-header">✅ release CONFIDENCE</div>
+
+      <div>
+        <span class="catalog-badge-label">catalog:</span>
+        <span class="catalog-badge">analytics_dev</span>
+      </div>
+
+      <div class="devs-right">
+
+        <!-- Alice -->
+        <div class="dev-row">
+          <div class="dev-label"><span>👤</span> Alice</div>
+          <div class="arrow-right">→</div>
+          <div class="schema-box schema-alice">
+            <div class="check-mark">✓</div>
+            <div class="schema-name">dbt_alice</div>
+            <div class="models-list">
+              <span class="model-chip">cost_daily</span>
+              <span class="model-chip">spend_by_sku</span>
+              <span class="model-chip">usage_trends</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bob -->
+        <div class="dev-row">
+          <div class="dev-label"><span>👤</span> Bob</div>
+          <div class="arrow-right">→</div>
+          <div class="schema-box schema-bob">
+            <div class="check-mark">✓</div>
+            <div class="schema-name">dbt_bob</div>
+            <div class="models-list">
+              <span class="model-chip">cost_daily</span>
+              <span class="model-chip">spend_by_sku</span>
+              <span class="model-chip">usage_trends</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Randy -->
+        <div class="dev-row">
+          <div class="dev-label"><span>👤</span> Randy</div>
+          <div class="arrow-right">→</div>
+          <div class="schema-box schema-randy">
+            <div class="check-mark">✓</div>
+            <div class="schema-name">dbt_randy_pitcher</div>
+            <div class="models-list">
+              <span class="model-chip">cost_daily</span>
+              <span class="model-chip">spend_by_sku</span>
+              <span class="model-chip">usage_trends</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="env-note">schema = "dbt_" + $DBT_DEV_USER (defaults to $USER)</div>
+
+      <div class="caption-right">
+        <strong>schema-per-developer → no collisions → ship without fear</strong><br>
+        run dbt any time; your sandbox is yours alone
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+
+</div><!-- /page -->
+</body>
+</html>
