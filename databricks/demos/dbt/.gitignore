@@ -1,0 +1,14 @@
+# Python / uv — uv.lock is intentionally NOT committed: on a Databricks machine `uv`
+# rewrites its registry sources to the internal PyPI proxy, which is wrong for public consumers.
+.venv/
+uv.lock
+
+# dbt
+target/
+dbt_packages/
+dbt_modules/
+logs/
+package-lock.yml
+
+# local env (keep template.env, ignore the real one)
+.env
