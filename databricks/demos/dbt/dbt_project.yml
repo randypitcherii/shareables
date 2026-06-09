@@ -1,7 +1,7 @@
-name: 'randy_pitcher_workspace'
+name: 'rpw_dbt_databricks_reference'
 version: '1.0.0'
 
-profile: 'fe_randy_pitcher_workspace'
+profile: 'rpw_dbt_databricks_reference'
 
 # ---------------------------------------------------------------------------
 # Environment-driven configuration (the portable-onboarding pattern)
@@ -29,7 +29,7 @@ flags:
   use_managed_iceberg: true
 
 models:
-  randy_pitcher_workspace:
+  rpw_dbt_databricks_reference:
     # defaults for every model in the project
     +materialized: view
     +persist_docs:
@@ -38,18 +38,18 @@ models:
 
     # ---- layer-specific configuration ----
     staging:
-      +tags: staging
+      +tags: [staging, hourly]
       +schema: staging
       +materialized: view
 
     modeled:
-      +tags: modeled
+      +tags: [modeled, hourly]
       +schema: modeled
       +materialized: table
       +auto_liquid_cluster: true
 
     marts:
-      +tags: mart
+      +tags: [mart, hourly]
       +schema: mart
       +materialized: table
       +auto_liquid_cluster: true

@@ -13,11 +13,12 @@ sources:
         description: >
           Billable usage records (DBUs and other units), one row per usage event.
           See https://docs.databricks.com/admin/system-tables/billing.html
-        loaded_at_field: "cast(ingestion_date as timestamp)"
-        freshness:
-          # system.billing.usage has real ingestion latency -- keep thresholds generous.
-          warn_after: {count: 24, period: hour}
-          error_after: {count: 48, period: hour}
+        config:
+          loaded_at_field: "cast(ingestion_date as timestamp)"
+          freshness:
+            # system.billing.usage has real ingestion latency -- keep thresholds generous.
+            warn_after: {count: 24, period: hour}
+            error_after: {count: 48, period: hour}
         columns:
           - name: record_id
             description: "Unique ID for this usage record."

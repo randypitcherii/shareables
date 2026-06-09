@@ -1,0 +1,17 @@
+command:
+  - python
+  - app.py
+
+env:
+  - name: DBT_DEPLOYMENT_ENVIRONMENT
+    value: production
+  - name: DBT_ARTIFACT_VOLUME_FULL_NAME
+    valueFrom: dbt-docs-volume
+  - name: DBT_ARTIFACT_CATALOG
+    value: fe_randy_pitcher_workspace_catalog
+  - name: DBT_ARTIFACT_SCHEMA
+    value: dbt_artifacts
+  - name: DBT_ARTIFACT_VOLUME
+    value: dbt_demo_artifacts
+  - name: DBT_PRODUCTION_JOB_ID
+    valueFrom: dbt-production-job

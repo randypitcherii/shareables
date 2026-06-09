@@ -180,6 +180,43 @@ uv run dbt docs generate --target dev --profiles-dir . && uv run dbt docs serve
 
 ---
 
+# Production DAB: state capture + hosted docs
+
+This demo also includes a Databricks Asset Bundle (`databricks.yml`) for production operations:
+
+- A managed Unity Catalog volume for production dbt artifacts.
+- A daily serverless workflow job that runs `dbt build -s tag:hourly`, captures the production state artifacts, and regenerates dbt docs.
+- A Databricks app that serves the generated dbt docs from the volume.
+
+Default production artifact paths:
+
+```text
+/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/state/latest
+/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/docs/latest
+```
+
+Deploy and run:
+
+```bash
+databricks bundle validate -t prod
+databricks bundle deploy -t prod
+databricks bundle run dbt_production_daily -t prod
+databricks bundle run dbt_docs -t prod
+```
+
+The bundle looks up a SQL warehouse named `dbt_wh` by default. Override it when deploying if your workspace uses a different warehouse:
+
+```bash
+databricks bundle deploy -t prod --var="warehouse_id=<warehouse-id>"
+```
+
+The docs app derives its `/Volumes/<catalog>/<schema>/<volume>` path from the same
+`production_catalog`, `production_artifact_schema`, and `production_artifact_volume` bundle variables
+that the job uses. You can also set `DBT_ARTIFACT_VOLUME_FULL_NAME` to `catalog.schema.volume` for a
+single injected value.
+
+---
+
 # CI/CD
 
 See [`ci/github-actions-dbt-ci.yml.example`](ci/github-actions-dbt-ci.yml.example) for a
@@ -187,7 +224,7 @@ GitHub Actions workflow that builds each PR into its own disposable schema by se
 
 ```bash
 DBT_DEPLOYMENT_ENVIRONMENT=ci_testing
-DBT_DEFAULT_SCHEMA=dbt_randy_pitcher_workspace_pr${PR_NUMBER}_build${RUN_NUMBER}
+DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NUMBER}
 ```
 
 Because the schema name carries the PR number **and** the build number, a re-run after a fix
