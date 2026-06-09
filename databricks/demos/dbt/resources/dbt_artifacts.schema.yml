@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    dbt_artifacts:
+      catalog_name: ${var.production_catalog}
+      name: ${var.production_artifact_schema}
+      comment: Stores production dbt state artifacts and generated docs for rpw-dbt-databricks-reference.

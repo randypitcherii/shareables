@@ -18,7 +18,7 @@
 #     logs and forbids them outside profiles.yml, so the secret can never leak into
 #     compiled SQL or the warehouse.
 # ===========================================================================
-fe_randy_pitcher_workspace:
+rpw_dbt_databricks_reference:
   target: dev
   outputs:
 

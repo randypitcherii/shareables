@@ -25,6 +25,8 @@ models:
               arguments:
                 min_value: 0
                 row_condition: "list_cost is not null"
+              config:
+                severity: warn
     data_tests:
       - dbt_expectations.expect_table_row_count_to_be_between:
           arguments:

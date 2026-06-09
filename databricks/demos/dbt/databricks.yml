@@ -1,0 +1,46 @@
+bundle:
+  name: dbt_databricks_demo
+
+include:
+  - resources/*.yml
+
+variables:
+  production_catalog:
+    description: Unity Catalog catalog used by production dbt runs.
+    default: fe_randy_pitcher_workspace_catalog
+  production_schema:
+    description: Default schema for production dbt models without a layer-specific schema.
+    default: dbt
+  production_artifact_schema:
+    description: Schema that owns the managed volume for production dbt artifacts.
+    default: dbt_artifacts
+  production_artifact_volume:
+    description: Managed volume that stores production dbt state and generated docs.
+    default: dbt_demo_artifacts
+  warehouse_id:
+    description: Serverless or Pro SQL warehouse ID used by the dbt workflow.
+    lookup:
+      warehouse: dbt_wh
+
+targets:
+  dev:
+    default: true
+    mode: development
+    variables:
+      production_catalog: analytics_dev
+      production_schema: dbt_${workspace.current_user.short_name}
+      production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    presets:
+      tags:
+        env: dev
+        owner: ${workspace.current_user.userName}
+
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    presets:
+      tags:
+        env: prod

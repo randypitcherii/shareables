@@ -1,0 +1,46 @@
+resources:
+  jobs:
+    dbt_production_daily:
+      name: rpw-dbt-databricks-reference Production Daily
+      description: Builds the hourly-tagged reference models, captures production state, and regenerates docs.
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+      tasks:
+        - task_key: dbt_build_hourly
+          dbt_task:
+            project_directory: ..
+            source: WORKSPACE
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.production_catalog}
+            schema: ${var.production_schema}
+            commands:
+              - dbt deps
+              - >-
+                dbt build -s tag:hourly
+                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
+                --target-path /Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}/state/latest
+          environment_key: dbt
+        - task_key: dbt_generate_docs
+          depends_on:
+            - task_key: dbt_build_hourly
+          run_if: ALL_DONE
+          dbt_task:
+            project_directory: ..
+            source: WORKSPACE
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.production_catalog}
+            schema: ${var.production_schema}
+            commands:
+              - dbt deps
+              - >-
+                dbt docs generate
+                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
+                --target-path /Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}/docs/latest
+          environment_key: dbt
+      environments:
+        - environment_key: dbt
+          spec:
+            environment_version: "3"
+            dependencies:
+              - dbt-databricks>=1.11.0

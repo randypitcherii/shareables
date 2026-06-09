@@ -32,7 +32,7 @@ jobs:
       # --- environment selection -------------------------------------------
       DBT_DEPLOYMENT_ENVIRONMENT: ci_testing
       # per-PR, per-build schema -> fully isolated, disposable namespace
-      DBT_DEFAULT_SCHEMA: dbt_randy_pitcher_workspace_pr${{ github.event.pull_request.number }}_build${{ github.run_number }}
+      DBT_DEFAULT_SCHEMA: dbt_rpw_dbt_databricks_reference_pr${{ github.event.pull_request.number }}_build${{ github.run_number }}
 
       # --- connection (non-secret) -----------------------------------------
       DBT_HOST: ${{ vars.DBT_HOST }}
