@@ -20,10 +20,10 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import mlflow
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
@@ -81,17 +81,13 @@ def load_config() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def setup_tracing(experiment_name: Optional[str] = None) -> None:
+def setup_tracing(experiment_name: str = _DEFAULT_EXPERIMENT) -> None:
     """
     Enable MLflow LangChain autologging and set the active experiment.
 
     Args:
-        experiment_name: MLflow experiment name/path. Defaults to the
-            MLFLOW_EXPERIMENT env var or "/langgraph-genie-agent".
+        experiment_name: MLflow experiment name/path.
     """
-    if experiment_name is None:
-        experiment_name = os.environ.get("MLFLOW_EXPERIMENT", _DEFAULT_EXPERIMENT)
-
     mlflow.langchain.autolog()
     mlflow.set_experiment(experiment_name)
 
@@ -238,25 +234,14 @@ def main(question: str) -> None:
 
     graph = build_agent(llm=llm, genie_fn=genie_fn)
 
-    from langchain_core.messages import HumanMessage
-
     result = graph.invoke({"messages": [HumanMessage(content=question)]})
-    last_message = result["messages"][-1]
-    answer = last_message.content
+    answer = result["messages"][-1].content
 
     print(f"\nAnswer: {answer}\n")
-
-    # Surface the MLflow run/trace URL if available
-    active_run = mlflow.active_run()
-    if active_run:
-        tracking_uri = mlflow.get_tracking_uri()
-        run_id = active_run.info.run_id
-        print(f"MLflow run: {tracking_uri}/#/experiments/.../runs/{run_id}")
-    else:
-        print(
-            "MLflow tracing is enabled. View traces in the MLflow UI at your "
-            "tracking server or Databricks workspace under Experiments."
-        )
+    print(
+        f"MLflow trace logged to experiment '{cfg['mlflow_experiment']}' "
+        f"(tracking URI: {mlflow.get_tracking_uri()})."
+    )
 
 
 if __name__ == "__main__":

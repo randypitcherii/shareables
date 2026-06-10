@@ -5,10 +5,8 @@ All tests run without a live Databricks workspace.
 LLM and Genie are mocked at the seams defined in agent.py.
 """
 
-import os
-import json
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +73,7 @@ class TestGraphConstruction:
         )
         return fake_llm
 
-    def test_graph_has_expected_nodes(self, monkeypatch):
+    def test_graph_has_expected_nodes(self):
         """build_agent graph contains 'assistant' and 'genie_tool' nodes."""
         fake_llm = self._make_fake_llm()
         fake_genie_fn = MagicMock(return_value="some data")
@@ -87,7 +85,7 @@ class TestGraphConstruction:
         assert "assistant" in node_names, f"Expected 'assistant' node, got {node_names}"
         assert "genie_tool" in node_names, f"Expected 'genie_tool' node, got {node_names}"
 
-    def test_graph_compiles_without_error(self, monkeypatch):
+    def test_graph_compiles_without_error(self):
         """build_agent returns a compiled graph (StateGraph.compile succeeds)."""
         fake_llm = self._make_fake_llm()
         fake_genie_fn = MagicMock(return_value="some data")
@@ -105,30 +103,25 @@ class TestGraphConstruction:
 class TestGraphRouting:
     """End-to-end routing through the compiled graph using fake LLM and Genie."""
 
-    def _genie_tool_name(self):
-        """Return the tool name that the agent uses for the Genie tool."""
-        from agent import GENIE_TOOL_NAME
-        return GENIE_TOOL_NAME
-
-    def test_tool_call_path_calls_genie_and_returns_final_answer(self, monkeypatch):
+    def test_tool_call_path_calls_genie_and_returns_final_answer(self):
         """
         When the LLM first responds with a tool_call to the Genie tool and then
         responds with a final plain answer, the compiled graph:
           - calls the Genie function with a string that includes the user question, and
           - returns a final state whose last message content contains the final answer.
         """
-        from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
+        from langchain_core.messages import AIMessage, HumanMessage
         from langchain_core.messages.tool import ToolCall
+
+        from agent import GENIE_TOOL_NAME
 
         user_question = "What were total sales last quarter?"
         genie_result = "Sales were $1.2M last quarter."
         final_answer = "Based on Genie data, sales were $1.2M last quarter."
 
-        tool_name = self._genie_tool_name()
-
         # First LLM call: returns a tool call
         tool_call = ToolCall(
-            name=tool_name,
+            name=GENIE_TOOL_NAME,
             args={"question": user_question},
             id="call-001",
         )
@@ -160,7 +153,7 @@ class TestGraphRouting:
             f"Expected final answer in last message, got: {last_msg.content!r}"
         )
 
-    def test_no_tool_call_path_goes_straight_to_end(self, monkeypatch):
+    def test_no_tool_call_path_goes_straight_to_end(self):
         """
         When the LLM responds with a plain answer (no tool calls), the graph
         goes straight to END without calling Genie.
