@@ -195,7 +195,14 @@ def register_web_search(catalog="", schema="", spark_session=None):
 
     active_spark = spark_session
     if active_spark is None:
-        active_spark = spark  # type: ignore[name-defined]  # noqa: F821
+        # The `spark` global only exists in notebooks. A serverless
+        # spark_python_task (how driver.py runs) must build its own session.
+        try:
+            active_spark = spark  # type: ignore[name-defined]  # noqa: F821
+        except NameError:
+            from pyspark.sql import SparkSession
+
+            active_spark = SparkSession.builder.getOrCreate()
 
     active_spark.sql(_build_create_sql(fqn))
     print("Registered " + fqn)
