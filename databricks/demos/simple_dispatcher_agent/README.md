@@ -177,6 +177,11 @@ in Delta tables in `{BASE_CATALOG}.{BASE_SCHEMA}` (table prefix = experiment
 ID) rather than workspace-managed MLflow storage — no 100k-trace cap,
 UC governance, and queryable from SQL/notebooks/dashboards.
 
+One platform constraint: a UC trace destination can only be linked to an
+experiment that has **no traces yet**. If the experiment already accumulated
+workspace-managed traces, the agent prints a note and keeps using it
+unlinked — switch to a fresh experiment name to get UC-backed storage.
+
 ## Adding a third tool
 
 The whole point of a dispatcher is that the next tool is just one more entry in
