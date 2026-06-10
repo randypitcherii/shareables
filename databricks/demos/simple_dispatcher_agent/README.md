@@ -88,7 +88,8 @@ uv run pytest
 
 # 3. Configure
 cp .env.template .env
-# edit .env: set GENIE_SPACE_ID, BASE_CATALOG, BASE_SCHEMA (LLM_ENDPOINT has a default)
+# edit .env: set GENIE_SPACE_ID and BASE_CATALOG
+# (BASE_SCHEMA is prefilled; LLM_ENDPOINT has a default)
 
 # 4. Make sure you're logged in (one-time SSO)
 databricks auth login --profile DEFAULT
@@ -146,9 +147,9 @@ The MLflow experiment path follows the same suffix convention:
 | `DATABRICKS_PROFILE` | local dev | `DEFAULT` | CLI profile for user SSO |
 | `GENIE_SPACE_ID` | yes | — | Genie space ID (from the space URL) |
 | `BASE_CATALOG` | yes | — | UC catalog for the UDF + registered model |
-| `BASE_SCHEMA` | yes | `simple_dispatcher` | UC schema for the UDF + registered model |
+| `BASE_SCHEMA` | yes | — (`.env.template` prefills `simple_dispatcher`) | UC schema for the UDF + registered model |
 | `LLM_ENDPOINT` | no | `databricks-claude-sonnet-4-6` | Chat model serving endpoint |
-| `MLFLOW_EXPERIMENT` | no | per-user (see above) | MLflow experiment path for traces |
+| `MLFLOW_EXPERIMENT` | no | unset (traces go to the active MLflow experiment; the bundle job sets a per-target path) | MLflow experiment path for traces |
 
 A missing required variable raises a `ValueError` that names every one that's
 missing.
@@ -225,6 +226,17 @@ break installs for external users. Regenerate it locally with `uv sync`.
 that only ship binary wheels for the Databricks runtime interpreters; 3.13+
 falls back to building from sdist and needs a Rust toolchain. The `pyproject`
 caps `requires-python` accordingly.
+
+**How the deployed model gets its code and config.** `driver.py` logs
+`serving_agent.py` with `code_paths=["agent.py"]` — serving imports `agent`,
+and without it the container fails with `ModuleNotFoundError`
+(`tests/test_agent.py::TestModelPackaging` guards this by loading the logged
+model from a clean cwd). The agent reads `GENIE_SPACE_ID` / `BASE_CATALOG` /
+`BASE_SCHEMA` / `LLM_ENDPOINT` from the environment, so the job sets them
+before `log_model` (mlflow's log-time validation runs one real `predict`,
+failing a broken config at deploy time instead of at the first user request)
+and passes the same dict as `environment_vars` to `agents.deploy` so the
+serving container can rebuild the dispatcher.
 
 **Why `databricks.agents.deploy(...)` instead of a DABs
 `model_serving_endpoints` resource.** Two reasons:

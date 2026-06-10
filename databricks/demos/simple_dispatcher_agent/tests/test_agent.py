@@ -296,6 +296,7 @@ class TestModelPackaging:
         validation run offline (the code file executed by log_model resolves
         `agent` from sys.modules, so the patch reaches it).
         """
+        import os
         import subprocess
         import sys
 
@@ -328,11 +329,7 @@ class TestModelPackaging:
         result = subprocess.run(
             [sys.executable, "-c", probe],
             cwd=tmp_path,  # outside the repo: no accidental `import agent`
-            env={
-                k: v
-                for k, v in __import__("os").environ.items()
-                if k not in ("PYTHONPATH",)
-            },
+            env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
             capture_output=True,
             text=True,
             timeout=300,
