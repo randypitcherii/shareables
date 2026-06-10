@@ -106,9 +106,11 @@ uv run python agent.py "What's the latest news about Databricks?" # → web_sear
 
 ### Bundle workflow
 
-The bundle defines one job, `deploy_dispatcher`, that registers the UDF, logs
-and registers the agent model to UC, and (in `prod`) deploys the serving
-endpoint. There is no schedule — it's deploy-on-demand via `databricks bundle run`.
+The bundle defines one job, `deploy_dispatcher`, that creates the target
+schema if needed (dev/test schemas are per-user/per-PR and won't pre-exist),
+registers the UDF, logs and registers the agent model to UC, and (in `prod`)
+deploys the serving endpoint. There is no schedule — it's deploy-on-demand
+via `databricks bundle run`.
 
 ```bash
 # Validate (read-only, safe) — all three targets must pass
