@@ -52,10 +52,18 @@ targets:
     mode: production
     # Production runs as a dedicated M2M service principal, never the deploying user,
     # and deploys to a shared path so it isn't coupled to anyone's home directory.
-    run_as:
-      service_principal_name: ${var.production_service_principal}
+    # run_as lives on the JOB (not the target) because bundles containing apps reject
+    # a target-level run_as that differs from the deployer -- apps always run as
+    # their own auto-created service principal.
+    resources:
+      jobs:
+        dbt_production_daily:
+          run_as:
+            service_principal_name: ${var.production_service_principal}
     workspace:
-      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+      # Deploy under the production SP's own user folder: not coupled to any human's
+      # home directory, and (unlike /Workspace/Shared) not writable by all users.
+      root_path: /Workspace/Users/${var.production_service_principal}/.bundle/${bundle.name}/${bundle.target}
     presets:
       tags:
         env: prod
