@@ -72,18 +72,25 @@ marts     cost_daily             cost_by_workspace   cost_by_sku      (tables: a
 - **Effective list price.** Cost uses `pricing.effective_list.default` (resolves list +
   promotional pricing) — the value Databricks documents for calculating cost.
 - **Incremental fact.** `int_usage_priced` is `materialized: incremental` (merge on `record_id`).
-  Incremental runs scan only recent usage with a 3-day lookback so late-arriving corrections
-  (`record_type` retraction / restatement) get re-merged. Full refresh is bounded by the
-  `usage_history_days` var (default 90; pass a smaller value for quick demos).
+  Incremental runs scan only recently-**ingested** usage: the 3-day lookback keys on
+  `ingestion_date`, not `usage_date`, because corrections (`record_type` retraction /
+  restatement) are new rows that carry the *original* usage date — sometimes weeks old —
+  with a fresh ingestion date. A usage-date lookback would silently miss them. Full refresh
+  is bounded by the `usage_history_days` var (default 90; pass a smaller value for quick demos).
 - **`list_cost`, not "spend".** `list_prices` is the published list price; it does **not**
   include account-level discounts, so `list_cost` is a list-price estimate, not invoiced spend.
 - **Account-level usage.** Some usage (storage, network, certain serverless features) has a
   NULL `workspace_id`; `cost_by_workspace` surfaces it as an explicit `(account-level)` bucket
   so it is attributed rather than silently dropped.
+- **Currency-safe rollups.** Every mart carries `currency_code` in its grain — costs are
+  never summed across currencies, so multi-currency accounts get correct numbers.
 - **Tests prove correctness, not just success.** Beyond `not_null`/`unique`/`accepted_values`,
-  two singular tests guard against the classic "green build, NULL costs" failure:
-  `assert_recent_cost_is_positive` (a recent settled day must have positive cost) and
-  `assert_dbu_usage_is_priced` (≤5% of recent DBU usage may be unpriced).
+  every mart has a `dbt_utils.unique_combination_of_columns` test pinning its grain (a
+  fan-out from a bad upstream join fails loudly), and two singular tests guard against the
+  classic "green build, NULL costs" failure: `assert_recent_cost_is_positive` (a recent
+  settled day must have positive cost) and `assert_dbu_usage_is_priced` (≤5% of recent DBU
+  usage may be unpriced). In production, a source-freshness task runs *before* the build,
+  so a stalled `system.billing` pipeline fails the run instead of staying green.
 
 ---
 
@@ -132,12 +139,15 @@ A matching `generate_database_name` override routes models to `default_catalog` 
 
 ### 1. Install dependencies (uv)
 
-This project pins Python via `.python-version` (3.12) and locks dbt deps in `uv.lock`.
+This project pins Python via `.python-version` (3.12). `uv.lock` is intentionally **not**
+committed (see `.gitignore`): on Databricks-managed machines `uv` rewrites registry sources
+to the internal PyPI proxy, which would be wrong for everyone else — so each clone resolves
+against its own registry configuration.
 
 ```bash
 cd databricks/demos/dbt
 uv sync                 # creates .venv with dbt-databricks
-uv run dbt deps         # installs dbt packages (dbt_utils, dbt_expectations, dbt_date)
+uv run dbt deps         # installs dbt packages (dbt_utils, dbt_expectations)
 ```
 
 ### 2. Configure the connection + authenticate (dev = SSO, one time)
@@ -146,7 +156,7 @@ Set the two required connection vars (no in-repo fallback), then log in:
 
 ```bash
 cp template.env .env           # then edit DBT_HOST + DBT_HTTP_PATH
-set -a; source .env; set +a    # dbt 1.12+/Fusion auto-load .env; on 1.10 source it yourself
+set -a; source .env; set +a    # dbt 1.12+/Fusion auto-load .env; this project is on core 1.11, so source it yourself
 
 databricks auth login --profile DEFAULT     # opens a browser for SSO
 ```
@@ -185,8 +195,20 @@ uv run dbt docs generate --target dev --profiles-dir . && uv run dbt docs serve
 This demo also includes a Databricks Asset Bundle (`databricks.yml`) for production operations:
 
 - A managed Unity Catalog volume for production dbt artifacts.
-- A daily serverless workflow job that runs `dbt build -s tag:hourly`, captures the production state artifacts, and regenerates dbt docs.
+- A daily serverless workflow job that checks source freshness, runs `dbt build -s tag:daily`,
+  captures the production state artifacts, and regenerates dbt docs.
 - A Databricks app that serves the generated dbt docs from the volume.
+
+Production runs as a **dedicated service principal** (`run_as` in the prod target), never the
+deploying human, and deploys to a shared workspace path (`/Workspace/Shared/.bundle/...`) so
+production isn't coupled to anyone's home directory. The bundle looks up the SP by display
+name (`dbt_prod_sp` by default); the deploying identity needs CAN_USE on it, and the SP needs
+SELECT on `system.billing`, ownership-level access to the production catalog/schemas, and
+WRITE on the artifacts volume.
+
+Production runs also apply **grants as code**: every `dbt build` grants `SELECT` on the marts
+to `account users` (see `+grants` in `dbt_project.yml`) — consumers get access as part of the
+run, not via manual GRANT statements.
 
 Default production artifact paths:
 
@@ -204,10 +226,13 @@ databricks bundle run dbt_production_daily -t prod
 databricks bundle run dbt_docs -t prod
 ```
 
-The bundle looks up a SQL warehouse named `dbt_wh` by default. Override it when deploying if your workspace uses a different warehouse:
+The bundle looks up a SQL warehouse named `dbt_wh` and a service principal named `dbt_prod_sp`
+by default. Override either when deploying if your workspace uses different names:
 
 ```bash
-databricks bundle deploy -t prod --var="warehouse_id=<warehouse-id>"
+databricks bundle deploy -t prod \
+  --var="warehouse_id=<warehouse-id>" \
+  --var="production_service_principal=<sp-application-id>"
 ```
 
 The docs app derives its `/Volumes/<catalog>/<schema>/<volume>` path from the same
@@ -229,6 +254,22 @@ DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NU
 
 Because the schema name carries the PR number **and** the build number, a re-run after a fix
 builds fully isolated from the previous attempt.
+
+**Slim CI.** The production job captures dbt state (`manifest.json`) to the artifacts volume,
+and the CI workflow downloads it to build **only changed models and their descendants**
+(`dbt build -s state:modified+ --defer --state prod_state`), deferring unmodified parents to
+the production relations. If the state download fails (first run, missing permissions), CI
+falls back to a full build.
+
+**Hygiene.** The per-PR teardown drops the ephemeral schema and is *not* allowed to fail
+silently. Cancelled runs can still leak schemas, so a sweep run-operation exists for that:
+
+```bash
+# dry run by default; pass dry_run: false to actually drop
+uv run dbt run-operation drop_stale_ci_schemas \
+  --args '{prefix: dbt_rpw_dbt_databricks_reference_pr, older_than_days: 3, dry_run: false}' \
+  --target ci --profiles-dir .
+```
 
 ---
 

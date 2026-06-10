@@ -37,22 +37,31 @@ models:
       columns: true
 
     # ---- layer-specific configuration ----
+    # `daily` is the production cadence tag: the DAB job runs `dbt build -s tag:daily`
+    # on a daily schedule. Models without it (e.g. managed_iceberg_examples) are
+    # intentionally outside the production DAG.
     staging:
-      +tags: [staging, hourly]
+      +tags: [staging, daily]
       +schema: staging
       +materialized: view
 
     modeled:
-      +tags: [modeled, hourly]
+      +tags: [modeled, daily]
       +schema: modeled
       +materialized: table
       +auto_liquid_cluster: true
 
     marts:
-      +tags: [mart, hourly]
+      +tags: [mart, daily]
       +schema: mart
       +materialized: table
       +auto_liquid_cluster: true
+      # Grants-as-code: in production, consumers get read access to the marts as part
+      # of every run -- no manual GRANTs. Empty list otherwise, which tells dbt to
+      # actively revoke stray grants on dev/CI sandboxes. The condition checks the CLI
+      # var (how the production job injects it) and falls back to the env var.
+      +grants:
+        select: "{{ ['account users'] if var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) == 'production' else [] }}"
 
     managed_iceberg_examples:
       +materialized: table

@@ -2,12 +2,23 @@ resources:
   jobs:
     dbt_production_daily:
       name: rpw-dbt-databricks-reference Production Daily
-      description: Builds the hourly-tagged reference models, captures production state, and regenerates docs.
+      description: Checks source freshness, builds the daily-tagged reference models, captures production state, and regenerates docs.
+      permissions:
+        - group_name: users
+          level: CAN_VIEW
+        # Setting ANY permissions here replaces the grant the app resource would
+        # otherwise add for itself -- so re-grant the docs app's service principal
+        # explicitly (bundle validate warns about exactly this).
+        - service_principal_name: ${resources.apps.dbt_docs.service_principal_client_id}
+          level: CAN_VIEW
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"
         timezone_id: UTC
       tasks:
-        - task_key: dbt_build_hourly
+        # Source freshness runs FIRST and fails the run when system.billing is stale.
+        # The singular correctness tests anchor on max(usage_date) -- a relative check --
+        # so without this absolute check a stalled pipeline could stay green for weeks.
+        - task_key: dbt_source_freshness
           dbt_task:
             project_directory: ..
             source: WORKSPACE
@@ -17,13 +28,28 @@ resources:
             commands:
               - dbt deps
               - >-
-                dbt build -s tag:hourly
+                dbt source freshness
+                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
+          environment_key: dbt
+        - task_key: dbt_build_daily
+          depends_on:
+            - task_key: dbt_source_freshness
+          dbt_task:
+            project_directory: ..
+            source: WORKSPACE
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.production_catalog}
+            schema: ${var.production_schema}
+            commands:
+              - dbt deps
+              - >-
+                dbt build -s tag:daily
                 --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
                 --target-path /Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}/state/latest
           environment_key: dbt
         - task_key: dbt_generate_docs
           depends_on:
-            - task_key: dbt_build_hourly
+            - task_key: dbt_build_daily
           run_if: ALL_DONE
           dbt_task:
             project_directory: ..

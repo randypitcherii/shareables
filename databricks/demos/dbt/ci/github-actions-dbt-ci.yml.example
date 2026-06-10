@@ -9,6 +9,20 @@
 # the `ci_testing` environment, so we just inject a build-scoped schema name. The
 # name carries both the PR number and the run number, so a re-run after a fix
 # builds completely separately from the previous attempt.
+#
+# Slim CI: the production job captures dbt state (manifest.json) to a UC volume.
+# When CI can download it, only changed models and their descendants are built
+# (`state:modified+`), with unmodified parents deferred to production relations
+# (`--defer`). First run / missing state falls back to a full build. The CI
+# service principal needs READ on the artifacts volume and SELECT on the
+# production schemas for deferral to work.
+#
+# Hygiene: the teardown step is NOT allowed to fail silently -- a failed drop is
+# signal that schemas are leaking. Cancelled runs can still leak (the teardown
+# never executes), which is what the `drop_stale_ci_schemas` run-operation is
+# for -- run it on a schedule:
+#   dbt run-operation drop_stale_ci_schemas \
+#     --args '{prefix: dbt_rpw_dbt_databricks_reference_pr, dry_run: false}' --target ci
 # =============================================================================
 name: dbt CI
 
@@ -44,26 +58,50 @@ jobs:
       # DBT_ENV_SECRET_ prefix => dbt masks it in logs and forbids it outside profiles.yml
       DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_CLIENT_SECRET }}
 
+      # --- same credentials, Databricks CLI spelling (for the state download) ---
+      DATABRICKS_HOST: ${{ vars.DBT_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DBT_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_CLIENT_SECRET }}
+
+      # --- production state location (enables Slim CI) ----------------------
+      # /Volumes/<production_catalog>/<production_artifact_schema>/<production_artifact_volume>/state/latest
+      # -- the same path the production DAB job writes its --target-path to.
+      DBT_PROD_STATE_PATH: ${{ vars.DBT_PROD_STATE_PATH || 'dbfs:/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/state/latest' }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
       - name: Install dependencies
         run: |
           uv sync
           uv run dbt deps --profiles-dir .
 
+      - name: Download production state (enables Slim CI)
+        continue-on-error: true
+        run: |
+          databricks fs cp "$DBT_PROD_STATE_PATH/manifest.json" prod_state/manifest.json
+
       - name: Build & test (isolated CI schema)
         run: |
           echo "Building into schema: $DBT_DEFAULT_SCHEMA"
-          uv run dbt build --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+          if [ -f prod_state/manifest.json ]; then
+            echo "Production manifest found -> Slim CI: build changed models + descendants, defer the rest to prod"
+            uv run dbt build -s state:modified+ --defer --state prod_state \
+              --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+          else
+            echo "No production manifest -> full build"
+            uv run dbt build --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+          fi
 
-      # Optional: tear down the ephemeral schema after the PR build.
-      # Requires a `drop_ci_schema` operation/macro, or use the Databricks CLI:
-      #   databricks schemas delete "${DBT_DEFAULT_CATALOG}.${DBT_DEFAULT_SCHEMA}" --force
+      # Tear down the ephemeral schema. No `|| true`: if the drop fails we want a red
+      # step, because silent failures here mean schemas pile up in the catalog.
       - name: Drop ephemeral CI schema
         if: always()
         run: |
-          uv run dbt run-operation drop_schema --args "{schema: $DBT_DEFAULT_SCHEMA}" --target ci --profiles-dir . || true
+          uv run dbt run-operation drop_schema --args "{schema: $DBT_DEFAULT_SCHEMA}" --target ci --profiles-dir .

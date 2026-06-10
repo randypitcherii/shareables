@@ -13,9 +13,14 @@
   system.billing.usage is append-only and continuously updated, so a full rebuild
   every run would be wasteful. Instead:
     * full refresh / first run -> bounded to the last `usage_history_days` days
-    * incremental runs          -> scan only recent usage, with a lookback window so
-                                    late-arriving corrections / restatements get
-                                    re-merged on record_id.
+    * incremental runs          -> scan only recently-INGESTED usage, with a lookback
+                                    window keyed on ingestion_date.
+
+  Why ingestion_date and not usage_date: corrections (record_type RETRACTION /
+  RESTATEMENT) are new rows that carry the ORIGINAL usage_date -- which can be weeks
+  old -- with a fresh ingestion_date. A usage_date lookback would silently miss any
+  correction older than the window; an ingestion_date lookback catches them all.
+  The usage_date filter below is kept purely as a partition-pruning history bound.
 
   Output grain: one row per usage record, enriched with the effective list price and
   `list_cost` (= usage_quantity * effective list price). This is LIST price, NOT the
@@ -31,8 +36,8 @@ with usage as (
     where usage_date >= current_date() - interval {{ history_days }} days
 
     {% if is_incremental() %}
-    and usage_date >= (
-        select coalesce(max(usage_date), date '1900-01-01') - interval {{ lookback_days }} days
+    and ingestion_date >= (
+        select coalesce(max(ingestion_date), date '1900-01-01') - interval {{ lookback_days }} days
         from {{ this }}
     )
     {% endif %}

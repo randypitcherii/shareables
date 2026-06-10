@@ -206,7 +206,7 @@ def _latest_run_summary(client: WorkspaceClient):
         "message": state_message or "",
         "updated_at": updated_at,
         "url": run.run_page_url or "",
-        "logs": _task_run_logs(client, run, "dbt_build_hourly"),
+        "logs": _task_run_logs(client, run, "dbt_build_daily"),
     }
 
 

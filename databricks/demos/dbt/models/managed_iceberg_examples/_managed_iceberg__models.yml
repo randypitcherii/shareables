@@ -1,0 +1,10 @@
+version: 2
+
+# These two models exist purely to demonstrate managed Iceberg table configuration
+# (format-version 2 vs 3). They are intentionally untagged, so they are OUTSIDE the
+# production DAG (`dbt build -s tag:daily` never selects them) and have no data tests.
+models:
+  - name: v2_iceberg_table
+    description: "Demo: managed Iceberg table pinned to format-version 2 via a model-level tblproperties override."
+  - name: v3_iceberg_table
+    description: "Demo: managed Iceberg table using the project default format-version 3."

@@ -2,13 +2,17 @@ version: 2
 
 models:
   - name: cost_daily
-    description: "Daily list cost and usage by cloud -- the headline cost-monitoring rollup."
+    description: "Daily list cost and usage by cloud -- the headline cost-monitoring rollup. Grain: one row per usage_date + cloud + currency_code."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [usage_date, cloud, currency_code]
     columns:
       - name: usage_date
         data_tests:
           - not_null
       - name: list_cost
-        description: "Total daily list cost (not invoiced spend)."
+        description: "Total daily list cost (not invoiced spend), expressed in `currency_code`."
         data_tests:
           - dbt_expectations.expect_column_values_to_be_between:
               arguments:
@@ -18,29 +22,47 @@ models:
                 severity: warn
 
   - name: cost_by_workspace
-    description: "Daily list cost by workspace."
+    description: "Daily list cost by workspace. Grain: one row per workspace_id + usage_date + cloud + currency_code."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [workspace_id, usage_date, cloud, currency_code]
     columns:
       - name: workspace_id
+        description: "Workspace id, or '(account-level)' for usage billed at the account rather than a workspace."
         data_tests:
           - not_null
 
   - name: cost_by_sku
-    description: "Daily list cost by SKU and billing_origin_product."
+    description: "Daily list cost by SKU and billing_origin_product. Grain: one row per sku_name + billing_origin_product + usage_unit + usage_date + cloud + currency_code."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [sku_name, billing_origin_product, usage_unit, usage_date, cloud, currency_code]
     columns:
       - name: sku_name
         data_tests:
           - not_null
 
   - name: cost_by_product
-    description: "Daily list cost by Databricks product (Jobs, SQL, Model Serving, DLT, ...)."
+    description: "Daily list cost by Databricks product (Jobs, SQL, Model Serving, DLT, ...). Grain: one row per billing_origin_product + usage_date + cloud + currency_code."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [billing_origin_product, usage_date, cloud, currency_code]
     columns:
       - name: billing_origin_product
         data_tests:
           - not_null
 
   - name: cost_by_tag
-    description: "Showback: daily list cost attributed to the `Owner` custom tag."
+    description: "Showback: daily list cost attributed to the `Owner` custom tag. Grain: one row per owner + usage_date + cloud + currency_code."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [owner, usage_date, cloud, currency_code]
     columns:
       - name: owner
+        description: "Value of the `Owner` custom tag, or '(untagged)' -- untagged rows are cost you can't yet attribute."
         data_tests:
           - not_null
