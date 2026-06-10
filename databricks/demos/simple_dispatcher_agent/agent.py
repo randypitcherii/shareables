@@ -135,15 +135,38 @@ def setup_tracing(
     queryable from SQL.
     """
     mlflow.langchain.autolog()
-    if experiment_name:
-        kwargs: dict[str, Any] = {}
-        if catalog and schema:
-            from mlflow.entities.trace_location import UnityCatalog
+    if not experiment_name:
+        return
+    if catalog and schema:
+        set_experiment_uc_backed(experiment_name, catalog, schema)
+    else:
+        mlflow.set_experiment(experiment_name)
 
-            kwargs["trace_location"] = UnityCatalog(
-                catalog_name=catalog, schema_name=schema
-            )
-        mlflow.set_experiment(experiment_name, **kwargs)
+
+def set_experiment_uc_backed(experiment_name: str, catalog: str, schema: str) -> None:
+    """Set the experiment with UC-backed trace storage, falling back gracefully.
+
+    A UC trace destination can only be linked to an experiment that has no
+    traces yet. If this experiment already accumulated workspace-managed
+    traces, keep using it unlinked rather than failing the run.
+    """
+    from mlflow.entities.trace_location import UnityCatalog
+
+    try:
+        mlflow.set_experiment(
+            experiment_name,
+            trace_location=UnityCatalog(catalog_name=catalog, schema_name=schema),
+        )
+    except Exception as e:
+        if "already contains traces" not in str(e):
+            raise
+        print(
+            f"Note: experiment '{experiment_name}' already contains traces, and a "
+            "UC trace destination can only be linked to a trace-free experiment. "
+            "Continuing with workspace-managed trace storage; use a fresh "
+            "experiment to get UC-backed traces."
+        )
+        mlflow.set_experiment(experiment_name)
 
 
 # ---------------------------------------------------------------------------

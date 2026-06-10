@@ -372,3 +372,30 @@ class TestTracing:
 
         fake_mlflow.langchain.autolog.assert_called_once()
         fake_mlflow.set_experiment.assert_not_called()
+
+    def test_setup_tracing_falls_back_when_experiment_has_traces(self, monkeypatch, capsys):
+        """A UC trace destination can only link to a trace-free experiment.
+        If the link is rejected, fall back to the plain experiment instead of
+        crashing the run."""
+        import agent as agent_module
+
+        fake_mlflow = MagicMock()
+        fake_mlflow.set_experiment.side_effect = [
+            Exception(
+                "BAD_REQUEST: Experiment 123 already contains traces. A UC Trace "
+                "Destination can only be linked to an Experiment that does not "
+                "already contain any traces."
+            ),
+            None,
+        ]
+        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
+
+        agent_module.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
+
+        # Second call retried without the UC trace_location.
+        assert fake_mlflow.set_experiment.call_count == 2
+        retry_args, retry_kwargs = fake_mlflow.set_experiment.call_args
+        assert retry_args[0] == "/Users/x/exp"
+        assert "trace_location" not in retry_kwargs
+        # And the user was told why.
+        assert "already contains traces" in capsys.readouterr().out

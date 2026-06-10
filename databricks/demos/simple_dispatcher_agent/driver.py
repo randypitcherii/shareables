@@ -106,12 +106,9 @@ def run(args) -> str:
     # supplies the credentials; the declared resources below grant access.
     # UC-backed tracing: the experiment's traces land in Delta tables in the
     # target schema (created above) instead of workspace-managed storage.
-    from mlflow.entities.trace_location import UnityCatalog
+    from agent import set_experiment_uc_backed
 
-    mlflow.set_experiment(
-        args.experiment,
-        trace_location=UnityCatalog(catalog_name=catalog, schema_name=schema),
-    )
+    set_experiment_uc_backed(args.experiment, catalog, schema)
 
     web_search_fqn = f"{catalog}.{schema}.{FUNCTION_NAME}"
     resources = [
