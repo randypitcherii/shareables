@@ -26,6 +26,7 @@ spark_python_task and is also importable/readable as a normal module.
 from __future__ import annotations
 
 import argparse
+import os
 
 import mlflow
 from mlflow.models.resources import (
@@ -39,6 +40,27 @@ from register_web_search import FUNCTION_NAME, register_web_search
 MODEL_NAME = "simple_dispatcher_agent"
 
 
+def log_model_kwargs(resources: list | None = None) -> dict:
+    """The exact kwargs driver.py logs the model with.
+
+    Shared with the packaging test so "what we test" and "what we deploy"
+    cannot drift. code_paths must carry agent.py: serving_agent.py imports it,
+    and without it the serving container fails with ModuleNotFoundError.
+    """
+    return {
+        "name": MODEL_NAME,
+        "python_model": "serving_agent.py",
+        "code_paths": ["agent.py"],
+        "resources": resources or [],
+        "pip_requirements": [
+            "databricks-langchain",
+            "langchain>=1.3",
+            "mlflow>=3.0",
+            "databricks-agents",
+        ],
+    }
+
+
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Deploy the simple dispatcher agent.")
     parser.add_argument("--catalog", required=True)
@@ -50,12 +72,33 @@ def _parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _agent_environment(args) -> dict[str, str]:
+    """The env vars the dispatcher needs, derived from job parameters.
+
+    Set locally before log_model (mlflow validates ResponsesAgent models by
+    running predict on an input example, which builds the dispatcher) and
+    passed to agents.deploy so the serving container can build it too.
+    """
+    return {
+        "GENIE_SPACE_ID": args.genie_space_id,
+        "BASE_CATALOG": args.catalog,
+        "BASE_SCHEMA": args.schema,
+        "LLM_ENDPOINT": args.llm_endpoint,
+    }
+
+
 def run(args) -> str:
     """Execute the full deploy flow. Returns the UC model name."""
     catalog, schema = args.catalog, args.schema
 
     # 1. Register / refresh the web_search UDF in the target schema.
     register_web_search(catalog=catalog, schema=schema)
+
+    # mlflow's log_model runs a validation predict on ResponsesAgent models,
+    # which builds the dispatcher from these env vars — and makes one real
+    # agent invocation, so a broken config fails the deploy job here instead
+    # of at first user request.
+    os.environ.update(_agent_environment(args))
 
     # serving_agent.py reads its config from the environment at load/serve time,
     # so the deployed model resolves GENIE_SPACE_ID / BASE_CATALOG / BASE_SCHEMA /
@@ -76,17 +119,7 @@ def run(args) -> str:
     # 2. Code-based logging: log serving_agent.py directly (it calls
     #    mlflow.models.set_model at import).
     with mlflow.start_run(run_name="log_dispatcher"):
-        logged = mlflow.pyfunc.log_model(
-            name=MODEL_NAME,
-            python_model="serving_agent.py",
-            resources=resources,
-            pip_requirements=[
-                "databricks-langchain",
-                "langchain>=1.3",
-                "mlflow>=3.0",
-                "databricks-agents",
-            ],
-        )
+        logged = mlflow.pyfunc.log_model(**log_model_kwargs(resources))
 
         # 3. Register the model version to Unity Catalog.
         registered = mlflow.register_model(
@@ -103,6 +136,7 @@ def run(args) -> str:
             uc_model_name,
             registered.version,
             scale_to_zero_enabled=True,
+            environment_vars=_agent_environment(args),
         )
         print(f"Deployed {uc_model_name} v{registered.version} (scale-to-zero).")
     else:

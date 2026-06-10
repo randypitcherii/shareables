@@ -274,3 +274,69 @@ class TestServingWrapper:
         # Response carries the answer somewhere in its output items.
         text_blob = serving_agent._response_text(response)
         assert "the dispatched answer" in text_blob
+
+
+# ---------------------------------------------------------------------------
+# Model packaging (the deployed-serving path)
+# ---------------------------------------------------------------------------
+
+
+class TestModelPackaging:
+    def test_logged_model_loads_outside_repo(self, tmp_path, monkeypatch):
+        """Log the model exactly as driver.py does, then load it from a clean
+        subprocess cwd'd outside the repo.
+
+        serving_agent.py imports `agent`, so the logged artifact must bundle
+        agent.py (code_paths) — otherwise the model only loads when the repo
+        happens to be on sys.path, and the deployed serving container crashes
+        with ModuleNotFoundError.
+
+        mlflow validates ResponsesAgent models at log time by running predict
+        on an input example; the env vars + patched dispatcher below let that
+        validation run offline (the code file executed by log_model resolves
+        `agent` from sys.modules, so the patch reaches it).
+        """
+        import subprocess
+        import sys
+
+        from langchain_core.messages import AIMessage
+        import mlflow
+
+        import agent as agent_module
+        import driver
+
+        monkeypatch.setenv("GENIE_SPACE_ID", "space-test")
+        monkeypatch.setenv("BASE_CATALOG", "cat")
+        monkeypatch.setenv("BASE_SCHEMA", "sch")
+        fake_dispatcher = MagicMock()
+        fake_dispatcher.invoke.return_value = {
+            "messages": [AIMessage(content="validation answer")]
+        }
+        monkeypatch.setattr(
+            agent_module, "build_dispatcher_from_config", lambda cfg: fake_dispatcher
+        )
+
+        mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+        with mlflow.start_run():
+            logged = mlflow.pyfunc.log_model(**driver.log_model_kwargs())
+
+        probe = (
+            "import mlflow; "
+            f"mlflow.pyfunc.load_model({logged.model_uri!r}); "
+            "print('LOADED')"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=tmp_path,  # outside the repo: no accidental `import agent`
+            env={
+                k: v
+                for k, v in __import__("os").environ.items()
+                if k not in ("PYTHONPATH",)
+            },
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        assert "LOADED" in result.stdout, (
+            f"model failed to load in a clean cwd:\n{result.stderr[-2000:]}"
+        )
