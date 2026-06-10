@@ -124,9 +124,14 @@ databricks bundle deploy -t dev \
 databricks bundle run deploy_dispatcher -t dev \
   --var base_catalog=<catalog> --var genie_space_id=<space-id>
 
-# Production (also creates/refreshes the scale-to-zero serving endpoint)
-databricks bundle deploy -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id>
-databricks bundle run deploy_dispatcher -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id>
+# Production (also creates/refreshes the scale-to-zero serving endpoint).
+# genie_tables: comma-separated FQNs of the tables your Genie space queries —
+# the deployed endpoint's credential is scoped to declared resources only,
+# so without this the Genie route fails with table-level PermissionDenied.
+databricks bundle deploy -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id> \
+  --var genie_tables=<catalog>.<schema>.<table>[,...]
+databricks bundle run deploy_dispatcher -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id> \
+  --var genie_tables=<catalog>.<schema>.<table>[,...]
 ```
 
 **Targets** (same env-isolation pattern as `databricks_gsheets_reader`):
@@ -136,6 +141,15 @@ databricks bundle run deploy_dispatcher -t prod --var base_catalog=<catalog> --v
 | `dev` (default) | development | `${base_schema}_<short_name>` | false | Your personal sandbox |
 | `test` | development | `${base_schema}_<pr_number>` | false | Ephemeral per-PR; dev mode keeps schedules/guardrails off |
 | `prod` | production | `${base_schema}` | true | Clean schema, deploys the endpoint |
+
+**How the deployed endpoint authenticates** (learned the hard way, live): the
+serving container's credential is scoped to *exactly* the resources declared
+at `log_model` time — the Genie space, the SQL warehouse Genie executes on
+(auto-derived from the space, no config needed), the `web_search` function,
+the LLM endpoint, and the Genie space's tables (`genie_tables`). UC grants to
+the serving principal are **not** a substitute; they are silently ineffective
+for this scoped credential. If Genie answers with a permissions apology,
+declare the missing table and redeploy.
 
 The MLflow experiment path follows the same suffix convention:
 `/Users/<you>/simple_dispatcher_agent_dev_<short_name>` in dev,
@@ -227,6 +241,9 @@ picks it up from the docstring.
 | `web_search(...)` errors after registration | The compute needs internet egress to `mcp.exa.ai`. Use serverless or allow outbound HTTPS to that host. |
 | `RESOURCE_DOES_NOT_EXIST` for the function | The UDF isn't registered in `{BASE_CATALOG}.{BASE_SCHEMA}` yet. Run the bundle job (or `register_web_search.py` in a notebook). |
 | `ImportError: cannot import name 'ExecutionInfo' from 'langgraph.runtime'` | A stale resolve pulled `langchain` 1.2.x + `langgraph` 1.0.x. The pin is `langchain>=1.3`; rerun `uv sync` to pick a matching `langgraph<1.3`. |
+| Deployed endpoint: `not authorized to use or monitor this SQL Endpoint` | Old model version logged before the warehouse was a declared resource. Rerun the deploy job — the driver derives the warehouse from the Genie space automatically. |
+| Deployed endpoint: Genie apologizes about missing `SELECT`/`USE` on a table | The serving credential only reaches declared resources. Add the table(s) to `--var genie_tables=...` and rerun the deploy job. UC grants to the serving principal won't help. |
+| `databricks serving-endpoints query` returns only `{"id": ..., "object": "response"}` | CLI display quirk: it drops the ResponsesAgent `output` field. Query via `databricks api post /serving-endpoints/<name>/invocations --json '...'` to see the full response. |
 
 ## Engineering Notes
 
