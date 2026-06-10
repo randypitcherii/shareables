@@ -9,6 +9,7 @@ with tagged as (
         coalesce(custom_tags['Owner'], '(untagged)') as owner,
         usage_date,
         cloud,
+        currency_code,
         usage_quantity,
         list_cost
     from {{ ref('int_usage_priced') }}
@@ -18,7 +19,8 @@ select
     owner,
     usage_date,
     cloud,
+    currency_code,
     sum(usage_quantity) as usage_quantity,
     sum(list_cost)      as list_cost
 from tagged
-group by owner, usage_date, cloud
+group by owner, usage_date, cloud, currency_code

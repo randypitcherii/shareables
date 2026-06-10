@@ -94,16 +94,24 @@ model never collide.
   (`DBT_DEV_USER` → OS `USER` → fallback) instead.
 - **In this repo:** `macros/config/get_clean_username.sql`.
 
-### 6. Every PR gets a disposable, fully-isolated CI schema
+### 6. Every PR gets a disposable, fully-isolated CI schema — and builds only what changed
 CI sets `default_schema` to a name carrying both the PR number and the build number, so a
 re-run after a fix builds completely separately from the previous attempt, and teardown is
-a single `drop schema cascade`.
+a single `drop schema cascade`. Production state captured to a UC volume pays for itself
+here: CI defers to it (`dbt build -s state:modified+ --defer --state ...`) so a PR builds
+only changed models and their descendants, falling back to a full build when state is
+unavailable.
 
 - **In this repo:** `ci/github-actions-dbt-ci.yml.example` + the `drop_schema` run-operation.
 
 ### 7. Least privilege, per environment
 Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated M2M service principals,
-credentials only ever in the runtime's secret store. No shared "god" token.
+credentials only ever in the runtime's secret store. No shared "god" token. Production
+deployments must not run as the deploying human either: the DAB's prod target sets
+`run_as` to a dedicated service principal and deploys to a shared workspace path, so
+production survives people changing teams.
+
+- **In this repo:** `run_as` + `/Workspace/Shared` root path in `databricks.yml` (prod target).
 
 ### 8. Raw/source data is read-only and shared across environments
 Every environment reads the SAME upstream sources; only the outputs are namespaced. Dev
@@ -127,13 +135,20 @@ fear.
 
 ### 11. Automate warehouse hygiene as run-operations
 Dropping stale CI schemas, empty schemas, old relations — make these `dbt run-operation`
-macros, not manual cleanup.
+macros, not manual cleanup. Per-PR teardown must fail loudly (a swallowed drop means
+schemas silently pile up), and a scheduled sweep catches what teardown misses (cancelled
+runs, runner deaths).
 
-- **In this repo:** `macros/operations/drop_schema.sql`.
+- **In this repo:** `macros/operations/drop_schema.sql` (per-PR teardown) +
+  `macros/operations/drop_stale_ci_schemas.sql` (scheduled sweep, dry-run by default).
 
-### 12. Version-control everything; let dbt push docs + lineage into Unity Catalog
+### 12. Version-control everything; let dbt push docs + lineage + grants into Unity Catalog
 All SQL in git; `persist_docs` pushes model/column descriptions into UC so the catalog is
-self-documenting. (Grants-as-code via `+grants`/post-hooks is a natural next addition.)
+self-documenting, and `+grants` makes consumer access part of every production run instead
+of a manual GRANT someone forgets.
+
+- **In this repo:** `+grants` on the marts layer in `dbt_project.yml` — `SELECT` to
+  `account users` in production, an empty (revoke-stray-grants) list everywhere else.
 
 ---
 

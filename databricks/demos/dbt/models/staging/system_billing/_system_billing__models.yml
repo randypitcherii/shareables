@@ -1,0 +1,35 @@
+version: 2
+
+# Staging models are thin views over the FULL system tables, so data tests here would
+# scan unbounded history on every run. Descriptions live here (and are pushed into
+# Unity Catalog via persist_docs); data tests live downstream on the date-bounded
+# incremental model `int_usage_priced`.
+models:
+  - name: stg_billing__usage
+    description: >
+      1:1 cleaned view over system.billing.usage: renames nothing, flattens the
+      usage_metadata / identity_metadata / product_features structs into columns,
+      and keeps record_type so corrections (RETRACTION / RESTATEMENT) net out when
+      usage_quantity is summed.
+    columns:
+      - name: record_id
+        description: "Unique ID for this usage record."
+      - name: record_type
+        description: "ORIGINAL | RETRACTION | RESTATEMENT. Corrections are new rows carrying the original usage_date with a fresh ingestion_date."
+      - name: usage_quantity
+        description: "Number of units (e.g. DBUs) consumed for this record. Sum across record types to net out corrections."
+      - name: ingestion_date
+        description: "Date the record landed in system.billing.usage. The incremental lookback in int_usage_priced keys on this, NOT usage_date, so late corrections are never missed."
+
+  - name: stg_billing__list_prices
+    description: >
+      1:1 cleaned view over system.billing.list_prices: unpacks the pricing struct into
+      list_price and effective_list_price. Use effective_list_price downstream -- it is
+      the value Databricks documents for calculating cost.
+    columns:
+      - name: effective_list_price
+        description: "pricing.effective_list.default: resolves list + promotional pricing; the documented value for cost calculation."
+      - name: price_start_time
+        description: "Start of the effective-dated price window (inclusive)."
+      - name: price_end_time
+        description: "End of the effective-dated price window (exclusive); NULL for the current price."

@@ -21,6 +21,14 @@ variables:
     description: Serverless or Pro SQL warehouse ID used by the dbt workflow.
     lookup:
       warehouse: dbt_wh
+  production_service_principal:
+    description: >-
+      Application ID of the service principal that owns and runs production (looked up
+      by display name). Production must NOT run as the deploying human -- least
+      privilege, and deploys survive people leaving. Override at deploy time if your
+      SP has a different name: --var="production_service_principal=<application-id>".
+    lookup:
+      service_principal: dbt_prod_sp
 
 targets:
   dev:
@@ -30,6 +38,9 @@ targets:
       production_catalog: analytics_dev
       production_schema: dbt_${workspace.current_user.short_name}
       production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
+      # dev runs as the developer; short-circuit the SP lookup so dev deploys
+      # don't require the production service principal to exist.
+      production_service_principal: unused-in-dev
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     presets:
@@ -39,8 +50,12 @@ targets:
 
   prod:
     mode: production
+    # Production runs as a dedicated M2M service principal, never the deploying user,
+    # and deploys to a shared path so it isn't coupled to anyone's home directory.
+    run_as:
+      service_principal_name: ${var.production_service_principal}
     workspace:
-      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
     presets:
       tags:
         env: prod
