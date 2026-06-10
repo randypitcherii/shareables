@@ -280,7 +280,7 @@ serving container can rebuild the dispatcher.
    App scaffolding. A plain serving-endpoint resource doesn't do that setup.
 
 So the job logs the model with its resources and calls `agents.deploy(...,
-scale_to_zero_enabled=True)` itself.
+scale_to_zero=True)` itself.
 
 **The `web_search` UDF authoring constraints** are inherited from
 `databricks/demos/genie_web_search`: the `CREATE FUNCTION` SQL is built with

@@ -173,10 +173,12 @@ def run(args) -> str:
     if str(args.deploy_endpoint).strip().lower() == "true":
         from databricks import agents
 
+        # NB: the parameter is `scale_to_zero` — `scale_to_zero_enabled` is
+        # silently swallowed by **kwargs and the endpoint stays always-on.
         agents.deploy(
             uc_model_name,
             registered.version,
-            scale_to_zero_enabled=True,
+            scale_to_zero=True,
             environment_vars=_agent_environment(args),
         )
         print(f"Deployed {uc_model_name} v{registered.version} (scale-to-zero).")
