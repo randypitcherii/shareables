@@ -204,6 +204,8 @@ def register_web_search(catalog="", schema="", spark_session=None):
 
             active_spark = SparkSession.builder.getOrCreate()
 
+    # The dev/test schemas are per-user/per-PR and won't pre-exist.
+    active_spark.sql("CREATE SCHEMA IF NOT EXISTS " + catalog + "." + schema)
     active_spark.sql(_build_create_sql(fqn))
     print("Registered " + fqn)
     return fqn
