@@ -171,6 +171,12 @@ that case set `MLFLOW_EXPERIMENT` to a path you can write to (e.g.
 `/Users/<you@example.com>/simple_dispatcher_agent`) — a root-level path only
 works with a local tracking server.
 
+Traces are **UC-backed**: when an experiment is set with a UC namespace
+(`setup_tracing` locally, the deploy job in the bundle), its traces are stored
+in Delta tables in `{BASE_CATALOG}.{BASE_SCHEMA}` (table prefix = experiment
+ID) rather than workspace-managed MLflow storage — no 100k-trace cap,
+UC governance, and queryable from SQL/notebooks/dashboards.
+
 ## Adding a third tool
 
 The whole point of a dispatcher is that the next tool is just one more entry in

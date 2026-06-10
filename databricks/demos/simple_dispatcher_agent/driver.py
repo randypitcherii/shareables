@@ -104,7 +104,14 @@ def run(args) -> str:
     # so the deployed model resolves GENIE_SPACE_ID / BASE_CATALOG / BASE_SCHEMA /
     # LLM_ENDPOINT the same way agent.py does. The endpoint's runtime identity
     # supplies the credentials; the declared resources below grant access.
-    mlflow.set_experiment(args.experiment)
+    # UC-backed tracing: the experiment's traces land in Delta tables in the
+    # target schema (created above) instead of workspace-managed storage.
+    from mlflow.entities.trace_location import UnityCatalog
+
+    mlflow.set_experiment(
+        args.experiment,
+        trace_location=UnityCatalog(catalog_name=catalog, schema_name=schema),
+    )
 
     web_search_fqn = f"{catalog}.{schema}.{FUNCTION_NAME}"
     resources = [

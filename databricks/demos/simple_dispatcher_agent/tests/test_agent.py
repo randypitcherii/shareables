@@ -337,3 +337,38 @@ class TestModelPackaging:
         assert "LOADED" in result.stdout, (
             f"model failed to load in a clean cwd:\n{result.stderr[-2000:]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tracing setup
+# ---------------------------------------------------------------------------
+
+
+class TestTracing:
+    def test_setup_tracing_links_uc_trace_location(self, monkeypatch):
+        """When an experiment and a UC namespace are configured, traces are
+        stored UC-backed: set_experiment gets a UnityCatalog trace_location."""
+        import agent as agent_module
+
+        fake_mlflow = MagicMock()
+        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
+
+        agent_module.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
+
+        fake_mlflow.langchain.autolog.assert_called_once()
+        args, kwargs = fake_mlflow.set_experiment.call_args
+        assert args[0] == "/Users/x/exp"
+        loc = kwargs["trace_location"]
+        assert loc.catalog_name == "cat"
+        assert loc.schema_name == "sch"
+
+    def test_setup_tracing_without_experiment_only_autologs(self, monkeypatch):
+        import agent as agent_module
+
+        fake_mlflow = MagicMock()
+        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
+
+        agent_module.setup_tracing(None, catalog="cat", schema="sch")
+
+        fake_mlflow.langchain.autolog.assert_called_once()
+        fake_mlflow.set_experiment.assert_not_called()

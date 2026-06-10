@@ -122,11 +122,28 @@ def load_config() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def setup_tracing(experiment_name: str | None = None) -> None:
-    """Enable MLflow LangChain autologging and (optionally) set the experiment."""
+def setup_tracing(
+    experiment_name: str | None = None,
+    catalog: str | None = None,
+    schema: str | None = None,
+) -> None:
+    """Enable MLflow LangChain autologging and (optionally) set the experiment.
+
+    When a UC namespace is provided alongside the experiment, the experiment's
+    traces are stored UC-backed (Delta tables in {catalog}.{schema}) instead of
+    workspace-managed MLflow storage — unlimited retention, governable,
+    queryable from SQL.
+    """
     mlflow.langchain.autolog()
     if experiment_name:
-        mlflow.set_experiment(experiment_name)
+        kwargs: dict[str, Any] = {}
+        if catalog and schema:
+            from mlflow.entities.trace_location import UnityCatalog
+
+            kwargs["trace_location"] = UnityCatalog(
+                catalog_name=catalog, schema_name=schema
+            )
+        mlflow.set_experiment(experiment_name, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +235,9 @@ def build_dispatcher_from_config(cfg: dict[str, str]) -> Any:
 
 def main(question: str) -> None:
     cfg = load_config()
-    setup_tracing(cfg["mlflow_experiment"] or None)
+    setup_tracing(
+        cfg["mlflow_experiment"] or None, cfg["base_catalog"], cfg["base_schema"]
+    )
 
     dispatcher = build_dispatcher_from_config(cfg)
     result = dispatcher.invoke({"messages": [{"role": "user", "content": question}]})
