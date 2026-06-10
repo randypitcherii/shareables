@@ -423,3 +423,21 @@ class TestModelResources:
         )
         warehouses = [r for r in resources if isinstance(r, DatabricksSQLWarehouse)]
         assert warehouses, "DatabricksSQLWarehouse missing from declared resources"
+
+    def test_resources_include_genie_tables(self):
+        """The serving credential is scoped to declared resources only, so the
+        tables the Genie space queries must be declared too (live prod query
+        failed with table-level PermissionDenied without them)."""
+        from mlflow.models.resources import DatabricksTable
+
+        import driver
+
+        resources = driver.model_resources(
+            genie_space_id="space-1",
+            web_search_fqn="cat.sch.web_search",
+            llm_endpoint="databricks-claude-sonnet-4-6",
+            warehouse_id="wh-123",
+            genie_tables=["cat.data.spend", "cat.data.usage"],
+        )
+        tables = [r for r in resources if isinstance(r, DatabricksTable)]
+        assert len(tables) == 2

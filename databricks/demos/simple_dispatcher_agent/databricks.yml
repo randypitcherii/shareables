@@ -18,6 +18,12 @@ variables:
   genie_space_id:
     description: Databricks Genie space ID the dispatcher routes structured-data questions to.
     default: ""
+  genie_tables:
+    description: >
+      Comma-separated fully-qualified tables the Genie space queries. Declared
+      as serving resources so the deployed endpoint's scoped credential can
+      read them (UC grants to the serving principal are not a substitute).
+    default: ""
   llm_endpoint:
     description: Databricks chat model serving endpoint backing the dispatcher.
     default: databricks-claude-sonnet-4-6
@@ -62,6 +68,8 @@ resources:
               - "${var.target_experiment}"
               - "--deploy-endpoint"
               - "${var.deploy_endpoint}"
+              - "--genie-tables"
+              - "${var.genie_tables}"
           environment_key: default
       environments:
         - environment_key: default

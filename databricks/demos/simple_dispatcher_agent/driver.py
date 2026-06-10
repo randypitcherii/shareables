@@ -34,6 +34,7 @@ from mlflow.models.resources import (
     DatabricksGenieSpace,
     DatabricksServingEndpoint,
     DatabricksSQLWarehouse,
+    DatabricksTable,
 )
 
 from register_web_search import FUNCTION_NAME, register_web_search
@@ -70,19 +71,32 @@ def _parse_args(argv=None):
     parser.add_argument("--llm-endpoint", required=True, dest="llm_endpoint")
     parser.add_argument("--experiment", required=True)
     parser.add_argument("--deploy-endpoint", default="false", dest="deploy_endpoint")
+    parser.add_argument(
+        "--genie-tables",
+        default="",
+        dest="genie_tables",
+        help="Comma-separated fully-qualified tables the Genie space queries "
+        "(declared as serving resources for auth passthrough).",
+    )
     return parser.parse_args(argv)
 
 
-def model_resources(genie_space_id, web_search_fqn, llm_endpoint, warehouse_id):
+def model_resources(
+    genie_space_id, web_search_fqn, llm_endpoint, warehouse_id, genie_tables=()
+):
     """Everything the serving endpoint's identity needs access to.
 
-    Declared at log time so agents.deploy can set up auth passthrough.
+    Declared at log time so agents.deploy can set up auth passthrough. The
+    serving credential is scoped to exactly these resources — UC grants to the
+    serving principal are not a substitute — so the tables the Genie space
+    queries must be declared alongside the space and its warehouse.
     """
     return [
         DatabricksGenieSpace(genie_space_id=genie_space_id),
         DatabricksSQLWarehouse(warehouse_id=warehouse_id),
         DatabricksFunction(function_name=web_search_fqn),
         DatabricksServingEndpoint(endpoint_name=llm_endpoint),
+        *[DatabricksTable(table_name=t) for t in genie_tables],
     ]
 
 
@@ -137,6 +151,7 @@ def run(args) -> str:
         web_search_fqn=web_search_fqn,
         llm_endpoint=args.llm_endpoint,
         warehouse_id=warehouse_id,
+        genie_tables=[t.strip() for t in args.genie_tables.split(",") if t.strip()],
     )
 
     uc_model_name = f"{catalog}.{schema}.{MODEL_NAME}"
