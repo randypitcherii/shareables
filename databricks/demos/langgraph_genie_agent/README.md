@@ -81,7 +81,10 @@ trace that shows the assistant and Genie tool spans.
 
 If your workspace is configured as the MLflow tracking server
 (`MLFLOW_TRACKING_URI=databricks`), traces appear directly in the Databricks
-Experiments UI under the experiment path.
+Experiments UI under the experiment path. In that case set `MLFLOW_EXPERIMENT`
+to a workspace path you can write to, e.g.
+`/Users/<you@example.com>/langgraph-genie-agent` — the default root-level path
+only works with a local tracking server.
 
 ## How It Works
 
@@ -122,6 +125,8 @@ User question
 | `ValueError: Missing required environment variable(s): LLM_ENDPOINT` | Set `export LLM_ENDPOINT="<endpoint>"` |
 | `databricks.sdk.errors.PermissionDenied` | Check that your PAT or CLI profile has access to the Genie space |
 | `RESOURCE_DOES_NOT_EXIST` from the serving endpoint | Verify `LLM_ENDPOINT` matches the exact name in your workspace |
+| `401: Credential was not sent or was of an unsupported type` plus a warning that two profiles match the same host | Multiple `~/.databrickscfg` profiles point at one workspace; disambiguate with `export DATABRICKS_CONFIG_PROFILE=<profile>` |
+| Experiment creation fails with `MLFLOW_TRACKING_URI=databricks` | Set `MLFLOW_EXPERIMENT` to a writable workspace path like `/Users/<you@example.com>/langgraph-genie-agent` |
 | `uv sync` fails to reach pypi.org | On Databricks-networked machines, set `UV_INDEX_URL=https://pypi-proxy.dev.databricks.com/simple/` |
 | Empty or truncated Genie answer | The Genie space may need more context; try a more specific question |
 | MLflow traces not appearing | Check `MLFLOW_TRACKING_URI` points to your server; confirm experiment exists |
