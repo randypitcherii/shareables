@@ -1,0 +1,33 @@
+[project]
+name = "simple-dispatcher-agent"
+version = "0.1.0"
+description = "A tiny dispatcher agent that routes questions to a Genie space or a web_search UC function"
+# databricks-agents pulls transitive deps that only ship binary wheels for the
+# Databricks runtime interpreters (3.11/3.12). 3.13+ falls back to building
+# `whenever` from sdist, which needs a Rust toolchain. Cap to a known-good band.
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "databricks-langchain>=0.20.0",
+    # langchain 1.3+ pins langgraph<1.3 and matches create_agent's import of
+    # ExecutionInfo from langgraph.runtime. Older 1.2.x lets the resolver drop
+    # to langgraph 1.0.x, which lacks that symbol and breaks `create_agent`.
+    "langchain>=1.3",
+    "mlflow>=3.0",
+    "databricks-agents>=1.0",
+]
+
+# No [build-system]: this project ships runnable scripts, not a wheel.
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+# agent.py / serving_agent.py live at the project root, not under a package,
+# so tests import them as top-level modules.
+pythonpath = ["."]

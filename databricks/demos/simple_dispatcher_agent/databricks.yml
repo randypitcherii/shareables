@@ -1,0 +1,113 @@
+bundle:
+  name: simple_dispatcher_agent
+
+workspace:
+  profile: DEFAULT
+
+variables:
+  base_catalog:
+    description: Catalog hosting the web_search UDF and the registered agent model.
+    default: your_catalog
+  base_schema:
+    description: >
+      Schema base name.
+      - dev: a per-user short name is appended (`_<short_name>`).
+      - test: a PR number is appended (`_<pr_number>`).
+      - prod: used unchanged.
+    default: simple_dispatcher
+  genie_space_id:
+    description: Databricks Genie space ID the dispatcher routes structured-data questions to.
+    default: ""
+  llm_endpoint:
+    description: Databricks chat model serving endpoint backing the dispatcher.
+    default: databricks-claude-sonnet-4-6
+  pr_number:
+    description: PR number suffix for the `test` target (CI only).
+    default: "0"
+  # Per-target derived values (set in each target's `variables` block).
+  target_schema:
+    description: Fully-resolved schema for the active target.
+  target_experiment:
+    description: MLflow experiment path for the active target.
+  deploy_endpoint:
+    description: Whether the deploy job should also create/refresh a serving endpoint.
+    default: "false"
+
+sync:
+  include:
+    - "agent.py"
+    - "serving_agent.py"
+    - "register_web_search.py"
+    - "driver.py"
+
+resources:
+  jobs:
+    deploy_dispatcher:
+      # No schedule: this is a deploy-on-demand job, run via `databricks bundle run`.
+      name: "Deploy Simple Dispatcher Agent"
+      tasks:
+        - task_key: deploy
+          spark_python_task:
+            python_file: ./driver.py
+            parameters:
+              - "--catalog"
+              - "${var.base_catalog}"
+              - "--schema"
+              - "${var.target_schema}"
+              - "--genie-space-id"
+              - "${var.genie_space_id}"
+              - "--llm-endpoint"
+              - "${var.llm_endpoint}"
+              - "--experiment"
+              - "${var.target_experiment}"
+              - "--deploy-endpoint"
+              - "${var.deploy_endpoint}"
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - databricks-langchain
+              - langchain>=1.3
+              - mlflow>=3.0
+              - databricks-agents
+
+targets:
+  dev:
+    default: true
+    mode: development
+    variables:
+      target_schema: "${var.base_schema}_${workspace.current_user.short_name}"
+      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_dev_${workspace.current_user.short_name}"
+      deploy_endpoint: "false"
+    workspace:
+      root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}
+    presets:
+      name_prefix: "[DEV - ${workspace.current_user.userName}] "
+
+  test:
+    # Development mode on purpose: it keeps schedules off (there are none here,
+    # but it also avoids prod-mode guardrails for ephemeral PR deploys).
+    mode: development
+    variables:
+      target_schema: "${var.base_schema}_${var.pr_number}"
+      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_test_${var.pr_number}"
+      deploy_endpoint: "false"
+    workspace:
+      root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}/pr_${var.pr_number}
+    presets:
+      # `mode: development` requires the prefix to carry the user's short_name
+      # for uniqueness, so the bare "[TEST] " the spec asked for won't validate.
+      name_prefix: "[TEST - ${workspace.current_user.short_name}] "
+
+  prod:
+    mode: production
+    variables:
+      target_schema: "${var.base_schema}"
+      target_experiment: "/Workspace/deployments/${bundle.name}/${bundle.name}_prod"
+      deploy_endpoint: "true"
+    workspace:
+      root_path: /Workspace/deployments/${bundle.name}
+    presets:
+      name_prefix: "[PROD 🏋️] "
