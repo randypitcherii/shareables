@@ -33,6 +33,7 @@ from mlflow.models.resources import (
     DatabricksFunction,
     DatabricksGenieSpace,
     DatabricksServingEndpoint,
+    DatabricksSQLWarehouse,
 )
 
 from register_web_search import FUNCTION_NAME, register_web_search
@@ -70,6 +71,19 @@ def _parse_args(argv=None):
     parser.add_argument("--experiment", required=True)
     parser.add_argument("--deploy-endpoint", default="false", dest="deploy_endpoint")
     return parser.parse_args(argv)
+
+
+def model_resources(genie_space_id, web_search_fqn, llm_endpoint, warehouse_id):
+    """Everything the serving endpoint's identity needs access to.
+
+    Declared at log time so agents.deploy can set up auth passthrough.
+    """
+    return [
+        DatabricksGenieSpace(genie_space_id=genie_space_id),
+        DatabricksSQLWarehouse(warehouse_id=warehouse_id),
+        DatabricksFunction(function_name=web_search_fqn),
+        DatabricksServingEndpoint(endpoint_name=llm_endpoint),
+    ]
 
 
 def _agent_environment(args) -> dict[str, str]:
@@ -111,11 +125,19 @@ def run(args) -> str:
     set_experiment_uc_backed(args.experiment, catalog, schema)
 
     web_search_fqn = f"{catalog}.{schema}.{FUNCTION_NAME}"
-    resources = [
-        DatabricksGenieSpace(genie_space_id=args.genie_space_id),
-        DatabricksFunction(function_name=web_search_fqn),
-        DatabricksServingEndpoint(endpoint_name=args.llm_endpoint),
-    ]
+
+    # The Genie space resource does NOT propagate access to the SQL warehouse
+    # Genie executes on — the warehouse must be declared in its own right, so
+    # derive it from the space instead of asking for more config.
+    from databricks.sdk import WorkspaceClient
+
+    warehouse_id = WorkspaceClient().genie.get_space(args.genie_space_id).warehouse_id
+    resources = model_resources(
+        genie_space_id=args.genie_space_id,
+        web_search_fqn=web_search_fqn,
+        llm_endpoint=args.llm_endpoint,
+        warehouse_id=warehouse_id,
+    )
 
     uc_model_name = f"{catalog}.{schema}.{MODEL_NAME}"
     mlflow.set_registry_uri("databricks-uc")

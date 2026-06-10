@@ -399,3 +399,27 @@ class TestTracing:
         assert "trace_location" not in retry_kwargs
         # And the user was told why.
         assert "already contains traces" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Declared model resources (auth passthrough for the serving endpoint)
+# ---------------------------------------------------------------------------
+
+
+class TestModelResources:
+    def test_resources_include_genie_warehouse(self):
+        """The Genie space resource alone does not grant the serving identity
+        access to the SQL warehouse Genie executes on — the warehouse must be
+        declared too (live prod query failed without it)."""
+        from mlflow.models.resources import DatabricksSQLWarehouse
+
+        import driver
+
+        resources = driver.model_resources(
+            genie_space_id="space-1",
+            web_search_fqn="cat.sch.web_search",
+            llm_endpoint="databricks-claude-sonnet-4-6",
+            warehouse_id="wh-123",
+        )
+        warehouses = [r for r in resources if isinstance(r, DatabricksSQLWarehouse)]
+        assert warehouses, "DatabricksSQLWarehouse missing from declared resources"
