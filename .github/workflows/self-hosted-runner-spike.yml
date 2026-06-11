@@ -2,15 +2,13 @@
 #
 # Deliberately NO pull_request trigger: this is a public repo and the runner
 # lives inside a Databricks workspace. Fork PRs must never be able to reach it.
-# Triggers are limited to pushes to the spike branch (collaborators only) and
-# manual workflow_dispatch.
+# Manual workflow_dispatch only. (During the spike a push trigger scoped to the
+# spike branch produced the proof runs; it was removed once the runner was torn
+# down so later pushes don't queue jobs no runner will serve.)
 name: self-hosted-runner-spike
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - superset/feat/gha-runner-app-spike
 
 permissions: {}
 

@@ -18,9 +18,19 @@ GitHub-side secrets. See [go/no-go](#gono-go-recommendation) for the conditions.
 | 3 | Auth | ✅ Registration token minted locally with `gh api .../actions/runners/registration-token` and pasted in (fine for the spike). Job steps inherit the container env, including `DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`, so the Databricks CLI authenticates as the app SP from inside a job step with no setup at all. |
 | 4 | Ephemerality | ✅ `--ephemeral` + a supervisor loop works: the runner deregisters after each job and the supervisor re-registers it. A registration token stays valid ~1 hour and is reusable, so one pasted token keeps the loop alive for that window. App restarts/redeploys wipe `/home/app` (runner + ICU re-download on next start — seconds, not minutes) and kill the supervisor; true self-healing across restarts needs a stored GitHub credential (see hardening). |
 
-Proof run: [workflow run 27370283658](https://github.com/randypitcherii/shareables/actions/runs/27370283658)
-— `runs-on: self-hosted`, echo + `databricks current-user me` returning the app SP
-(`app-wplr48 randy-pitcher-gha-runner`).
+Proof runs (all `runs-on: self-hosted`, echo + `databricks current-user me` returning
+the app SP `app-wplr48 randy-pitcher-gha-runner`):
+
+- [27370283658](https://github.com/randypitcherii/shareables/actions/runs/27370283658) —
+  first proof, runner started manually via the shell endpoints.
+- [27370581152](https://github.com/randypitcherii/shareables/actions/runs/27370581152) and
+  [27370614828](https://github.com/randypitcherii/shareables/actions/runs/27370614828) —
+  back-to-back jobs through the supervisor loop: the ephemeral runner deregistered after
+  the first job, the supervisor re-registered it, and the second job ran ~35 s later.
+
+The spike runner was deregistered and the supervisor stopped after these runs — no
+self-hosted runner is left attached to this public repo. Re-run via
+[Reproduce](#reproduce).
 
 ## How it works
 
