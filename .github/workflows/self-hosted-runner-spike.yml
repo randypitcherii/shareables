@@ -1,0 +1,40 @@
+# Spike proof workflow for the Databricks App self-hosted runner (#36).
+#
+# Deliberately NO pull_request trigger: this is a public repo and the runner
+# lives inside a Databricks workspace. Fork PRs must never be able to reach it.
+# Triggers are limited to pushes to the spike branch (collaborators only) and
+# manual workflow_dispatch.
+name: self-hosted-runner-spike
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - superset/feat/gha-runner-app-spike
+
+permissions: {}
+
+jobs:
+  proof:
+    # Belt-and-suspenders: never run from a fork context, only for the repo owner.
+    if: github.repository == 'randypitcherii/shareables' && github.actor == 'randypitcherii'
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: prove the runner is alive
+        run: |
+          echo "hello from a Databricks App self-hosted runner"
+          echo "hostname: $(hostname)"
+          uname -a
+          id
+      - name: prove in-workspace Databricks auth (app service principal)
+        run: |
+          # The runner inherits DATABRICKS_HOST / DATABRICKS_CLIENT_ID /
+          # DATABRICKS_CLIENT_SECRET from the app container, so the CLI
+          # authenticates as the app's service principal with zero GitHub secrets.
+          CLI_VERSION=1.3.0
+          curl -fsSL -o "$RUNNER_TEMP/dbx-cli.tar.gz" \
+            "https://github.com/databricks/cli/releases/download/v${CLI_VERSION}/databricks_cli_${CLI_VERSION}_linux_amd64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/dbx-cli"
+          tar -xzf "$RUNNER_TEMP/dbx-cli.tar.gz" -C "$RUNNER_TEMP/dbx-cli"
+          "$RUNNER_TEMP/dbx-cli/databricks" current-user me
