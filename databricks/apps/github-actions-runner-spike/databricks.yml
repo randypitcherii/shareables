@@ -1,0 +1,25 @@
+bundle:
+  name: github_actions_runner_spike
+
+variables:
+  app_name:
+    description: Databricks app name.
+    default: gha-runner-spike
+
+resources:
+  apps:
+    gha_runner_app:
+      name: ${var.app_name}
+      source_code_path: .
+      description: "Spike: self-hosted GitHub Actions runner inside a Databricks App"
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    presets:
+      tags:
+        env: dev
+        owner: ${workspace.current_user.userName}

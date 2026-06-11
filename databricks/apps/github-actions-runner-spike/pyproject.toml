@@ -1,0 +1,22 @@
+[project]
+name = "gha-runner-spike"
+version = "0.1.0"
+description = "Spike: self-hosted GitHub Actions runner inside a Databricks App."
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.0",
+  "httpx>=0.28.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
