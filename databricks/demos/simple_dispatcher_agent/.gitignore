@@ -1,0 +1,21 @@
+# uv.lock is gitignored because `uv sync` resolves against the Databricks
+# internal PyPI proxy (pypi-proxy.dev.databricks.com), which is not reachable
+# outside the Databricks corporate network. Committing it would break installs
+# for all non-Databricks users. Run `uv sync` to regenerate it in your own env.
+uv.lock
+
+# Local secrets — never commit the real .env (the committed file is .env.template).
+.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# MLflow run artifacts (created by mlflow locally)
+mlruns/
+mlflow.db
