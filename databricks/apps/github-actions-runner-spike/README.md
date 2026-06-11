@@ -1,13 +1,62 @@
-# GitHub Actions self-hosted runner inside a Databricks App — spike
+# GitHub Actions self-hosted runner inside a Databricks App
 
-Spike for [#36](https://github.com/randypitcherii/shareables/issues/36): can a Databricks
-App host a self-hosted GitHub Actions runner, so CI for `databricks/demos/dbt/` can run
-**inside the workspace** using the app's service principal — no workspace credentials in
-GitHub secrets, no external CI compute?
+Run your GitHub Actions CI **inside your Databricks workspace** by hosting the runner as
+a Databricks App.
 
-**Verdict: yes, it works end-to-end.** A workflow job executed on the runner and
-`databricks current-user me` authenticated as the app's service principal with zero
-GitHub-side secrets. See [go/no-go](#gono-go-recommendation) for the conditions.
+## Who this is for
+
+You'll know you want this if you've felt one of these pains:
+
+- **Your workspace has IP access lists (or private networking), and GitHub-hosted
+  runners can't reach it.** Hosted runner IPs aren't allowlistable in any practical way,
+  so every `databricks` CLI call in CI dies at the front door. A runner *inside* the
+  workspace flips the direction: it makes outbound-only HTTPS calls to GitHub to pick up
+  jobs, and its workspace API calls originate in-network — your IP ACLs never see CI
+  traffic from the outside.
+- **You don't want workspace credentials sitting in GitHub secrets.** Hosted runners
+  need a PAT or SP secret stored on the GitHub side. Here, CI steps inherit the app
+  service principal's OAuth credentials from the container environment — **zero
+  Databricks secrets in GitHub**, and nothing to rotate when someone leaves.
+- **You'd rather keep CI compute on-platform** than pay for external runners that spend
+  most of their minutes waiting on a SQL warehouse anyway.
+
+This started as a spike for [#36](https://github.com/randypitcherii/shareables/issues/36)
+(enabling CI for `databricks/demos/dbt/`). **Verdict: it works end-to-end.** A workflow
+job executed on the runner and `databricks current-user me` authenticated as the app's
+service principal with zero GitHub-side secrets. See
+[go/no-go](#gono-go-recommendation) for the conditions before pointing real CI at it.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph gh["GitHub (github.com)"]
+        ACTIONS["GitHub Actions service"]
+        REPO["Repo workflow<br/>runs-on: self-hosted"]
+    end
+
+    subgraph ws["Databricks workspace (IP-restricted is fine)"]
+        subgraph app["Databricks App container"]
+            API["FastAPI<br/>/api/v1/runner/start·status·stop"]
+            SUP["Supervisor loop<br/>scripts/runner_supervisor.sh"]
+            RUNNER["GitHub Actions runner<br/>(ephemeral)"]
+        end
+        SP["App service principal<br/>(DATABRICKS_CLIENT_ID/SECRET in env)"]
+        DBX["Workspace APIs · SQL warehouse · UC"]
+    end
+
+    OPERATOR["Operator<br/>(pastes registration token)"] -->|"POST /runner/start"| API
+    API --> SUP
+    SUP -->|"config.sh --ephemeral<br/>re-register after each job"| RUNNER
+    RUNNER -->|"outbound-only HTTPS long-poll"| ACTIONS
+    REPO -.->|"job assigned"| RUNNER
+    RUNNER -->|"CI steps auth as SP,<br/>in-network"| SP
+    SP --> DBX
+```
+
+The key property for IP-restricted workspaces: **no inbound connectivity is required**.
+The runner long-polls GitHub over outbound HTTPS, and all Databricks API traffic stays
+inside the workspace network.
 
 ## Probe results
 
