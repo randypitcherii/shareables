@@ -1,177 +1,118 @@
-# Randy Databricks Apps Starter
+# GitHub Actions self-hosted runner inside a Databricks App — spike
 
-Canonical starter template for rapid Databricks Apps iteration in a sandbox workspace.
+Spike for [#36](https://github.com/randypitcherii/shareables/issues/36): can a Databricks
+App host a self-hosted GitHub Actions runner, so CI for `databricks/demos/dbt/` can run
+**inside the workspace** using the app's service principal — no workspace credentials in
+GitHub secrets, no external CI compute?
 
-## Current MVP
+**Verdict: yes, it works end-to-end.** A workflow job executed on the runner and
+`databricks current-user me` authenticated as the app's service principal with zero
+GitHub-side secrets. See [go/no-go](#gono-go-recommendation) for the conditions.
 
-- FastAPI service with `uv sync --frozen` launch (no pip, no requirements.txt).
-- **Endpoints**:
-  - `GET /` — interactive terminal UI (`static/terminal.html`)
-  - `GET /api/v1/healthcheck` — app health
-  - `GET /api/v1/db/health` — Lakebase connectivity check
-  - `POST /api/v1/shell/run` — execute shell command (JSON response)
-  - `POST /api/v1/shell/stream` — execute shell command (streaming text)
-  - `POST /api/v1/shell/complete` — tab completion candidates
-  - `GET /api/v1/auth/context` — OBO forwarded user/token presence
-- `db.py` module with `get_connection()` helper using M2M OAuth token auth
-- Per-session shell cwd persisted in local SQLite (`SESSION_STATE_DB_PATH`) for multi-worker consistency.
-- Root `Makefile` and `uv` workflow.
-- DAB + Lakebase template defaults (dev branch, prod main).
+## Probe results
 
-### Prerequisites
+| # | Probe | Result |
+|---|-------|--------|
+| 1 | Can the container execute the runner? | ✅ Ubuntu 22.04, x86_64, glibc 2.35 — the runner binary runs fine as the non-root `app` user (uid 1000). 4 vCPU / 15 GB RAM / ~190 GB disk observed. One gap: the image has **no libicu**, which `config.sh` hard-requires; fixed in user space (no root needed) by extracting `libicu70` from the Ubuntu archive and pointing `LD_LIBRARY_PATH` at it — `config.sh` greps `LD_LIBRARY_PATH` dirs for libicu, so the check passes and .NET gets real ICU. |
+| 2 | Outbound networking | ✅ Egress to `github.com` over HTTPS is open. The 216 MB runner tarball downloaded in **1.3 s**; the runner's HTTPS long-poll connects instantly and jobs are picked up within seconds. `archive.ubuntu.com` (plain HTTP) is also reachable. |
+| 3 | Auth | ✅ Registration token minted locally with `gh api .../actions/runners/registration-token` and pasted in (fine for the spike). Job steps inherit the container env, including `DATABRICKS_HOST` / `DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`, so the Databricks CLI authenticates as the app SP from inside a job step with no setup at all. |
+| 4 | Ephemerality | ✅ `--ephemeral` + a supervisor loop works: the runner deregisters after each job and the supervisor re-registers it. A registration token stays valid ~1 hour and is reusable, so one pasted token keeps the loop alive for that window. App restarts/redeploys wipe `/home/app` (runner + ICU re-download on next start — seconds, not minutes) and kill the supervisor; true self-healing across restarts needs a stored GitHub credential (see hardening). |
 
-- Python >= 3.10
-- [uv](https://docs.astral.sh/uv/) (pre-installed on Databricks Apps runtime)
-- [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install.html)
+Proof run: [workflow run 27370283658](https://github.com/randypitcherii/shareables/actions/runs/27370283658)
+— `runs-on: self-hosted`, echo + `databricks current-user me` returning the app SP
+(`app-wplr48 randy-pitcher-gha-runner`).
 
-## Quick Start
+## How it works
 
-```bash
-make dev
-```
+- The app is the [randy_apps_starter](../randy_apps_starter/) bash-over-REST template
+  (Lakebase stripped — a runner needs no Postgres). The shell endpoints
+  (`/api/v1/shell/run|stream|complete`) were the probe tool: every container experiment
+  above was run via REST against the deployed app, no redeploys.
+- `scripts/runner_supervisor.sh` does the runner lifecycle: download runner tarball +
+  libicu if missing → `config.sh --ephemeral --unattended` → `run.sh` → loop.
+- The FastAPI app manages the supervisor:
+  - `GET /api/v1/runner/status` — supervisor/listener process state + log tail
+  - `POST /api/v1/runner/start` — body `{"registration_token": "..."}` (plus optional
+    `repo_url`, `runner_name`, `labels`); spawns the supervisor detached
+  - `POST /api/v1/runner/stop` — kills supervisor + listener (runner falls offline and,
+    being ephemeral, gets reaped by GitHub)
+- The proof workflow is
+  [`.github/workflows/self-hosted-runner-spike.yml`](../../../.github/workflows/self-hosted-runner-spike.yml)
+  — `workflow_dispatch` + `push` to the spike branch only. **Deliberately no
+  `pull_request` trigger** (public repo + self-hosted runner, see caveats).
 
-Local review is intentionally pinned to `http://127.0.0.1:8000/` (canonical port).  
-`make dev` automatically stops any prior process listening on that port before starting a fresh instance.
-
-Smoke test:
-
-```bash
-curl -s http://127.0.0.1:8000/api/v1/healthcheck
-curl -s -X POST http://127.0.0.1:8000/api/v1/shell/run \
-  -H "content-type: application/json" \
-  -d '{"argv":["bash","-lc","echo hello from sandbox"]}'
-```
-
-Open the manual UI at [http://127.0.0.1:8000/](http://127.0.0.1:8000/).
-Check the **Runtime marker** badge near the page title to confirm you are on the latest run.
-
-Session-state storage defaults to `/tmp/randy_apps_starter_session_state.sqlite3` (override with `SESSION_STATE_DB_PATH`).
-
-Run tests:
+## Reproduce
 
 ```bash
-make test
-```
-
-## Deploy with Databricks Asset Bundles
-
-```bash
-make verify
+# 1. deploy + start the app (dev target)
 make deploy-dev
+
+# 2. mint a registration token (requires repo admin)
+REG_TOKEN=$(gh api -X POST repos/randypitcherii/shareables/actions/runners/registration-token --jq .token)
+
+# 3. start the runner supervisor inside the app
+TOKEN=$(databricks auth token --output json | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+curl -X POST "$APP_URL/api/v1/runner/start" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "{\"registration_token\": \"$REG_TOKEN\"}"
+
+# 4. confirm it's online, then trigger the proof workflow
+gh api repos/randypitcherii/shareables/actions/runners --jq '.runners[].status'
+gh workflow run self-hosted-runner-spike --ref <branch-with-the-workflow>
 ```
 
-`make deploy-dev` runs both bundle deployment and explicit app source deployment so the app reaches an active deployment state.
-It deploys source from the bundle workspace path (`/Workspace/Users/<user>/.bundle/randy_apps_starter/dev/files`), not the local filesystem path.
+`scripts/app-shell.sh` runs ad-hoc commands inside the container for debugging:
+`APP_URL=https://... ./scripts/app-shell.sh 'tail -20 /tmp/gha_runner_supervisor.log'`.
 
-Production deploy:
+## Limitations
 
-```bash
-make deploy-prod
-```
+- **No Docker.** Container actions, `services:`, and docker-based steps won't work.
+  Shell steps (and node-based actions like `actions/checkout`) are fine — dbt CI is
+  pip/uv + CLI, so it fits.
+- **Restarts are not self-healing yet.** The supervisor dies with the app container and
+  the pasted registration token expires after ~1 hour. Each app restart/redeploy needs a
+  fresh `POST /runner/start`. Fixable (see hardening), deliberately out of spike scope.
+- **One runner = serial CI.** One job at a time. Fine for this repo's volume; more
+  concurrency means more app replicas or multiple registered runners per container.
+- **Always-on compute.** The app runs 24/7 whether or not CI jobs arrive. That's the
+  trade for instant pickup; the dbt CI alternative (hosted runners + secrets) costs per
+  minute instead.
 
-## DAB and Lakebase Standards
+## Security caveats — read before pointing real CI at this
 
-- **Dev resource prefixing**: `make verify` / `make deploy-dev` compute a slug-safe user prefix (`[a-z0-9-]`, starts with letter). App names are capped to 30 chars; Lakebase project IDs are capped to 63 chars.
-- **Prod resource names**: no user prefix, canonical IDs.
-- **Lakebase strategy**:
-  - dev uses `dev-<git-branch-slug>`
-  - prod uses `main`
-  - no branch merge automation in this template
+- **Self-hosted runners on a public repo are explicitly discouraged by GitHub.** Anyone
+  who can get a workflow to run on this runner executes arbitrary code inside the
+  Databricks workspace network *as the app's service principal*.
+- **Fork PRs MUST NOT be allowed to reach it.** Concretely:
+  - Never add a `pull_request`-triggered workflow with `runs-on: self-hosted` to this
+    repo. The spike workflow uses `workflow_dispatch` + same-repo `push` only, plus an
+    `if: github.repository == ... && github.actor == 'randypitcherii'` guard.
+  - Repo Actions settings should require approval for **all** outside collaborators
+    (Settings → Actions → Fork pull request workflows).
+- **Job steps can read the app SP's client secret** from the environment. Any workflow
+  that lands on this runner owns the SP. Scope the SP to the minimum needed (the dbt CI
+  SP needs little beyond its dev schema + warehouse), and prefer a dedicated app/SP for
+  CI rather than reusing an app that has broader grants.
+- The `/runner/start` + shell endpoints are behind Databricks app auth (workspace users
+  with CAN_USE on the app) — do not grant the app to `users` broadly.
 
-Branch slug generation:
+## Go/no-go recommendation
 
-```bash
-./scripts/git-branch-slug.sh
-```
+**Conditional GO.** The mechanics are proven and pleasantly boring: the container runs
+the stock runner binary, egress just works, and in-workspace auth from job steps is
+free. For enabling the dbt CI workflow (`databricks/demos/dbt/ci/`), do it only with all
+of the following:
 
-Override at deploy time if needed:
+1. **Trigger hygiene**: `workflow_dispatch` and/or `push` to trusted branches only — no
+   `pull_request` trigger on this public repo. (If PR-triggered CI is the actual goal,
+   move the dbt demo CI to a private mirror or accept hosted runners with secrets.)
+2. **Token automation**: store a fine-grained PAT (or GitHub App key) with
+   `administration:write` on the repo in a Databricks secret, have the app mint
+   registration tokens itself at boot — that makes restarts fully self-healing and
+   removes the manual paste.
+3. **Dedicated least-privilege SP**: a CI-only app whose SP has exactly the dbt dev
+   schema + warehouse grants, nothing else.
 
-```bash
-databricks bundle deploy -t dev --var "git_branch_slug=my-feature"
-```
-
-Override dev names explicitly if needed:
-
-```bash
-databricks bundle deploy -t dev \
-  --var "app_name=my-prefix-randy-apps-starter" \
-  --var "lakebase_project_id=my-prefix-randy-apps-starter"
-```
-
-## Lakebase (Postgres) Connectivity
-
-The app connects to its attached Lakebase database using M2M OAuth tokens.
-The Databricks Apps runtime auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, and `PGSSLMODE`
-when a Lakebase database resource is configured in `databricks.yml`.
-
-Authentication uses the app's service principal credentials (`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`)
-to fetch an OAuth token from the workspace OIDC endpoint. Tokens are cached and auto-refreshed.
-
-```python
-from db import get_connection, check_connectivity
-
-# Get a raw psycopg2 connection
-conn = get_connection()
-cur = conn.cursor()
-cur.execute("SELECT 1")
-conn.close()
-
-# Or run a health check
-result = check_connectivity()  # {"ok": True, "latency_ms": ..., ...}
-```
-
-Key details:
-- **User**: `DATABRICKS_CLIENT_ID` (service principal UUID)
-- **Password**: M2M OAuth access token (not the client secret directly)
-- **Schema**: The service principal cannot write to `public` — create your own schema
-- **Endpoint**: `GET /api/v1/db/health` returns live connectivity status
-
-## OBO Integration
-
-- Endpoint `GET /api/v1/auth/context` reads `x-forwarded-user` and token presence from `x-forwarded-access-token`.
-- The endpoint intentionally reports only token presence (never token value).
-
-## Shell API
-
-Request body for `shell/run` and `shell/stream`:
-
-```json
-{
-  "argv": ["bash", "-lc", "echo hello"],
-  "session_id": "optional-session-id",
-  "timeout_seconds": 20
-}
-```
-
-- `session_id` persists working directory across requests (SQLite-backed)
-- Default timeout: 20 seconds (max 120)
-
-Request body for `shell/complete`:
-
-```json
-{"line": "partial-inp", "session_id": "optional"}
-```
-
-Returns `{input, fragment, common_prefix, completed_input, candidates}`.
-
-## Dependency Management
-
-Dependencies are managed by `uv` via `pyproject.toml` + `uv.lock`. The `app.yaml` command runs
-`uv sync --frozen` before launching uvicorn, so no `pip install` step is needed.
-
-To update dependencies locally:
-
-```bash
-uv add <package>        # adds to pyproject.toml and updates uv.lock
-uv lock                 # regenerate lockfile after manual pyproject.toml edits
-```
-
-## Notes
-
-- This MVP intentionally prioritizes exploration speed over hardening.
-- The shell sandbox has full filesystem and env access — do not expose to untrusted users.
-- Security hardening and default zerobus logging are tracked for follow-up.
-- Local review safety rails:
-  - canonical review port: `8000`
-  - `make dev` replaces any previous local reviewer process on that port
-  - runtime marker is exposed in UI and `GET /api/v1/healthcheck` for quick freshness checks
+Without 1–3, keep this as a demo. The pattern's sweet spot is private repos / internal
+projects, where it deletes both the secrets-in-GitHub problem and external CI spend in
+one move.

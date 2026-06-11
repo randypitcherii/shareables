@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shlex
 import sqlite3
+import subprocess
 import time
 import uuid
 from datetime import datetime, timezone
@@ -96,6 +97,13 @@ class ShellRunRequest(BaseModel):
     cwd: str | None = None
     session_id: str | None = None
     timeout_seconds: int = Field(default=20, ge=1, le=120)
+
+
+class RunnerStartRequest(BaseModel):
+    registration_token: str = Field(..., min_length=10)
+    repo_url: str = "https://github.com/randypitcherii/shareables"
+    runner_name: str = "gha-runner-spike"
+    labels: str = "databricks-app"
 
 
 class ShellCompleteRequest(BaseModel):
@@ -284,6 +292,73 @@ def auth_context(
         "obo_token_present": bool(x_forwarded_access_token),
         "mode": "databricks-app" if os.getenv("DATABRICKS_APP_NAME") else "local",
     }
+
+
+RUNNER_SUPERVISOR_LOG = os.getenv("RUNNER_SUPERVISOR_LOG", "/tmp/gha_runner_supervisor.log")
+RUNNER_SUPERVISOR_SCRIPT = Path(__file__).resolve().parent / "scripts" / "runner_supervisor.sh"
+
+
+def _pgrep(pattern: str) -> list[str]:
+    result = subprocess.run(
+        ["pgrep", "-af", pattern],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [line for line in result.stdout.splitlines() if "pgrep" not in line]
+
+
+def _runner_log_tail(max_lines: int = 40) -> list[str]:
+    try:
+        lines = Path(RUNNER_SUPERVISOR_LOG).read_text(errors="replace").splitlines()
+    except OSError:
+        return []
+    return lines[-max_lines:]
+
+
+@app.get("/api/v1/runner/status")
+def runner_status() -> dict[str, Any]:
+    return {
+        "supervisor_running": bool(_pgrep("runner_supervisor.sh")),
+        "listener_running": bool(_pgrep("Runner.Listener")),
+        "log_tail": _runner_log_tail(),
+    }
+
+
+@app.post("/api/v1/runner/start")
+def runner_start(payload: RunnerStartRequest) -> dict[str, Any]:
+    if _pgrep("runner_supervisor.sh"):
+        raise HTTPException(status_code=409, detail="Runner supervisor already running")
+    env = {
+        **os.environ,
+        "GH_RUNNER_REG_TOKEN": payload.registration_token,
+        "GH_RUNNER_REPO_URL": payload.repo_url,
+        "GH_RUNNER_NAME": payload.runner_name,
+        "GH_RUNNER_LABELS": payload.labels,
+    }
+    with open(RUNNER_SUPERVISOR_LOG, "ab") as log_file:
+        process = subprocess.Popen(
+            ["bash", str(RUNNER_SUPERVISOR_SCRIPT)],
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    logger.info("runner.supervisor.started pid=%s repo=%s", process.pid, payload.repo_url)
+    return {"started": True, "supervisor_pid": process.pid, "log_path": RUNNER_SUPERVISOR_LOG}
+
+
+@app.post("/api/v1/runner/stop")
+def runner_stop() -> dict[str, Any]:
+    killed = {
+        "supervisor": bool(_pgrep("runner_supervisor.sh")),
+        "listener": bool(_pgrep("Runner.Listener")),
+    }
+    subprocess.run(["pkill", "-f", "runner_supervisor.sh"], check=False)
+    subprocess.run(["pkill", "-f", "Runner.Listener"], check=False)
+    logger.info("runner.supervisor.stopped %s", killed)
+    return {"stopped": True, "was_running": killed}
 
 
 @app.post("/api/v1/shell/run")

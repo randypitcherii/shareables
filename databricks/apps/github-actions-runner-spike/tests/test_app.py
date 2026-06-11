@@ -207,3 +207,17 @@ def test_shell_complete_uses_session_cwd(tmp_path: Path) -> None:
     payload = response.json()
     assert payload["completed_input"] == "only-match.txt"
     assert payload["candidates"] == ["only-match.txt"]
+
+
+def test_runner_status_reports_process_state() -> None:
+    response = client.get("/api/v1/runner/status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload["supervisor_running"], bool)
+    assert isinstance(payload["listener_running"], bool)
+    assert isinstance(payload["log_tail"], list)
+
+
+def test_runner_start_rejects_short_token() -> None:
+    response = client.post("/api/v1/runner/start", json={"registration_token": "short"})
+    assert response.status_code == 422

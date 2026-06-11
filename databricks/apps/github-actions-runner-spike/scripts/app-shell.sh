@@ -17,4 +17,4 @@ curl -fsS -X POST "${APP_URL}/api/v1/shell/run" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "$(python3 -c 'import json,sys; print(json.dumps({"argv": ["bash", "-lc", sys.argv[1]], "session_id": "spike-probe", "timeout_seconds": int(sys.argv[2])}))' "$CMD" "$TIMEOUT")" \
-  | python3 -c 'import sys,json; r=json.load(sys.stdin); print(f"[exit={r[\"exit_code\"]} {r[\"duration_ms\"]}ms]"); print(r["stdout"], end=""); print(r["stderr"], file=sys.stderr, end="")'
+  | python3 -c 'import sys,json; r=json.load(sys.stdin); print("[exit=%s %sms]" % (r["exit_code"], r["duration_ms"])); print(r["stdout"], end=""); print(r["stderr"], file=sys.stderr, end="")'
