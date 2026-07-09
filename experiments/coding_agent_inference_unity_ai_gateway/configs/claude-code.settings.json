@@ -1,0 +1,8 @@
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://<your-workspace-host>/ai-gateway/anthropic",
+    "ANTHROPIC_MODEL": "system.ai.claude-sonnet-4-6",
+    "DATABRICKS_CONFIG_PROFILE": "<your-databricks-cli-profile>"
+  },
+  "apiKeyHelper": "<path-to-this-experiment>/bin/get-databricks-token.sh"
+}

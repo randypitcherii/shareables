@@ -1,0 +1,9 @@
+[project]
+name = "coding-agent-inference-unity-ai-gateway"
+version = "0.1.0"
+description = "Experiment: coding agent inference over the Unity AI Gateway with SSO-only auth (zero PATs)"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk",
+    "requests",
+]

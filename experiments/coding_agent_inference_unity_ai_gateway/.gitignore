@@ -1,0 +1,13 @@
+# Environment / secrets (commit .env.example only)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# uv lockfile (machine-specific registry config; do not commit)
+uv.lock
+
+# NOTE: results/*.json is intentionally NOT ignored — captured results are the
+# point of this experiment.

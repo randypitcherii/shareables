@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "databricks": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Databricks Unity AI Gateway",
+      "options": {
+        "baseURL": "https://<your-workspace-host>/ai-gateway/mlflow/v1",
+        "apiKey": "{env:DATABRICKS_TOKEN}"
+      },
+      "models": {
+        "system.ai.claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6 (Databricks, system.ai)"
+        }
+      }
+    }
+  },
+  "model": "databricks/system.ai.claude-sonnet-4-6"
+}

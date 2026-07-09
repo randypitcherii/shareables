@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "databricks-model-serving": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "DATABRICKS_TOKEN=\"$(<path-to-this-experiment>/bin/get-databricks-token.sh)\" DATABRICKS_HOST=\"https://<your-workspace-host>\" exec <your-mcp-server-command>"
+      ],
+      "env": {
+        "DATABRICKS_CONFIG_PROFILE": "<your-databricks-cli-profile>"
+      }
+    }
+  }
+}
