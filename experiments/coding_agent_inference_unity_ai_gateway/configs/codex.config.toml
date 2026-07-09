@@ -1,0 +1,40 @@
+# codex.config.toml — OpenAI Codex CLI template for Databricks Unity AI Gateway.
+#
+# ucode coverage: COVERED — `ucode codex` is the documented happy path; this
+# template is the reference / escape hatch for when ucode is unavailable.
+#
+# Install: merge this into ~/.codex/config.toml.
+#
+# Auth (SSO/OAuth only — NEVER a static dapi PAT):
+# Codex reads the API key from the env var named by `env_key` below. Mint a
+# short-lived Databricks OAuth token at shell level before launching codex:
+#
+#   export OPENAI_API_KEY="$(<path-to-this-experiment>/bin/get-databricks-token.sh)"
+#   codex
+#
+# CAVEAT: that token expires (~1 hour). A long Codex session will start
+# failing with 401s once it does; re-run the export in the same shell and
+# relaunch. There is no apiKeyHelper-style re-mint hook in Codex's config,
+# which is why the Claude Code template (apiKeyHelper) is the smoother path.
+
+# PLACEHOLDER: any three-part Unity Catalog model id (system.ai.<model>).
+# Never use legacy single-string names like "databricks-claude-sonnet-4-6".
+model = "system.ai.claude-sonnet-4-6"
+model_provider = "databricks"
+
+[model_providers.databricks]
+name = "Databricks Unity AI Gateway"
+# PLACEHOLDER: your workspace host, e.g. https://myshard.cloud.databricks.com
+# The Unity AI Gateway OpenAI-compatible base — the ONLY route family that
+# resolves three-part system.ai.* ids (live-tested 2026-07-09; the classic
+# /serving-endpoints base 404s on them). Codex appends /chat/completions.
+base_url = "https://<your-workspace-host>/ai-gateway/mlflow/v1"
+# Codex sends the value of this env var as the Bearer token.
+env_key = "OPENAI_API_KEY"
+wire_api = "chat"
+# VERIFY: Databricks' coding-agent integration docs also describe a dedicated
+# Codex route at https://<your-workspace-host>/ai-gateway/codex/v1 with
+# wire_api = "responses". Live-tested 2026-07-09: the route exists but
+# Responses-API passthrough returned 400 (not supported) for a Claude model;
+# it may work for other model families. Switch base_url and wire_api to it
+# only if your chosen model supports Responses passthrough.

@@ -1,0 +1,52 @@
+{
+  "deny_execute_blocks_inference": {
+    "notes": "TEST_PRINCIPAL not set — untested",
+    "recorded_at": "2026-07-09T12:56:57.532275+00:00",
+    "result": "❓"
+  },
+  "deny_model_grant_gateway": {
+    "notes": "TEST_PRINCIPAL not set — untested",
+    "recorded_at": "2026-07-09T12:56:57.646918+00:00",
+    "result": "❓"
+  },
+  "grant_revoke_execute_enforced": {
+    "notes": "TEST_PRINCIPAL not set — untested",
+    "recorded_at": "2026-07-09T13:21:20.028360+00:00",
+    "result": "❓"
+  },
+  "guardrails_pii_injection_unsafe": {
+    "notes": "No guardrails currently configured on this endpoint and ALLOW_ENDPOINT_MUTATION=1 not set — settability not probed (dry-run). Documented knobs to probe: ('pii', 'safety', 'valid_topics', 'invalid_keywords') on input/output; a dedicated prompt-injection filter is NOT in the documented schema. ai_gateway keys=['usage_tracking_config']",
+    "recorded_at": "2026-07-09T12:56:58.281154+00:00",
+    "result": "❓"
+  },
+  "per_user_hard_cap": {
+    "notes": "No hard per-user budget cap: ai_gateway exposes only alert-style surfaces (usage tracking) and rate caps (rate_limits per user/endpoint), no spend-denominated block-at-budget field. Per-user rate limits found: 0. ai_gateway key paths=['usage_tracking_config', 'usage_tracking_config.enabled']; cap-like keys=NONE; rate_limits(verbatim)=[].",
+    "recorded_at": "2026-07-09T12:56:41.856632+00:00",
+    "result": "❌"
+  },
+  "per_user_spend_alerting": {
+    "notes": "Per-user alerting surface present: usage tracking is ON (per-user attribution into system.serving usage tables — the documented basis for spend alerts via SQL alerts/budget policies). Note: no direct 'alert at $X per user' field exists ON the endpoint; alerting is composed from these knobs. ai_gateway keys=['usage_tracking_config']; usage_tracking_config={\"enabled\": true}; rate_limits=[]; per-user rate limits=0",
+    "recorded_at": "2026-07-09T12:56:41.220600+00:00",
+    "result": "✅"
+  },
+  "query_via_gateway_sso": {
+    "notes": "HTTP 200 with SSO OAuth token only (zero PATs); model=system.ai.claude-sonnet-4-6; reply=pong. Baseline gate for all other rows.",
+    "recorded_at": "2026-07-09T13:14:40.720932+00:00",
+    "result": "✅"
+  },
+  "revoke_gateway_no_fallback": {
+    "notes": "TEST_PRINCIPAL not set — untested",
+    "recorded_at": "2026-07-09T12:56:57.769745+00:00",
+    "result": "❓"
+  },
+  "three_part_identifier_resolves": {
+    "notes": "Three-part id got HTTP 200. three-part 'system.ai.claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1783602894, \"id\": \"msg_bdrk_01QngKE9c5LM2BouVHRrSH4B\", \"model\": \"us.anthropic.cl...); legacy 'databricks-claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1783602895, \"id\": \"msg_bdrk_01QDWaKJ6sBxL2DzNQMLwsEe\", \"model\": \"us.anthropic.cl...)",
+    "recorded_at": "2026-07-09T13:14:55.633596+00:00",
+    "result": "✅"
+  },
+  "usage_tracking_per_user_agent": {
+    "notes": "Per-user attribution PROVEN (populated), but per-agent attribution unproven: the agent/client columns exist in the schema yet were empty/null in every sampled row — callers must send user_agent/usage_context metadata for it to populate. table=system.serving.endpoint_usage; user columns=['requester'] (populated: ['requester']); agent/client columns=['client_request_id', 'usage_context'] (populated: []); sampled rows=10. fresh inference HTTP 200 with marker 'uag-experiment-row09-7d14c36d5300' in User-Agent + usage_context. Marker hunt: 0 row(s) matched 'uag-experiment-row09-7d14c36d5300' (ingestion latency likely exceeds this run).",
+    "recorded_at": "2026-07-09T13:15:25.367643+00:00",
+    "result": "❓"
+  }
+}
