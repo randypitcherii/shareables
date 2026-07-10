@@ -134,7 +134,29 @@ def main() -> int:
             elif status_r == 200:
                 _common.fail("REVOKE accepted but the principal can still infer — NOT enforced.")
                 verdict = False
-                notes_parts.insert(0, "API accepted GRANT/REVOKE but did NOT enforce (post-revoke 200):")
+                # A post-revoke 200 can be plain UC semantics if a broader
+                # grant path remains (e.g. a schema-level EXECUTE to
+                # `account users`, which ships by default). Capture that
+                # evidence so the verdict reads correctly: revoking a direct
+                # grant does not restrict access OOTB. DENY (row 04) is the
+                # discriminating probe.
+                securable = gov.uc_model_securable(model_id)
+                if securable:
+                    inherited = gov.sql_exec(
+                        "SHOW GRANTS ON SCHEMA "
+                        + gov.backtick_parts(".".join(securable.split(".")[:2]))
+                    )
+                    if inherited["ok"]:
+                        others = [r for r in inherited["rows"] if "EXECUTE" in str(r)]
+                        notes_parts.append(
+                            f"schema-level EXECUTE grants still in effect: {gov.snip(others, 220)}"
+                        )
+                notes_parts.insert(
+                    0,
+                    "API accepted GRANT/REVOKE but post-revoke inference still 200 — "
+                    "revoking a direct grant does NOT restrict access OOTB (note the "
+                    "default schema-wide grant below; DENY in row 04 is the real test):",
+                )
             else:
                 verdict = None
                 notes_parts.insert(0, "Grant/revoke accepted; enforcement signal ambiguous:")

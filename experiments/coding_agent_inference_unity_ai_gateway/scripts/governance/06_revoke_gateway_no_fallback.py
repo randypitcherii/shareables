@@ -82,9 +82,23 @@ def main() -> int:
         print("  Step 1: revoking the principal's direct endpoint permissions...")
         endpoint_id = gov.get_endpoint_id(endpoint_name)
         if not endpoint_id:
-            _common.fail(f"Could not resolve endpoint id for '{endpoint_name}'.")
+            # Live-tested 2026-07-10: built-in pay-per-token FM endpoints
+            # return no `id` and the permissions API rejects their name —
+            # there is no per-principal endpoint permission to revoke, so
+            # the revoke->fallback leak cannot be reproduced against them.
+            _common.fail(
+                f"'{endpoint_name}' exposes no endpoint id — pay-per-token FM "
+                "endpoints have no per-principal ACLs to revoke."
+            )
             verdict = None
-            notes_parts.insert(0, f"Endpoint '{endpoint_name}' not found — untestable:")
+            notes_parts.insert(
+                0,
+                f"Built-in pay-per-token endpoint '{endpoint_name}' has no endpoint "
+                "id / per-principal ACL surface, so there is no gateway permission "
+                "to revoke and the fallback-leak repro needs a custom or "
+                "provisioned-throughput endpoint (or the environment from the "
+                "original field report):",
+            )
             return 0
         acl_status, acl_body = gov.get_endpoint_acl(endpoint_id)
         if acl_status != 200 or not isinstance(acl_body, dict):

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -133,20 +134,45 @@ def main() -> int:
         print(f"  PUT ai-gateway guardrails -> HTTP {put_status}: {gov.snip(put_body, 200)}")
         if put_status == 200:
             _common.ok("Guardrails accepted configuration (pii BLOCK + safety on input).")
-            print("  Sending ONE benign synthetic-PII boundary probe while enabled...")
-            probe_status, probe_body = _common.chat_completion(
-                model_id, SYNTHETIC_PII_PROMPT, max_tokens=48
-            )
-            print(f"  Synthetic-PII probe -> HTTP {probe_status}: {gov.snip(probe_body, 250)}")
+            # Config propagation is not instant — probe with increasing
+            # waits and judge enforcement by the LAST probe, not the first.
+            print("  Probing synthetic PII with propagation waits (0s/30s/60s)...")
+            probes: list[tuple[int, int]] = []
+            probe_status, probe_body = None, None
+            elapsed = 0
+            for wait in (0, 30, 60):
+                if wait:
+                    time.sleep(wait)
+                    elapsed += wait
+                probe_status, probe_body = _common.chat_completion(
+                    model_id, SYNTHETIC_PII_PROMPT, max_tokens=48
+                )
+                print(f"  probe after ~{elapsed}s -> HTTP {probe_status}: {gov.snip(probe_body, 200)}")
+                probes.append((elapsed, probe_status))
+                if probe_status != 200:
+                    break
+            blocked = probe_status != 200
+            if blocked:
+                verdict_note = (
+                    "ENFORCED: with input.pii behavior=BLOCK active, the synthetic-PII "
+                    f"request was rejected (HTTP {probe_status})."
+                )
+            else:
+                verdict_note = (
+                    "NOT ENFORCED in this test: config was accepted, but a request "
+                    "containing synthetic PII still returned HTTP 200 (model echoed "
+                    "the values) on every probe up to ~90s after enablement — "
+                    "settable is not the same as enforcing."
+                )
             gov.conclude(
                 ROW_KEY,
-                True,
-                "Guardrail surface exists and accepts configuration (input.pii "
-                "behavior=BLOCK, input.safety=true accepted via PUT ai-gateway; "
-                "restored afterwards). Synthetic-PII probe while enabled -> "
-                f"HTTP {probe_status} ({gov.snip(probe_body, 200)}). No dedicated "
-                "prompt-injection knob in the schema — knobs are "
-                "pii/safety/valid_topics/invalid_keywords.",
+                blocked,
+                f"Guardrail surface exists and accepts configuration (input.pii "
+                f"behavior=BLOCK, input.safety=true via PUT ai-gateway; restored "
+                f"afterwards). {verdict_note} Probe trail: "
+                f"{[(f'{w}s', s) for w, s in probes]}. Last body: "
+                f"{gov.snip(probe_body, 180)}. No dedicated prompt-injection knob "
+                "in the schema — knobs are pii/safety/valid_topics/invalid_keywords.",
             )
             return 0
         _common.fail("Guardrails configuration refused by this endpoint.")

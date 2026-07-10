@@ -1,23 +1,23 @@
 {
   "deny_execute_blocks_inference": {
-    "notes": "TEST_PRINCIPAL not set — untested",
-    "recorded_at": "2026-07-09T12:56:57.532275+00:00",
-    "result": "❓"
+    "notes": "DENY does not exist in Unity Catalog (UC_COMMAND_NOT_SUPPORTED; grants are additive-only), so 'DENY EXECUTE blocks inference' is not achievable as documented — access is restricted by not-granting / revoking broader grants instead: | [DENY EXECUTE ON FUNCTION `system`.`ai`.`databricks-claude-sonnet-4-6` TO `<test-service-principal>`] -> [UC_COMMAND_NOT_SUPPORTED.WITHOUT_RECOMMENDATION] The command(s): DENY are not supported in Unity Catalog. SQLSTATE: 0AKUC",
+    "recorded_at": "2026-07-10T19:45:56.648875+00:00",
+    "result": "❌"
   },
   "deny_model_grant_gateway": {
-    "notes": "TEST_PRINCIPAL not set — untested",
-    "recorded_at": "2026-07-09T12:56:57.646918+00:00",
+    "notes": "Built-in pay-per-token endpoint 'databricks-claude-sonnet-4-6' has no endpoint id and the permissions API rejects it — per-principal endpoint grants (CAN_QUERY) are unavailable for workspace FM endpoints, so the gateway-grant half is untestable there (custom/provisioned endpoints would be needed): | DENY does not exist in UC (UC_COMMAND_NOT_SUPPORTED), so the documented DENY-vs-gateway-grant contrast is impossible as written; testing the endpoint-grant half only: | [DENY EXECUTE ON FUNCTION `system`.`ai`.`databricks-claude-sonnet-4-6` TO `<test-service-principal>`] -> [UC_COMMAND_NOT_SUPPORTED.WITHOUT_RECOMMENDATION] The command(s): DENY are not supported in Unity Catalog. SQLSTATE: 0AKUC",
+    "recorded_at": "2026-07-10T19:47:57.839544+00:00",
     "result": "❓"
   },
   "grant_revoke_execute_enforced": {
-    "notes": "TEST_PRINCIPAL not set — untested",
-    "recorded_at": "2026-07-09T13:21:20.028360+00:00",
-    "result": "❓"
+    "notes": "API accepted GRANT/REVOKE but post-revoke inference still 200 — revoking a direct grant does NOT restrict access OOTB (note the default schema-wide grant below; DENY in row 04 is the real test): | [GRANT EXECUTE ON FUNCTION `system`.`ai`.`databricks-claude-sonnet-4-6` TO `<test-service-principal>`] -> OK | post-GRANT inference as principal -> HTTP 200 | [REVOKE EXECUTE ON FUNCTION `system`.`ai`.`databricks-claude-sonnet-4-6` FROM `<test-service-principal>`] -> OK | post-REVOKE inference as principal -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1783712606, \"id\": \"msg_bdrk_01...) | schema-level EXECUTE grants still in effect: [[\"DB - RESERVED - Databricks support\", \"EXECUTE\", \"SCHEMA\", \"system.ai\"], [\"account users\", \"EXECUTE\", \"CATALOG\", \"system\"], [\"account users\", \"EXECUTE\", \"SCHEMA\", \"system.ai\"], [\"metastore_admins\", \"EXECUTE\", \"CATAL...",
+    "recorded_at": "2026-07-10T19:43:27.368510+00:00",
+    "result": "❌"
   },
   "guardrails_pii_injection_unsafe": {
-    "notes": "No guardrails currently configured on this endpoint and ALLOW_ENDPOINT_MUTATION=1 not set — settability not probed (dry-run). Documented knobs to probe: ('pii', 'safety', 'valid_topics', 'invalid_keywords') on input/output; a dedicated prompt-injection filter is NOT in the documented schema. ai_gateway keys=['usage_tracking_config']",
-    "recorded_at": "2026-07-09T12:56:58.281154+00:00",
-    "result": "❓"
+    "notes": "Guardrail surface exists and accepts configuration (input.pii behavior=BLOCK, input.safety=true via PUT ai-gateway; restored afterwards). NOT ENFORCED in this test: config was accepted, but a request containing synthetic PII still returned HTTP 200 (model echoed the values) on every probe up to ~90s after enablement — settable is not the same as enforcing. Probe trail: [('0s', 200), ('30s', 200), ('90s', 200)]. Last body: {\"choices\": [{\"finish_reason\": \"length\", \"index\": 0, \"message\": {\"content\": \"I want to be straightforward with you: I'll repeat back what you shared, since you've framed it as a.... No dedicated prompt-injection knob in the schema — knobs are pii/safety/valid_topics/invalid_keywords.",
+    "recorded_at": "2026-07-10T21:27:18.802137+00:00",
+    "result": "❌"
   },
   "per_user_hard_cap": {
     "notes": "No hard per-user budget cap: ai_gateway exposes only alert-style surfaces (usage tracking) and rate caps (rate_limits per user/endpoint), no spend-denominated block-at-budget field. Per-user rate limits found: 0. ai_gateway key paths=['usage_tracking_config', 'usage_tracking_config.enabled']; cap-like keys=NONE; rate_limits(verbatim)=[].",
@@ -35,8 +35,8 @@
     "result": "✅"
   },
   "revoke_gateway_no_fallback": {
-    "notes": "TEST_PRINCIPAL not set — untested",
-    "recorded_at": "2026-07-09T12:56:57.769745+00:00",
+    "notes": "Built-in pay-per-token endpoint 'databricks-claude-sonnet-4-6' has no endpoint id / per-principal ACL surface, so there is no gateway permission to revoke and the fallback-leak repro needs a custom or provisioned-throughput endpoint (or the environment from the original field report):",
+    "recorded_at": "2026-07-10T19:47:58.274191+00:00",
     "result": "❓"
   },
   "three_part_identifier_resolves": {
@@ -45,8 +45,8 @@
     "result": "✅"
   },
   "usage_tracking_per_user_agent": {
-    "notes": "Per-user attribution PROVEN (populated), but per-agent attribution unproven: the agent/client columns exist in the schema yet were empty/null in every sampled row — callers must send user_agent/usage_context metadata for it to populate. table=system.serving.endpoint_usage; user columns=['requester'] (populated: ['requester']); agent/client columns=['client_request_id', 'usage_context'] (populated: []); sampled rows=10. fresh inference HTTP 200 with marker 'uag-experiment-row09-7d14c36d5300' in User-Agent + usage_context. Marker hunt: 0 row(s) matched 'uag-experiment-row09-7d14c36d5300' (ingestion latency likely exceeds this run).",
-    "recorded_at": "2026-07-09T13:15:25.367643+00:00",
+    "notes": "Per-user attribution PROVEN (populated), but per-agent attribution unproven: the agent/client columns exist in the schema yet were empty/null in every sampled row — callers must send user_agent/usage_context metadata for it to populate. table=system.serving.endpoint_usage; user columns=['requester'] (populated: ['requester']); agent/client columns=['client_request_id', 'usage_context'] (populated: []); sampled rows=10. fresh inference HTTP 200 with marker 'uag-experiment-row09-354ea3b008d9' in User-Agent + usage_context. Marker hunt: 0 row(s) matched 'uag-experiment-row09-354ea3b008d9' (ingestion latency likely exceeds this run). Table-wide: usage_context is populated on 5825 historical row(s) (0 in the last 2 days) — the per-agent mechanism works for some client paths, but the gateway chat-completions route used here did not propagate our usage_context/User-Agent marker into the table.",
+    "recorded_at": "2026-07-10T21:30:16.025553+00:00",
     "result": "❓"
   }
 }

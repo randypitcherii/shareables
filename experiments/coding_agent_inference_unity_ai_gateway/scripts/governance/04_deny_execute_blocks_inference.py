@@ -83,15 +83,30 @@ def main() -> int:
             notes_parts.append(f"[{stmt}] -> {'OK' if res['ok'] else gov.snip(res['error'], 200)}")
 
         if not deny_ok:
-            _common.fail("DENY EXECUTE was refused by the API (all spellings).")
-            print("  Consistent with UC not supporting DENY on this securable, or")
-            print("  the Foundation Model Permissions Preview being disabled.")
-            verdict = None
-            notes_parts.insert(
-                0,
-                "API refused DENY EXECUTE on the model securable — blocking "
-                "behavior untestable:",
-            )
+            all_errors = " ".join(str(r["error"]) for _, r in deny_attempts)
+            if "UC_COMMAND_NOT_SUPPORTED" in all_errors:
+                # Not a preview gate — Unity Catalog has no DENY command at
+                # all (grants are additive-only; live-tested 2026-07-10).
+                # The capability cannot exist as described.
+                _common.fail("DENY is not a Unity Catalog command — capability does not exist.")
+                verdict = False
+                notes_parts.insert(
+                    0,
+                    "DENY does not exist in Unity Catalog (UC_COMMAND_NOT_SUPPORTED; "
+                    "grants are additive-only), so 'DENY EXECUTE blocks inference' "
+                    "is not achievable as documented — access is restricted by "
+                    "not-granting / revoking broader grants instead:",
+                )
+            else:
+                _common.fail("DENY EXECUTE was refused by the API (all spellings).")
+                print("  Consistent with the Foundation Model Permissions Preview")
+                print("  being disabled — untestable here.")
+                verdict = None
+                notes_parts.insert(
+                    0,
+                    "API refused DENY EXECUTE on the model securable — blocking "
+                    "behavior untestable:",
+                )
             return 0
 
         _common.ok("DENY EXECUTE accepted.")
