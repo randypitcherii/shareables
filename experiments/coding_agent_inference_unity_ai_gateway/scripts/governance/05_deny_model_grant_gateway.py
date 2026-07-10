@@ -80,19 +80,49 @@ def main() -> int:
             marker = "ok" if res["ok"] else f"{res['state']}: {gov.snip(res['error'], 150)}"
             print(f"    {stmt} -> {marker}")
             notes_parts.append(f"[{stmt}] -> {'OK' if res['ok'] else gov.snip(res['error'], 150)}")
-        if not deny_ok:
+        deny_unsupported = not deny_ok and "UC_COMMAND_NOT_SUPPORTED" in " ".join(
+            str(r["error"]) for _, r in deny_attempts
+        )
+        if not deny_ok and not deny_unsupported:
             _common.fail("DENY refused by the API — the definer's-rights contrast can't be set up.")
             verdict = None
             notes_parts.insert(0, "DENY on the model was refused — untestable:")
             return 0
+        if deny_unsupported:
+            # UC has no DENY command at all (live-tested 2026-07-10), so the
+            # row's exact setup is impossible. Continue with the remaining
+            # testable half — endpoint CAN_QUERY grant + inference as the
+            # principal — and record the nuance in the verdict notes.
+            print("    DENY is not a UC command (grants are additive-only) — ")
+            print("    continuing with the endpoint-grant half of the row only.")
+            notes_parts.insert(
+                0,
+                "DENY does not exist in UC (UC_COMMAND_NOT_SUPPORTED), so the "
+                "documented DENY-vs-gateway-grant contrast is impossible as "
+                "written; testing the endpoint-grant half only:",
+            )
 
         # --- 2. GRANT CAN_QUERY on the serving endpoint --------------------
         print("  Step 2: grant CAN_QUERY on the serving endpoint...")
         endpoint_id = gov.get_endpoint_id(endpoint_name)
         if not endpoint_id:
-            _common.fail(f"Could not resolve endpoint id for '{endpoint_name}'.")
+            # Live-tested 2026-07-10: built-in pay-per-token FM endpoints
+            # return no `id` field and the permissions API rejects their
+            # name ("not a valid Inference Endpoint ID") — per-principal
+            # endpoint ACLs do not exist for them OOTB.
+            _common.fail(
+                f"'{endpoint_name}' exposes no endpoint id — pay-per-token FM "
+                "endpoints do not support per-principal endpoint ACLs."
+            )
             verdict = None
-            notes_parts.insert(0, f"Endpoint '{endpoint_name}' not found/resolvable — untestable:")
+            notes_parts.insert(
+                0,
+                f"Built-in pay-per-token endpoint '{endpoint_name}' has no endpoint "
+                "id and the permissions API rejects it — per-principal endpoint "
+                "grants (CAN_QUERY) are unavailable for workspace FM endpoints, so "
+                "the gateway-grant half is untestable there (custom/provisioned "
+                "endpoints would be needed):",
+            )
             return 0
         acl_status, acl_body = gov.get_endpoint_acl(endpoint_id)
         if acl_status == 200 and isinstance(acl_body, dict):
@@ -126,7 +156,20 @@ def main() -> int:
         print(f"  Step 3: inference AS {principal}: HTTP {status}")
         notes_parts.append(f"inference as principal -> HTTP {status} ({gov.snip(body, 200)})")
 
-        if status == 200:
+        if status == 200 and deny_unsupported:
+            # Without a DENY (impossible in UC) and with the default
+            # schema-wide `account users` EXECUTE grant in place, a 200 here
+            # cannot isolate definer's rights from plain inherited access.
+            _common.ok("Endpoint CAN_QUERY holder inferred successfully (200).")
+            verdict = None
+            notes_parts.insert(
+                0,
+                "Partially tested: endpoint CAN_QUERY + no direct model grant -> "
+                "inference 200, consistent with definer's rights, but not "
+                "isolable — UC has no DENY and the default schema-wide "
+                "`account users` EXECUTE grant provides model access anyway:",
+            )
+        elif status == 200:
             _common.ok(
                 "Inference SUCCEEDED despite the model-level DENY — this is the "
                 "counterintuitive-but-documented definer's-rights behavior: the "

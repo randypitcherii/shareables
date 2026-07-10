@@ -249,29 +249,70 @@ def sql_quote_principal(principal: str) -> str:
     return "`" + principal.replace("`", "``") + "`"
 
 
+def backtick_parts(full_name: str) -> str:
+    """Backtick-quote each part of a dotted UC name (hyphens need quoting)."""
+    return ".".join(f"`{p}`" for p in full_name.split("."))
+
+
+_SECURABLE_CACHE: dict[str, str | None] = {}
+
+
+def uc_model_securable(model_id: str) -> str | None:
+    """Discover the UC registered-model securable behind a gateway model id.
+
+    Live-tested 2026-07-10: the UC securables in system.ai KEEP the
+    `databricks-` prefix (`system.ai.databricks-claude-sonnet-4-6` is the
+    registered model) while the gateway INFERENCE identifier drops it
+    (`system.ai.claude-sonnet-4-6`). The two names differ, so grants must
+    target the discovered securable, not the inference id. Probes with
+    SHOW GRANTS (read-only); returns the full securable name, or None.
+    """
+    if model_id in _SECURABLE_CACHE:
+        return _SECURABLE_CACHE[model_id]
+    catalog, schema, tail = model_id.split(".", 2)
+    candidates = [model_id]
+    if not tail.startswith("databricks-"):
+        candidates.append(f"{catalog}.{schema}.databricks-{tail}")
+    found: str | None = None
+    for cand in candidates:
+        probe = sql_exec(f"SHOW GRANTS ON FUNCTION {backtick_parts(cand)}")
+        if probe["ok"]:
+            found = cand
+            break
+    _SECURABLE_CACHE[model_id] = found
+    return found
+
+
 def try_privilege_statements(
     verb: str, model_id: str, principal: str, token: str | None = None
 ) -> tuple[bool, list[tuple[str, dict]]]:
     """Attempt GRANT/REVOKE/DENY EXECUTE against the model securable.
 
-    The exact securable keyword for foundation-model services is itself part
-    of what's under test (suspected gated behind the account-console
-    "Foundation Model Permissions" Preview/Beta), so we try both spellings —
-    UC registered models surface as securable type FUNCTION in the grants
-    API, while SQL also documents a MODEL keyword. Returns
+    Live-tested 2026-07-10: UC registered models take grants as securable
+    type FUNCTION (`GRANT EXECUTE ON FUNCTION system.ai.`databricks-...``);
+    a MODEL keyword is a parse error, and unquoted hyphenated names are too.
+    The securable name is discovered via uc_model_securable() because it can
+    differ from the gateway inference id. Returns
     (any_succeeded, [(statement, result), ...]) with verbatim errors kept.
     """
     verb = verb.upper()
     keyword = "FROM" if verb == "REVOKE" else "TO"
     quoted = sql_quote_principal(principal)
     attempts: list[tuple[str, dict]] = []
-    for securable in ("MODEL", "FUNCTION"):
-        stmt = f"{verb} EXECUTE ON {securable} {model_id} {keyword} {quoted}"
-        result = sql_exec(stmt, token=token)
-        attempts.append((stmt, result))
-        if result["ok"]:
-            return True, attempts
-    return False, attempts
+    securable = uc_model_securable(model_id)
+    if securable is None:
+        attempts.append((
+            f"(securable discovery for {model_id})",
+            {"ok": False, "state": "NOT_FOUND",
+             "error": f"no UC registered model found for '{model_id}' "
+                      f"(tried the id and its databricks- prefixed form)",
+             "rows": []},
+        ))
+        return False, attempts
+    stmt = f"{verb} EXECUTE ON FUNCTION {backtick_parts(securable)} {keyword} {quoted}"
+    result = sql_exec(stmt, token=token)
+    attempts.append((stmt, result))
+    return bool(result["ok"]), attempts
 
 
 # ---------------------------------------------------------------------------

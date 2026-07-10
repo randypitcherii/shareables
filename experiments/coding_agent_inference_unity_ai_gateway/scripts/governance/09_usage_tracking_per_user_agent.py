@@ -149,12 +149,37 @@ def main() -> int:
             if hits:
                 agent_populated = agent_populated or agent_cols
 
+    # --- Step 3c: table-wide check — is the agent metadata EVER populated? ---
+    # A 10-row sample can miss a column that IS used by other clients. Ask
+    # the whole table: this separates "mechanism doesn't work" from "our
+    # gateway path doesn't populate it".
+    mechanism_note = ""
+    if "usage_context" in columns:
+        ever = gov.sql_exec(
+            f"SELECT COUNT(*) FROM {table} WHERE usage_context IS NOT NULL "
+            "AND to_json(usage_context) NOT IN ('{}', 'null')"
+        )
+        recent = gov.sql_exec(
+            f"SELECT COUNT(*) FROM {table} WHERE request_time > "
+            "current_timestamp() - INTERVAL 2 DAYS AND usage_context IS NOT NULL "
+            "AND to_json(usage_context) NOT IN ('{}', 'null')"
+        )
+        ever_n = int(ever["rows"][0][0]) if ever["ok"] and ever["rows"] else 0
+        recent_n = int(recent["rows"][0][0]) if recent["ok"] and recent["rows"] else 0
+        print(f"  usage_context populated ever={ever_n}, last 2 days={recent_n}")
+        mechanism_note = (
+            f" Table-wide: usage_context is populated on {ever_n} historical row(s) "
+            f"({recent_n} in the last 2 days) — the per-agent mechanism works for "
+            "some client paths, but the gateway chat-completions route used here "
+            "did not propagate our usage_context/User-Agent marker into the table."
+        )
+
     detail = (
         f"table={table}; user columns={user_cols} (populated: {user_populated}); "
         f"agent/client columns={agent_cols} (populated: {agent_populated}); "
         f"sampled rows={rows_seen}"
         + ("" if sample["ok"] else f"; sample query error={gov.snip(sample['error'], 150)}")
-        + f". {inference_note}.{marker_note}"
+        + f". {inference_note}.{marker_note}{mechanism_note}"
     )
 
     if user_populated and agent_populated:
