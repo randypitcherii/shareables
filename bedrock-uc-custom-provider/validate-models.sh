@@ -39,7 +39,7 @@ MODELS=(
   "us.anthropic.claude-fable-5|Claude Fable 5 (needs data-retention opt-in)"
 )
 
-REQUEST_BODY='{"messages":[{"role":"user","content":[{"text":"Reply with the single word: pong"}]}],"inferenceConfig":{"maxTokens":50}}'
+REQUEST_BODY='{"messages":[{"role":"user","content":[{"text":"Reply with the single word: pong"}]}],"inferenceConfig":{"maxTokens":200}}'
 
 PASS=0
 FAIL=0
@@ -74,10 +74,13 @@ except json.JSONDecodeError:
     doc = {}
 if code.startswith("2"):
     try:
-        text = doc["output"]["message"]["content"][0]["text"]
+        # Reasoning models (e.g. gpt-oss) emit a reasoningContent block before
+        # the text block — take the first block that carries text.
+        blocks = doc["output"]["message"]["content"]
+        text = next(b["text"] for b in blocks if "text" in b)
         print(f"replied: {text.strip()[:60]!r}")
         sys.exit(0)
-    except (KeyError, IndexError, TypeError):
+    except (KeyError, StopIteration, TypeError):
         print("HTTP 2xx but unexpected response shape")
         sys.exit(1)
 msg = str(doc.get("message", doc.get("Message", raw)))[:200]

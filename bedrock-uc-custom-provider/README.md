@@ -127,13 +127,14 @@ Content-Type: application/json
 |---|---|---|---|
 | Claude Sonnet 5 | `us.anthropic.claude-sonnet-5` | ~1.6s | `global.` inference profile also available |
 | Claude Opus 4.8 | `us.anthropic.claude-opus-4-8` | ~1.2s | `global.` inference profile also available |
-| GPT-OSS 120B | `openai.gpt-oss-120b-1:0` | ~0.7s | also reachable via Bedrock's OpenAI-compat layer (see caveats) |
+| GPT-OSS 120B | `openai.gpt-oss-120b-1:0` | ~0.7s | also reachable via Bedrock's OpenAI-compat layer (see caveats); its Converse responses put a `reasoningContent` block *before* the `text` block — don't assume `content[0].text` |
 | GLM 5 | `zai.glm-5` | ~0.5s | direct model ID — no inference profile needed |
 | Nova 2 Lite | `global.amazon.nova-2-lite-v1:0` | ~0.6s | latest Nova text model; `us.` profile also available |
 
-These latencies and results are from a live verification run on 2026-07-23;
-your numbers will vary. `validate-models.sh` re-checks the whole matrix so
-drift in Bedrock's catalog is caught on re-run.
+These latencies and results are from live verification runs on 2026-07-23
+(including a run of `validate-models.sh` itself: 5 PASS, Fable 5 SKIP); your
+numbers will vary. `validate-models.sh` re-checks the whole matrix so drift in
+Bedrock's catalog is caught on re-run.
 
 ### Claude Fable 5 — one-time account opt-in required
 
