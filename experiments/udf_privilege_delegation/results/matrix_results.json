@@ -1,0 +1,248 @@
+{
+  "environment": {
+    "author_identity": "workspace admin",
+    "caller_identity": "OAuth M2M service principal, workspace user (non-admin)",
+    "cloud": "AWS",
+    "compute": "serverless SQL warehouse (PRO channel)",
+    "unity_catalog": "enabled",
+    "workspace": "one real Databricks workspace (host redacted)"
+  },
+  "rows": {
+    "1": {
+      "evidence": {
+        "control_direct_read": {
+          "error": "[INSUFFICIENT_PERMISSIONS] Insufficient privileges: User does not have SELECT on Table 'my_catalog.udf_privilege_delegation.sensitive_table'. SQLSTATE: 42501",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "function_invocation": {
+          "error": null,
+          "error_code": null,
+          "scalar": "3",
+          "succeeded": true
+        }
+      },
+      "finding": "Definer's rights. The caller was denied a direct read of sensitive_table but successfully invoked an admin-owned SQL UDF whose body reads it, receiving 3. A SQL UDF is therefore a genuine privilege boundary for data access: EXECUTE on the function is sufficient and the caller never gains the underlying SELECT.",
+      "question": "Does a UC SQL UDF body run with definer (owner) privileges on objects the caller cannot access?",
+      "recorded_at": "2026-07-28T21:55:40+00:00",
+      "status": "pass"
+    },
+    "2": {
+      "evidence": {
+        "as_admin": {
+          "public_internet": {
+            "invocation": {
+              "error": null,
+              "error_code": null,
+              "scalar": "{\"reached\": true, \"status\": 200}",
+              "succeeded": true
+            },
+            "udf_report": {
+              "reached": true,
+              "status": 200
+            }
+          },
+          "workspace_control_plane": {
+            "invocation": {
+              "error": null,
+              "error_code": null,
+              "scalar": "{\"reached\": true, \"status\": 401, \"http_error\": true}",
+              "succeeded": true
+            },
+            "udf_report": {
+              "http_error": true,
+              "reached": true,
+              "status": 401
+            }
+          }
+        },
+        "as_lowpriv_caller": {
+          "public_internet": {
+            "invocation": {
+              "error": null,
+              "error_code": null,
+              "scalar": "{\"reached\": true, \"status\": 200}",
+              "succeeded": true
+            },
+            "udf_report": {
+              "reached": true,
+              "status": 200
+            }
+          },
+          "workspace_control_plane": {
+            "invocation": {
+              "error": null,
+              "error_code": null,
+              "scalar": "{\"reached\": true, \"status\": 401, \"http_error\": true}",
+              "succeeded": true
+            },
+            "udf_report": {
+              "http_error": true,
+              "reached": true,
+              "status": 401
+            }
+          }
+        }
+      },
+      "finding": "The UC Python UDF sandbox has outbound network access. As the low-privilege caller: workspace_control_plane -> HTTP 401, public_internet -> HTTP 200. A REST-based administrative action is therefore mechanically reachable from inside a function body \u2014 egress is not the constraint. Whether the request can be *authenticated* is row 3.",
+      "question": "Can a UC Python UDF make an outbound HTTPS request (the prerequisite for any REST-based admin action)?",
+      "recorded_at": "2026-07-28T21:55:48+00:00",
+      "status": "pass"
+    },
+    "3": {
+      "evidence": {
+        "as_admin": {
+          "invocation": {
+            "error": null,
+            "error_code": null,
+            "scalar": "{\"databricks_env_vars\": [\"DATABRICKS_ROOT_VIRTUALENV_ENV\"], \"credential_env_vars_present\": [], \"sdk_importable\": true, \"sdk_default_auth\": \"ValueError: default auth: cannot configure default credentials, please check https://docs.databricks.com/en/dev-tools/auth.html#databricks-client-unified-authentication to configure credentials for your preferred\", \"dbutils_available\": false, \"spark_session\": \"none\"}",
+            "succeeded": true
+          },
+          "udf_report": {
+            "credential_env_vars_present": [],
+            "databricks_env_vars": [
+              "DATABRICKS_ROOT_VIRTUALENV_ENV"
+            ],
+            "dbutils_available": false,
+            "sdk_default_auth": "ValueError: default auth: cannot configure default credentials, please check https://docs.databricks.com/en/dev-tools/auth.html#databricks-client-unified-authentication to configure credentials for your preferred",
+            "sdk_importable": true,
+            "spark_session": "none"
+          }
+        },
+        "as_lowpriv_caller": {
+          "invocation": {
+            "error": null,
+            "error_code": null,
+            "scalar": "{\"databricks_env_vars\": [\"DATABRICKS_ROOT_VIRTUALENV_ENV\"], \"credential_env_vars_present\": [], \"sdk_importable\": true, \"sdk_default_auth\": \"ValueError: default auth: cannot configure default credentials, please check https://docs.databricks.com/en/dev-tools/auth.html#databricks-client-unified-authentication to configure credentials for your preferred\", \"dbutils_available\": false, \"spark_session\": \"none\"}",
+            "succeeded": true
+          },
+          "udf_report": {
+            "credential_env_vars_present": [],
+            "databricks_env_vars": [
+              "DATABRICKS_ROOT_VIRTUALENV_ENV"
+            ],
+            "dbutils_available": false,
+            "sdk_default_auth": "ValueError: default auth: cannot configure default credentials, please check https://docs.databricks.com/en/dev-tools/auth.html#databricks-client-unified-authentication to configure credentials for your preferred",
+            "sdk_importable": true,
+            "spark_session": "none"
+          }
+        }
+      },
+      "finding": "No ambient credential. The UC Python UDF sandbox exposed no DATABRICKS_* environment variables and the SDK could not construct a default-auth client, for either identity. A function body therefore has nothing to authenticate as \u2014 it cannot act on the owner's behalf even in principle. Any credential would have to be passed in explicitly by the caller, which inverts the pattern: the caller would need to already hold the privileged credential.",
+      "question": "Does a UC Python UDF receive an ambient Databricks credential it could use to act as the function owner?",
+      "recorded_at": "2026-07-28T21:55:57+00:00",
+      "status": "fail"
+    },
+    "4": {
+      "evidence": {
+        "directory_contains_target_after_call": false,
+        "invocation": {
+          "error": null,
+          "error_code": null,
+          "scalar": "{\"had_ambient_token\": false, \"had_ambient_host\": false, \"outcome\": \"no ambient credential in UDF sandbox\"}",
+          "succeeded": true
+        },
+        "udf_report": {
+          "had_ambient_host": false,
+          "had_ambient_token": false,
+          "outcome": "no ambient credential in UDF sandbox"
+        }
+      },
+      "finding": "End-to-end delegation did not work. The caller could invoke the admin-owned function, but no service principal was created \u2014 the function body could not perform the administrative action. The failure is a capability failure inside the sandbox (see rows 2 and 3), not an authorization failure on the function itself.",
+      "question": "Can a low-privilege caller create a service principal by invoking an admin-owned UDF wrapper?",
+      "recorded_at": "2026-07-28T21:56:02+00:00",
+      "status": "fail"
+    },
+    "5": {
+      "evidence": {
+        "create_login": {
+          "outcome": {
+            "error": "[PARSE_SYNTAX_ERROR] Syntax error at or near 'LOGIN'. SQLSTATE: 42601 (line 1, pos 7) == SQL == CREATE LOGIN `udf-delegation-probe` -------^^^",
+            "error_code": "ServiceErrorCode.BAD_REQUEST",
+            "scalar": null,
+            "succeeded": false
+          },
+          "statement": "CREATE LOGIN `udf-delegation-probe`"
+        },
+        "create_service_principal": {
+          "outcome": {
+            "error": "[PARSE_SYNTAX_ERROR] Syntax error at or near 'SERVICE'. SQLSTATE: 42601 (line 1, pos 7) == SQL == CREATE SERVICE PRINCIPAL `udf-delegation-probe` -------^^^",
+            "error_code": "ServiceErrorCode.BAD_REQUEST",
+            "scalar": null,
+            "succeeded": false
+          },
+          "statement": "CREATE SERVICE PRINCIPAL `udf-delegation-probe`"
+        },
+        "create_user": {
+          "outcome": {
+            "error": "[PARSE_SYNTAX_ERROR] Syntax error at or near 'USER'. SQLSTATE: 42601 (line 1, pos 7) == SQL == CREATE USER `udf-delegation-probe` -------^^^",
+            "error_code": "ServiceErrorCode.BAD_REQUEST",
+            "scalar": null,
+            "succeeded": false
+          },
+          "statement": "CREATE USER `udf-delegation-probe`"
+        }
+      },
+      "finding": "No SQL surface. Every identity-administration statement was rejected by the parser even for a workspace admin, so principal creation is reachable only over the SCIM REST API. The one function type that carries definer's rights (SQL UDFs, row 1) therefore cannot express the action, and the one that could express it (Python UDFs) has neither egress nor a credential (rows 2-3). The two halves of the pattern never meet.",
+      "question": "Does any SQL surface exist for creating a principal, such that a definer-rights SQL UDF could wrap it?",
+      "recorded_at": "2026-07-28T21:56:05+00:00",
+      "status": "fail"
+    },
+    "6": {
+      "evidence": {
+        "describe_function_extended": {
+          "error": null,
+          "error_code": null,
+          "sentinel_visible_to_caller": true,
+          "statement": "DESCRIBE FUNCTION EXTENDED `my_catalog`.`udf_privilege_delegation`.f_py_with_embedded_sentinel",
+          "succeeded": true
+        },
+        "information_schema_routines": {
+          "error": null,
+          "error_code": null,
+          "sentinel_visible_to_caller": true,
+          "statement": "SELECT routine_definition FROM `my_catalog`.information_schema.routines WHERE routine_schema = 'udf_privilege_delegation' AND routine_name = 'f_py_with_embedded_sentinel'",
+          "succeeded": true
+        },
+        "invocation_control": {
+          "error": null,
+          "error_code": null,
+          "scalar": "ran",
+          "succeeded": true
+        },
+        "show_create_table": {
+          "error": "[TABLE_OR_VIEW_NOT_FOUND] The table or view `my_catalog`.`udf_privilege_delegation`.`f_py_with_embedded_sentinel` cannot be found. Verify the spelling and correctness of the schema and catalog.\nSearch path: [`system`.`session`, `my_catalog`.`default`].\nIf you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.\nTo tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 18",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "sentinel_visible_to_caller": false,
+          "statement": "SHOW CREATE TABLE `my_catalog`.`udf_privilege_delegation`.f_py_with_embedded_sentinel",
+          "succeeded": false
+        }
+      },
+      "finding": "The function body is readable by a caller holding only EXECUTE, via describe_function_extended, information_schema_routines. A credential hardcoded into the body is therefore disclosed to exactly the population the wrapper was meant to keep it from \u2014 the workaround is not a delegation boundary, it is a credential handout with extra steps.",
+      "question": "Can a caller holding only EXECUTE read the function body, and therefore any credential embedded in it?",
+      "recorded_at": "2026-07-28T21:56:14+00:00",
+      "status": "fail"
+    },
+    "7": {
+      "evidence": {
+        "credential_source": "author's short-lived OAuth access token, embedded in the body",
+        "directory_contains_target_after_call": true,
+        "invocation": {
+          "error": null,
+          "error_code": null,
+          "scalar": "{\"outcome\": \"created\", \"status\": 201}",
+          "succeeded": true
+        },
+        "udf_report": {
+          "outcome": "created",
+          "status": 201
+        }
+      },
+      "finding": "It works, by embedding a credential. A caller holding only EXECUTE created a service principal through an admin-authored Python UDF whose body carries the author's token. The action is genuinely delegated and genuinely narrow \u2014 the caller can pass only a display name. But the elevation comes from a stored secret, not from the function model: the platform never re-authorizes the body as the owner, it simply replays whatever credential the author left in the source. Row 6 decides whether that secret stays hidden from the caller, and the token expires, so the wrapper silently stops working when it does.",
+      "question": "Does embedding the author's credential in the function body make the delegated admin action succeed for a low-privilege caller?",
+      "recorded_at": "2026-07-28T21:56:41+00:00",
+      "status": "pass"
+    }
+  }
+}
