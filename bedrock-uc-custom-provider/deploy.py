@@ -15,13 +15,19 @@ Creates (idempotently):
 then verifies the working invocation path: provider passthrough to Bedrock's
 Converse API through the gateway.
 
-Run:  AWS_BEARER_TOKEN_BEDROCK='ABSK...' uv run deploy.py
+The Bedrock key is read from a Databricks secret. Store it once:
+
+    databricks secrets create-scope bedrock
+    databricks secrets put-secret bedrock aws_bearer_token_bedrock --string-value 'ABSK...'
+
+Run:  uv run deploy.py
 
 Uses the beta, undocumented `model-provider-services` / `model-services` UC
 APIs — not DABs resources yet, hence a plain script with declarative
 parameters at the top.
 """
 
+import base64
 import os
 import sys
 import time
@@ -32,7 +38,8 @@ from databricks.sdk.errors import DatabricksError, NotFound
 # ── Parameters ──────────────────────────────────────────────────────────────
 TARGET_CATALOG = "ai_gateway_demo"  # created if missing — metastore default storage
 TARGET_SCHEMA = "bedrock"           # created if missing
-BEDROCK_API_KEY = os.environ["AWS_BEARER_TOKEN_BEDROCK"]  # ABSK... long-term key
+SECRET_SCOPE = "bedrock"            # Databricks secret holding the ABSK... key
+SECRET_KEY = "aws_bearer_token_bedrock"
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", "us-east-1")
 
 PROVIDER_ID = "aws_bedrock"
@@ -127,6 +134,11 @@ def verify_passthrough():
 
 
 def main():
+    # secrets/get returns the value base64-encoded
+    bedrock_api_key = base64.b64decode(
+        w.secrets.get_secret(SECRET_SCOPE, SECRET_KEY).value
+    ).decode()
+
     ensure_catalog_and_schema()
 
     created = ensure_gateway_object(
@@ -140,7 +152,7 @@ def main():
             "forward_unmanaged_paths": True,
             "custom": {
                 "direct": {
-                    "api_key": {"plaintext": BEDROCK_API_KEY},
+                    "api_key": {"plaintext": bedrock_api_key},
                     "base_url": f"https://bedrock-runtime.{BEDROCK_REGION}.amazonaws.com",
                 }
             },

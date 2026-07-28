@@ -29,9 +29,10 @@ caller ──(Databricks OAuth)──► <workspace>/ai-gateway/... ──(ABSK 
 
 ## What `deploy.py` creates
 
-Parameters are at the top of the script; the key comes from the
-`AWS_BEARER_TOKEN_BEDROCK` env var (region from `BEDROCK_REGION`, default
-`us-east-1`). Everything is create-if-missing:
+Parameters are at the top of the script; the key is read from a **Databricks
+secret** (scope `bedrock`, key `aws_bearer_token_bedrock` by default — so the
+`ABSK` key never touches your shell env or disk) and the region from
+`BEDROCK_REGION` (default `us-east-1`). Everything is create-if-missing:
 
 1. **Catalog** — no `storage_root`, so it uses the metastore's default storage.
 2. **Schema** — inside that catalog.
@@ -49,7 +50,10 @@ It ends with a live verification call — Sonnet 5 through the gateway via
 provider passthrough — and prints the reply.
 
 ```bash
-export AWS_BEARER_TOKEN_BEDROCK='ABSK...'   # never commit this
+# one-time: store the Bedrock key as a Databricks secret (never commit it)
+databricks secrets create-scope bedrock
+databricks secrets put-secret bedrock aws_bearer_token_bedrock --string-value 'ABSK...'
+
 uv run deploy.py
 ```
 
