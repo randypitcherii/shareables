@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+aws_profile = "your-aws-profile-name"
+aws_region  = "us-east-1"
+
+# Decide your own exposure. The broker is UNAUTHENTICATED — synthetic data only,
+# destroy when done. Lock down for anything beyond a short evaluation window.
+allowed_ingress_cidrs = [
+  "203.0.113.10/32", # your laptop
+  # plus your Databricks workspace egress CIDRs, or 0.0.0.0/0 for a short-lived run
+]

@@ -1,0 +1,37 @@
+#!/bin/bash
+# Bootstraps a single-node Apache Pulsar standalone with the KoP (Kafka-on-Pulsar)
+# protocol handler, exposing:
+#   6650 - Pulsar binary protocol
+#   8080 - Pulsar admin API
+#   9092 - Kafka protocol (KoP)
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+mkdir -p /opt/pulsar/protocols
+
+# KoP NAR is Apache-2.0 licensed; version must pair with the Pulsar release.
+curl -fL -o /opt/pulsar/protocols/pulsar-protocol-handler-kafka-${kop_version}.nar \
+  "https://github.com/streamnative/kop/releases/download/v${kop_version}/pulsar-protocol-handler-kafka-${kop_version}.nar"
+
+# Public IP via IMDSv2 — advertised to both Pulsar and Kafka clients so external
+# lookups redirect to a reachable address.
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PUBLIC_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# entryFormat=pulsar lets one event stream (produced with the native Pulsar client)
+# be consumed over BOTH protocols — that is the whole point of this evaluation.
+docker run -d --name pulsar --restart always \
+  -p 6650:6650 -p 8080:8080 -p 9092:9092 \
+  -v /opt/pulsar/protocols:/pulsar/protocols \
+  -e PULSAR_PREFIX_messagingProtocols=kafka \
+  -e PULSAR_PREFIX_protocolHandlerDirectory=./protocols \
+  -e PULSAR_PREFIX_entryFormat=pulsar \
+  -e PULSAR_PREFIX_kafkaListeners=PLAINTEXT://0.0.0.0:9092 \
+  -e PULSAR_PREFIX_kafkaAdvertisedListeners=PLAINTEXT://$PUBLIC_IP:9092 \
+  -e PULSAR_PREFIX_advertisedAddress=$PUBLIC_IP \
+  -e PULSAR_PREFIX_allowAutoTopicCreationType=partitioned \
+  -e PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled=false \
+  apachepulsar/pulsar:${pulsar_version} \
+  sh -c "bin/apply-config-from-env.py conf/standalone.conf && bin/pulsar standalone --no-functions-worker --no-stream-storage"
