@@ -106,12 +106,138 @@ diagnosis entirely (a firewall) instead of the right one (no credential).
 `reached: true` with the status code. Reachability and authorization are
 different questions and a probe that conflates them answers neither.
 
+## Trap 4 — an authorization refusal wearing an HTTP status code
+
+Rows 8–11 and 14 were added on 2026-07-29 and immediately reproduced the same
+family of mistake, from the other direction.
+
+`http_request()` does not fail the statement when Unity Catalog refuses the
+connection. It returns, successfully, a `STRUCT<status_code, text>` whose
+`status_code` is `403` and whose `text` carries the refusal:
+
+```
+{"status_code":"403","text":"[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP
+request failed with code 403, and error message 'HTTP request failed with status:
+{"error_code":"PERMISSION_DENIED","message":"Failed request to <host>. Error:
+User is missing USE CONNECTION on <connection>"}' SQLSTATE: 57012"}
+```
+
+The first version of row 8 scored on `outcome.succeeded`, so the caller's refusal
+counted as a working call and the row recorded **inconclusive** on the grounds
+that the caller "could use the connection directly". Read one step further and it
+would have recorded **pass** — definer's rights work — which is the opposite of
+what happened.
+
+This is trap 3 inverted. There the harness treated an HTTP answer as a
+connectivity failure; here it treated an authorization failure as an HTTP answer.
+The general form is the same: `http_request()` returns a transport-shaped value
+for both transport outcomes and authorization outcomes, so the status code alone
+never says which one occurred. Scoring now goes through
+`_delegation_common.http_request_outcome`, which classifies on the body, and a
+call counts as allowed only when the platform did not refuse it *and* the origin
+answered.
+
+## Trap 5 — one probe cannot separate "unreachable" from "not allowed"
+
+Row 11 asks whether `http_request()` can reach this workspace's own SCIM API. The
+first version asked it once, with the sentinel credential, and got:
+
+```
+{"status_code":"401","text":"... {"error_code":401,"message":"Credential was not
+sent or was of an unsupported type for this API. [ReqId: ...]"}"}
+```
+
+Scored as "refused", which was true and useless. A 401 about the credential is
+evidence the request *arrived* — DNS, egress and TLS all worked and the platform
+got as far as looking at what was presented. Reporting that as unreachable
+invites the firewall diagnosis all over again.
+
+The same call with a valid credential is refused `403`, by the workspace's IP
+access list, naming the egress address. That is the real answer, and it can only
+appear after authentication succeeds — an access list has nothing to evaluate
+until it knows who is asking.
+
+So the row runs both probes deliberately: the sentinel establishes that the
+round trip completes, and the live credential establishes that the authenticated
+request is then refused at the perimeter. Either probe alone tells a coherent
+and wrong story.
+
 ## What survived
 
 Rows 1, 5, 6, and 7 were correct on the first run and unchanged by the fixes.
 Rows 2 and 3 changed status. Row 4 was correct throughout but for a reason the
 first harness could not have articulated — it fails because of row 3, and rows
 2 and 3 had to be measured properly before that attribution was earned.
+
+Of the 2026-07-29 additions, rows 9, 10, 12 and 13 were correct on the first run.
+Row 8 changed status once its scoring was fixed (trap 4) and row 11 changed once
+it stopped asking its question with a single probe (trap 5). Row 14 was written
+after the fixes and inherits both.
+
+## Verbatim platform responses, 2026-07-29
+
+Row 8, the caller through the admin-owned SQL UDF, holding only `EXECUTE`:
+
+```
+PERMISSION_DENIED: Failed request to <host>. Error:
+User is missing USE CONNECTION on <connection>
+```
+
+Identical, string for string, to what the same caller got calling
+`http_request()` directly. That identity is the finding.
+
+Row 9, the same caller *after* `GRANT USE CONNECTION`, running
+`DESCRIBE CONNECTION`:
+
+```
+Connection Name  <connection>
+Type             HTTP
+Owner            author@example.com
+Read-only        true
+Options          auth_scheme -> bearer, host -> <host>, port -> 443, base_path -> /
+```
+
+No `bearer_token`. `SHOW CONNECTIONS`, `system.information_schema.connections`
+and the connections REST API were all allowed and all silent about it too.
+
+Row 10, the same caller, request shapes the author's function never makes:
+
+```
+GET  <base_path>                    -> 200   (origin answered)
+GET  some/other/resource            -> 404   (origin answered)
+POST <base_path>                    -> 405   (origin answered)
+DELETE <base_path>                  -> 405   (origin answered)
+GET  ../../etc/passwd               -> [INVALID_HTTP_REQUEST_PATH] rejected
+```
+
+A 404 is a stronger result than a 200 here: it can only have come from the far
+end, so the platform dispatched a call nobody authored.
+
+Row 12, the caller triggering the broker job with the two suffixes:
+
+```json
+{"requested_suffix": "alpha", "run_as": "author@example.com", "outcome": "created",
+ "created_display_name": "udf-delegation-job-sp-alpha"}
+{"requested_suffix": "../Evil Name", "outcome": "rejected",
+ "reason": "suffix must match ^[a-z0-9-]{1,24}$"}
+```
+
+Row 13, the same caller against the job's edges: `edit_task`, `change_run_as` and
+`regrant_self` all `PermissionDenied`; reading the notebook the job runs came
+back `ResourceDoesNotExist`, which is a refusal that hides the object's existence
+rather than naming the privilege — still a refusal, but not an authorization
+answer, and the README says so rather than rounding it up.
+
+Row 14, the caller through a `SQL SECURITY DEFINER` procedure, with
+`USE CONNECTION` revoked:
+
+```
+401 Credential was not sent or was of an unsupported type for this API. [ReqId: ...]
+```
+
+Not the `USE CONNECTION` refusal the UDF produced, and not a working call. The
+`ReqId` marks it as platform-emitted rather than anything the target host would
+say.
 
 ## Environment dependence worth restating
 

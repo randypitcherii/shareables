@@ -13,7 +13,7 @@ export
 
 PY := uv run python
 
-.PHONY: help auth-check verify setup matrix row-1 row-2 row-3 row-4 row-5 row-6 row-7 teardown test test-infrastructure lint
+.PHONY: help auth-check verify setup matrix row-1 row-2 row-3 row-4 row-5 row-6 row-7 row-8 row-9 row-10 row-11 row-12 row-13 row-14 teardown test test-infrastructure lint
 
 help: ## List available targets
 	@echo "Targets:"
@@ -35,8 +35,10 @@ verify: auth-check ## Prove auth + connectivity end-to-end with one real request
 setup: verify ## Create the low-privilege caller, the admin-owned objects, and the grants
 	$(PY) scripts/setup/00_create_lowpriv_principal.py
 	$(PY) scripts/setup/01_provision_objects.py
+	$(PY) scripts/setup/02_provision_connection.py
+	$(PY) scripts/setup/03_provision_delegated_job.py
 
-matrix: row-1 row-2 row-3 row-4 row-5 row-6 row-7 ## Run every matrix row and rewrite results/matrix_results.json
+matrix: row-1 row-2 row-3 row-4 row-5 row-6 row-7 row-8 row-9 row-10 row-11 row-12 row-13 row-14 ## Run every matrix row and rewrite results/matrix_results.json
 
 row-1: ## SQL UDF — definer vs invoker rights
 	$(PY) scripts/delegation/01_sql_udf_definer_vs_invoker.py
@@ -59,7 +61,28 @@ row-6: ## Function body readability — can a caller with only EXECUTE read the 
 row-7: ## Author-embedded credential — does the delegated action work then?
 	$(PY) scripts/delegation/07_embedded_credential_end_to_end.py
 
-teardown: ## Remove the schema, the functions, and both service principals
+row-8: ## UC connection — does the privilege resolve as definer or invoker?
+	$(PY) scripts/delegation/08_connection_definer_vs_invoker.py
+
+row-9: ## UC connection — is the stored credential readable by its grantees?
+	$(PY) scripts/delegation/09_connection_credential_readable_by_caller.py
+
+row-10: ## UC connection — what does USE CONNECTION actually authorise?
+	$(PY) scripts/delegation/10_connection_grant_blast_radius.py
+
+row-11: ## UC connection — is this workspace's control plane reachable at all?
+	$(PY) scripts/delegation/11_control_plane_reachable_via_connection.py
+
+row-12: ## Job run-as — can a CAN_MANAGE_RUN caller cause the shaped action?
+	$(PY) scripts/delegation/12_job_run_as_delegated_action.py
+
+row-13: ## Job run-as — what does CAN_MANAGE_RUN withhold?
+	$(PY) scripts/delegation/13_job_manage_run_boundary.py
+
+row-14: ## SQL SECURITY DEFINER procedure — does it change row 8's answer?
+	$(PY) scripts/delegation/14_definer_procedure_vs_connection.py
+
+teardown: ## Remove the schema, connections, broker job, and every service principal
 	$(PY) scripts/setup/99_teardown.py
 
 test: ## Run no-infra tests only (unit + composition)

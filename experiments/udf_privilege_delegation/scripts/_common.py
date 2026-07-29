@@ -55,6 +55,32 @@ LOWPRIV_DISPLAY_NAME = os.environ.get(
     "EXPERIMENT_LOWPRIV_DISPLAY_NAME", "udf-delegation-lowpriv"
 )
 
+# Connections are metastore-level objects with a flat, shared namespace, so the
+# name is prefixed and torn down explicitly rather than left to a schema drop.
+CONNECTION_NAME = os.environ.get(
+    "EXPERIMENT_CONNECTION_NAME", "udf_delegation_conn"
+)
+
+# A second connection, pointed at this workspace's own control plane, for the
+# question rows 8-10 deliberately keep out of the way: whether the SCIM API is
+# even reachable from where http_request() egresses.
+CONNECTION_SCIM_NAME = os.environ.get(
+    "EXPERIMENT_CONNECTION_SCIM_NAME", "udf_delegation_scim_conn"
+)
+
+# The connection's stored credential. A sentinel, not a secret: rows 8-10 ask
+# whether the connection *hides* what it stores and how far that store reaches,
+# and both questions are answerable without putting a live token in a public
+# repo's blast radius.
+CONNECTION_SENTINEL_TOKEN = "SENTINEL-NOT-A-REAL-SECRET-9f3a2c"
+
+# The job-as-broker scenario (rows 12-13).
+JOB_NAME = os.environ.get("EXPERIMENT_JOB_NAME", "udf-delegation-broker-job")
+JOB_ID = os.environ.get("EXPERIMENT_JOB_ID", "")
+# Every principal the brokered action is allowed to create carries this prefix.
+# The job's notebook prepends it; the caller supplies only what comes after.
+JOB_SP_PREFIX = os.environ.get("EXPERIMENT_JOB_SP_PREFIX", "udf-delegation-job-sp-")
+
 
 # --------------------------------------------------------------------------
 # output
@@ -252,8 +278,23 @@ PLACEHOLDER_AUTHOR = "author@example.com"
 PLACEHOLDER_CALLER = "00000000-0000-0000-0000-000000000000"
 
 
+# Rows that must present a live credential to answer their question register it
+# here, so the results writer scrubs it even if a platform error quotes it back.
+# Registering is not a substitute for not writing secrets down; it is the second
+# line for the case where the platform, not the script, chooses the output.
+_REGISTERED_SECRETS: list[str] = []
+PLACEHOLDER_SECRET = "<redacted-credential>"
+
+
+def register_secret(value: str | None) -> None:
+    if value and len(value) > 8:
+        _REGISTERED_SECRETS.append(value)
+
+
 def _redaction_map() -> dict[str, str]:
     mapping = {CATALOG: PLACEHOLDER_CATALOG}
+    for secret in _REGISTERED_SECRETS:
+        mapping[secret] = PLACEHOLDER_SECRET
     caller_id = os.environ.get("EXPERIMENT_LOWPRIV_CLIENT_ID")
     if caller_id:
         mapping[caller_id] = PLACEHOLDER_CALLER
@@ -264,6 +305,8 @@ def _redaction_map() -> dict[str, str]:
         # bare hostname, for error strings that omit the scheme
         if cfg.hostname:
             mapping[cfg.hostname] = PLACEHOLDER_HOST.removeprefix("https://")
+        if cfg.account_id:
+            mapping[cfg.account_id] = PLACEHOLDER_ACCOUNT_ID
     except Exception:  # pragma: no cover - redaction must never break a run
         pass
     return mapping
@@ -271,12 +314,60 @@ def _redaction_map() -> dict[str, str]:
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
+# Platform error strings quote the egress address the request presented. It is
+# infrastructure detail from a real workspace and it has no bearing on any
+# finding, so it does not travel into a public repo either.
+PLACEHOLDER_IP = "203.0.113.0"
+PLACEHOLDER_ACCOUNT_ID = "00000000-0000-0000-0000-000000000000"
+_IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+# The Databricks SDK appends its whole client config to some errors:
+#   "... Config: host=..., account_id=..., workspace_id=..., discovery_url=..."
+# Scripts truncate long errors before recording them, which can cut that dump
+# mid-hostname — and a half-written workspace URL is past every exact-match
+# replacement above while still naming the workspace. The dump is SDK
+# diagnostics, never the finding, so it is removed rather than patched up.
+_SDK_CONFIG_DUMP_RE = re.compile(r"\s*Config:\s.*", re.DOTALL)
+
+# Job ids, run ids and principal ids are workspace-specific object identifiers.
+PLACEHOLDER_LONG_ID = 0
+_LONG_ID_RE = re.compile(r"\b\d{12,}\b")
+
 
 def redact(blob: str) -> str:
+    """Scrub one string. Callers redact *values*, never serialised JSON.
+
+    An earlier version ran this over the whole `json.dumps` output, which meant
+    every pattern here had to reason about JSON escaping — and one of them got
+    it wrong, matching up to the `"` of an escaped `\\"` and leaving a dangling
+    backslash that made the results file unparseable. Redacting the object tree
+    instead removes that entire class of bug: each string arrives unescaped and
+    the structure is never at risk.
+    """
+    blob = _SDK_CONFIG_DUMP_RE.sub(" Config: [redacted]", blob)
     for real, placeholder in _redaction_map().items():
         if real:
             blob = blob.replace(real, placeholder)
-    return _EMAIL_RE.sub(PLACEHOLDER_AUTHOR, blob)
+    blob = _EMAIL_RE.sub(PLACEHOLDER_AUTHOR, blob)
+    blob = _IPV4_RE.sub(PLACEHOLDER_IP, blob)
+    return _LONG_ID_RE.sub(str(PLACEHOLDER_LONG_ID), blob)
+
+
+def redact_tree(value: Any) -> Any:
+    """Apply `redact` to every string in a nested structure, in place of the
+    structure's shape. Integers wide enough to be a job or run id are flattened
+    too — they are workspace-specific handles that carry no finding."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return PLACEHOLDER_LONG_ID if abs(value) >= 10**11 else value
+    if isinstance(value, dict):
+        return {redact(str(k)): redact_tree(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_tree(v) for v in value]
+    return value
 
 
 def write_result(
@@ -302,19 +393,22 @@ def write_result(
     else:
         payload = {"rows": {}}
 
-    payload["rows"][row_id] = json.loads(
-        redact(
-            json.dumps(
-                {
-                    "question": question,
-                    "status": status,
-                    "finding": finding,
-                    "evidence": evidence,
-                    "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                }
-            )
+    # json round-trip first so anything the SDK handed back (enums, dataclasses)
+    # becomes plain data, then redact the tree. Redacting the *serialised* form
+    # is what broke this once — see `redact`.
+    row = json.loads(
+        json.dumps(
+            {
+                "question": question,
+                "status": status,
+                "finding": finding,
+                "evidence": evidence,
+                "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+            default=str,
         )
     )
+    payload["rows"][row_id] = redact_tree(row)
     payload["environment"] = environment_shape()
     RESULTS_PATH.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     ok(f"recorded row {row_id}: {status}")
@@ -333,4 +427,7 @@ def environment_shape() -> dict[str, str]:
         "unity_catalog": "enabled",
         "caller_identity": "OAuth M2M service principal, workspace user (non-admin)",
         "author_identity": "workspace admin",
+        # Row 11 is a claim about this posture rather than about the platform, so
+        # the posture belongs in the record next to the rows it explains.
+        "network": "IP access lists enabled (allow lists not covering serverless egress)",
     }
