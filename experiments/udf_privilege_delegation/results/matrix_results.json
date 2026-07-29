@@ -4,6 +4,7 @@
     "caller_identity": "OAuth M2M service principal, workspace user (non-admin)",
     "cloud": "AWS",
     "compute": "serverless SQL warehouse (PRO channel)",
+    "network": "IP access lists enabled (allow lists not covering serverless egress)",
     "unity_catalog": "enabled",
     "workspace": "one real Databricks workspace (host redacted)"
   },
@@ -25,8 +26,209 @@
       },
       "finding": "Definer's rights. The caller was denied a direct read of sensitive_table but successfully invoked an admin-owned SQL UDF whose body reads it, receiving 3. A SQL UDF is therefore a genuine privilege boundary for data access: EXECUTE on the function is sufficient and the caller never gains the underlying SELECT.",
       "question": "Does a UC SQL UDF body run with definer (owner) privileges on objects the caller cannot access?",
-      "recorded_at": "2026-07-28T21:55:40+00:00",
+      "recorded_at": "2026-07-29T16:00:26+00:00",
       "status": "pass"
+    },
+    "10": {
+      "evidence": {
+        "author_blessed_call__GET_root": {
+          "allowed": true,
+          "body": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.o ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "method": "GET",
+          "path": "",
+          "statement_succeeded": true,
+          "status_code": "200"
+        },
+        "escape_above_base_path": {
+          "allowed": false,
+          "body": null,
+          "denied_by_unity_catalog": false,
+          "error": "Exception thrown in awaitResult: [INVALID_HTTP_REQUEST_PATH] The input parameter: path, value: ../../etc/passwd is not a valid parameter for http_request because path traversal is not allowed. SQLSTATE: 22023",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "method": "GET",
+          "path": "../../etc/passwd",
+          "refusal_kind": "input validation (path traversal)",
+          "statement_succeeded": false,
+          "status_code": null
+        },
+        "unblessed_method__DELETE_root": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 405, and error message 'HTTP request failed with status: <!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1> ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "method": "DELETE",
+          "path": "",
+          "statement_succeeded": true,
+          "status_code": "405"
+        },
+        "unblessed_method__POST_root": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 405, and error message 'HTTP request failed with status: <!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1> ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "method": "POST",
+          "path": "",
+          "statement_succeeded": true,
+          "status_code": "405"
+        },
+        "unblessed_path__GET_other": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 404, and error message 'HTTP request failed with status: <!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1> ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "method": "GET",
+          "path": "some/other/resource",
+          "statement_succeeded": true,
+          "status_code": "404"
+        }
+      },
+      "finding": "USE CONNECTION is scoped to the connection, not to the author's call. Holding it, the caller reached the origin on 3 request shapes the author's function never makes (unblessed_path__GET_other, unblessed_method__POST_root, unblessed_method__DELETE_root) \u2014 different paths and different methods, each answered by the far end rather than refused by the platform. The wrapper function's fixed method and path are therefore not a constraint on the caller; they are a convention the caller can decline to follow. The one boundary the connection does enforce is its host and base_path \u2014 the probe that tried to climb above base_path was rejected outright with INVALID_HTTP_REQUEST_PATH, before any privilege was consulted.",
+      "question": "Is USE CONNECTION scoped to the call the author's function makes, or to the whole connection?",
+      "recorded_at": "2026-07-29T16:05:39+00:00",
+      "status": "fail"
+    },
+    "11": {
+      "evidence": {
+        "live_credential_probe": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 403, and error message 'HTTP request failed with status: {\"error_code\":403,\"message\":\"Source IP address: 203.0.113.0 is blocked by Databricks IP ACL for workspace: 0 [ReqId: abfe6d69-ed1b-445b-8aee-91d05435aca7]\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "refused_by_network_perimeter": true,
+          "statement_succeeded": true,
+          "status_code": "403"
+        },
+        "sentinel_credential_probe": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 401, and error message 'HTTP request failed with status: {\"error_code\":401,\"message\":\"Credential was not sent or was of an unsupported type for this API. [ReqId: aaa62a02-4894-416c-857d-ce81a7ba25b7]\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "reached_authentication": true,
+          "statement_succeeded": true,
+          "status_code": "401"
+        }
+      },
+      "finding": "Reached, then refused. The sentinel probe came back as an answer about the credential (401), which establishes the request completes the round trip \u2014 this is not a firewall or DNS failure. The same call with a valid credential was then refused (403) by the workspace's IP access list, naming the egress address http_request() presents. So on an IP-access-listed workspace, a UC connection pointed at the workspace that hosts it is a call that leaves and re-enters the perimeter, and the perimeter gets a vote \u2014 independently of every privilege question. Environment-dependent: a workspace without IP access lists, or one whose list covers serverless egress, would not see this.",
+      "question": "Can http_request() reach this workspace's own SCIM API, or does the network perimeter stop it first?",
+      "recorded_at": "2026-07-29T16:06:45+00:00",
+      "status": "fail"
+    },
+    "12": {
+      "evidence": {
+        "caller_direct_scim_create": {
+          "error": "unable to parse response. This is likely a bug in the Databricks SDK for Python or the underlying API. Please report this issue with the following debugging information to the SDK issue tracker at https://github.com/databricks/databricks-sdk-py/issues. Request log:```POST /api/2.0/preview/scim/v2/Se",
+          "error_type": "PermissionDenied",
+          "refused": true
+        },
+        "hostile_suffix_rejected": true,
+        "job_run_as": "author@example.com",
+        "principal_present_on_readback": true,
+        "principals_matching_prefix_after_both_runs": [
+          "udf-delegation-job-sp-alpha"
+        ],
+        "run_with_rejected_suffix": {
+          "error": null,
+          "life_cycle_state": "TERMINATED",
+          "notebook_output": "{\"requested_suffix\": \"../Evil Name\", \"outcome\": \"rejected\", \"reason\": \"suffix must match ^[a-z0-9-]{1,24}$\"}",
+          "result_state": "SUCCESS",
+          "run_id": 0,
+          "suffix_supplied_by_caller": "../Evil Name"
+        },
+        "run_with_valid_suffix": {
+          "error": null,
+          "life_cycle_state": "TERMINATED",
+          "notebook_output": "{\"requested_suffix\": \"alpha\", \"run_as\": \"author@example.com\", \"outcome\": \"created\", \"created_display_name\": \"udf-delegation-job-sp-alpha\", \"created_application_id\": \"a6f4a757-0224-4266-8702-a34a371285d3\"}",
+          "result_state": "SUCCESS",
+          "run_id": 0,
+          "suffix_supplied_by_caller": "alpha"
+        },
+        "stale_principals_removed": []
+      },
+      "finding": "The job is a real delegation boundary. The caller was refused the SCIM create directly, then triggered a job it holds only CAN_MANAGE_RUN on and a service principal existed afterwards \u2014 named 'udf-delegation-job-sp-alpha', composed by the notebook from a prefix the caller never supplied. The hostile suffix was rejected by the notebook's own rule and created nothing, so the shape constraint is enforced by code running as the privileged identity rather than by trusting the caller. No credential passed through the caller's hands at any point: the job's identity lives on the compute, not in anything the caller can read (contrast rows 6-7).",
+      "question": "Can a caller holding only CAN_MANAGE_RUN cause a service principal to be created, in a shape the author fixed?",
+      "recorded_at": "2026-07-29T16:08:19+00:00",
+      "status": "pass"
+    },
+    "13": {
+      "evidence": {
+        "job_id_probed": "redacted-by-shape",
+        "read_run_output": {
+          "note": "the caller was allowed to do this",
+          "refused": false
+        },
+        "run_as": "author@example.com",
+        "withheld_probes": {
+          "change_run_as": {
+            "error": "User 00000000-0000-0000-0000-0 does not have Admin or Owner permissions on job 0. Config: [redacted]",
+            "error_type": "PermissionDenied",
+            "refused": true
+          },
+          "edit_task": {
+            "error": "User 00000000-0000-0000-0000-0 does not have Admin or Owner permissions on job 0. Config: [redacted]",
+            "error_type": "PermissionDenied",
+            "refused": true
+          },
+          "read_source": {
+            "error": "Path (/Users/author@example.com/udf_delegation_create_sp) doesn't exist.",
+            "error_type": "ResourceDoesNotExist",
+            "refused": true
+          },
+          "regrant_self": {
+            "error": "00000000-0000-0000-0000-0 does not have Manage permissions on Job with ID: ElasticJobId(0). Please contact the owner or an administrator for access. Config: [redacted]",
+            "error_type": "PermissionDenied",
+            "refused": true
+          }
+        }
+      },
+      "finding": "CAN_MANAGE_RUN withholds every probed way of changing what the job does. The caller could not repoint the task, could not change the run-as identity, could not grant itself CAN_MANAGE, and could not read the notebook the job executes \u2014 the last being the question that killed the embedded-credential wrapper in row 6, answered the other way here. (The source read is refused as ResourceDoesNotExist rather than PermissionDenied: the workspace hides the object's existence instead of naming it. Still a refusal, but it is an existence answer, not an authorization one.) The one thing it does grant is reading the output of runs it triggers, confirmed live: whatever the job prints, the caller reads, so job output is part of the caller's surface even though the job's credential is not. Scoped to the probes listed; not a proof that no other edit path exists.",
+      "question": "Does CAN_MANAGE_RUN withhold the ability to change what the job does, who it runs as, and what code it executes?",
+      "recorded_at": "2026-07-29T16:08:58+00:00",
+      "status": "pass"
+    },
+    "14": {
+      "evidence": {
+        "admin_call": {
+          "allowed": true,
+          "body": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.o ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "200"
+        },
+        "caller_call": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 401, and error message 'HTTP request failed with status: {\"error_code\":401,\"message\":\"Credential was not sent or was of an unsupported type for this API. [ReqId: d4ee6831-6fba-42a3-97e3-45f048bf296e]\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "failed_at_credential_resolution": true,
+          "refused_for_missing_use_connection": false,
+          "statement_succeeded": true,
+          "status_code": "401"
+        },
+        "caller_direct_call": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 403, and error message 'HTTP request failed with status: {\"error_code\":\"PERMISSION_DENIED\",\"message\":\"Failed request to https://example.com:443/. Error: User is missing USE CONNECTION on udf_delegation_conn\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": true,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "403"
+        }
+      },
+      "finding": "The procedure changes the answer without delivering the outcome. The caller was NOT refused for missing USE CONNECTION \u2014 the refusal row 8 produced through the UDF \u2014 so the definer clause is honoured far enough to get past that check. The call then failed at credential resolution: status_code 401, 'Credential was not sent or was of an unsupported type', a platform-shaped message carrying a Databricks request id rather than anything the target host would say. The definer-rights procedure therefore resolves the connection but does not present its credential, which is neither a working delegation nor the same refusal as the function. Treat this as a measured behaviour of one workspace on one date, not as a documented contract: nothing in the public documentation describes this path, and it is the kind of edge that changes without notice.",
+      "question": "Does a SQL SECURITY DEFINER stored procedure resolve the connection privilege as definer, where the SQL UDF did not?",
+      "recorded_at": "2026-07-29T16:09:39+00:00",
+      "status": "partial"
     },
     "2": {
       "evidence": {
@@ -87,7 +289,7 @@
       },
       "finding": "The UC Python UDF sandbox has outbound network access. As the low-privilege caller: workspace_control_plane -> HTTP 401, public_internet -> HTTP 200. A REST-based administrative action is therefore mechanically reachable from inside a function body \u2014 egress is not the constraint. Whether the request can be *authenticated* is row 3.",
       "question": "Can a UC Python UDF make an outbound HTTPS request (the prerequisite for any REST-based admin action)?",
-      "recorded_at": "2026-07-28T21:55:48+00:00",
+      "recorded_at": "2026-07-29T16:00:50+00:00",
       "status": "pass"
     },
     "3": {
@@ -131,7 +333,7 @@
       },
       "finding": "No ambient credential. The UC Python UDF sandbox exposed no DATABRICKS_* environment variables and the SDK could not construct a default-auth client, for either identity. A function body therefore has nothing to authenticate as \u2014 it cannot act on the owner's behalf even in principle. Any credential would have to be passed in explicitly by the caller, which inverts the pattern: the caller would need to already hold the privileged credential.",
       "question": "Does a UC Python UDF receive an ambient Databricks credential it could use to act as the function owner?",
-      "recorded_at": "2026-07-28T21:55:57+00:00",
+      "recorded_at": "2026-07-29T16:01:40+00:00",
       "status": "fail"
     },
     "4": {
@@ -151,7 +353,7 @@
       },
       "finding": "End-to-end delegation did not work. The caller could invoke the admin-owned function, but no service principal was created \u2014 the function body could not perform the administrative action. The failure is a capability failure inside the sandbox (see rows 2 and 3), not an authorization failure on the function itself.",
       "question": "Can a low-privilege caller create a service principal by invoking an admin-owned UDF wrapper?",
-      "recorded_at": "2026-07-28T21:56:02+00:00",
+      "recorded_at": "2026-07-29T16:02:18+00:00",
       "status": "fail"
     },
     "5": {
@@ -186,7 +388,7 @@
       },
       "finding": "No SQL surface. Every identity-administration statement was rejected by the parser even for a workspace admin, so principal creation is reachable only over the SCIM REST API. The one function type that carries definer's rights (SQL UDFs, row 1) therefore cannot express the action, and the one that could express it (Python UDFs) has neither egress nor a credential (rows 2-3). The two halves of the pattern never meet.",
       "question": "Does any SQL surface exist for creating a principal, such that a definer-rights SQL UDF could wrap it?",
-      "recorded_at": "2026-07-28T21:56:05+00:00",
+      "recorded_at": "2026-07-29T16:02:36+00:00",
       "status": "fail"
     },
     "6": {
@@ -221,7 +423,7 @@
       },
       "finding": "The function body is readable by a caller holding only EXECUTE, via describe_function_extended, information_schema_routines. A credential hardcoded into the body is therefore disclosed to exactly the population the wrapper was meant to keep it from \u2014 the workaround is not a delegation boundary, it is a credential handout with extra steps.",
       "question": "Can a caller holding only EXECUTE read the function body, and therefore any credential embedded in it?",
-      "recorded_at": "2026-07-28T21:56:14+00:00",
+      "recorded_at": "2026-07-29T16:03:14+00:00",
       "status": "fail"
     },
     "7": {
@@ -241,7 +443,88 @@
       },
       "finding": "It works, by embedding a credential. A caller holding only EXECUTE created a service principal through an admin-authored Python UDF whose body carries the author's token. The action is genuinely delegated and genuinely narrow \u2014 the caller can pass only a display name. But the elevation comes from a stored secret, not from the function model: the platform never re-authorizes the body as the owner, it simply replays whatever credential the author left in the source. Row 6 decides whether that secret stays hidden from the caller, and the token expires, so the wrapper silently stops working when it does.",
       "question": "Does embedding the author's credential in the function body make the delegated admin action succeed for a low-privilege caller?",
-      "recorded_at": "2026-07-28T21:56:41+00:00",
+      "recorded_at": "2026-07-29T16:03:51+00:00",
+      "status": "pass"
+    },
+    "8": {
+      "evidence": {
+        "admin_direct_call": {
+          "allowed": true,
+          "body": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.o ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "200"
+        },
+        "caller_direct_call": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 403, and error message 'HTTP request failed with status: {\"error_code\":\"PERMISSION_DENIED\",\"message\":\"Failed request to https://example.com:443/. Error: User is missing USE CONNECTION on udf_delegation_conn\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": true,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "403"
+        },
+        "caller_via_function": {
+          "allowed": false,
+          "body": "[REMOTE_FUNCTION_HTTP_FAILED_ERROR] The remote HTTP request failed with code 403, and error message 'HTTP request failed with status: {\"error_code\":\"PERMISSION_DENIED\",\"message\":\"Failed request to https://example.com:443/. Error: User is missing USE CONNECTION on udf_delegation_conn\"}' SQLSTATE: 57012",
+          "denied_by_unity_catalog": true,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "403"
+        }
+      },
+      "finding": "Invoker. The caller holds EXECUTE on the admin-owned function and was refused anyway, with the same message it got calling the connection directly \u2014 'User is missing USE CONNECTION on udf_delegation_conn', surfaced as status_code 403 inside a successful statement. Unity Catalog re-checks the connection privilege against the invoker, so wrapping http_request() in a SQL UDF confers nothing. Definer's rights cover the objects the body reads, not the connection the body calls out through.",
+      "question": "Does a UC SQL UDF resolve the USE CONNECTION privilege on an admin-owned connection as definer, the way it resolves table SELECT?",
+      "recorded_at": "2026-07-29T16:04:16+00:00",
+      "status": "fail"
+    },
+    "9": {
+      "evidence": {
+        "connections_rest_api": {
+          "response": "{\"connection_id\": \"a3a50837-d610-4cc1-924b-19ba4e5a5979\", \"connection_type\": \"HTTP\", \"created_at\": 0, \"created_by\": \"author@example.com\", \"credential_type\": \"BEARER_TOKEN\", \"full_name\": \"udf_delegation_conn\", \"metastore_id\": \"c0da88f1-c020-4992-b8c9-c828e556889d\", \"name\": \"udf_delegation_conn\", \"options\": {\"auth_scheme\": \"bearer\", \"host\": \"https://example.com\", \"port\": \"443\", \"base_path\": \"/\"}, \"owner\": \"author@example.com\", \"provisioning_info\": {\"state\": \"ACTIVE\"}, \"read_only\": true, \"securable_type\": \"CONNECTION\", \"updated_at\": 0, \"updated_by\": \"author@example.com\", \"url\": \"https://example.com:443/\"}",
+          "sentinel_visible_to_caller": false,
+          "succeeded": true
+        },
+        "describe_connection": {
+          "error": null,
+          "error_code": null,
+          "row_count": 5,
+          "sentinel_visible_to_caller": false,
+          "statement": "DESCRIBE CONNECTION `udf_delegation_conn`",
+          "succeeded": true
+        },
+        "grant_control": {
+          "allowed": true,
+          "body": "<!doctype html><html lang=\"en\"><head><title>Example Domain</title><link rel=\"icon\" href=\"data:,\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{background:#eee;width:60vw;margin:15vh auto;font-family:system-ui,sans-serif}h1{font-size:1.5em}div{opacity:0.8}a:link,a:visited{color:#348}</style></head><body><div><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission. Avoid use in operations.</p><p><a href=\"https://iana.o ...[truncated]",
+          "denied_by_unity_catalog": false,
+          "error": null,
+          "error_code": null,
+          "statement_succeeded": true,
+          "status_code": "200"
+        },
+        "information_schema_connections": {
+          "error": null,
+          "error_code": null,
+          "row_count": 1,
+          "sentinel_visible_to_caller": false,
+          "statement": "SELECT * FROM system.information_schema.connections WHERE connection_name = 'udf_delegation_conn'",
+          "succeeded": true
+        },
+        "show_connections": {
+          "error": null,
+          "error_code": null,
+          "row_count": 3348,
+          "sentinel_visible_to_caller": false,
+          "statement": "SHOW CONNECTIONS",
+          "succeeded": true
+        }
+      },
+      "finding": "The credential stays hidden. The caller held USE CONNECTION and demonstrably used the connection, and none of DESCRIBE CONNECTION, SHOW CONNECTIONS, system.information_schema.connections, or the connections REST API returned the sentinel the connection was created with \u2014 DESCRIBE reports 'auth_scheme -> bearer' and the host, and stops there. This is the one property the embedded-credential workaround could not provide (row 6). Scoped to the paths probed; not a proof that no read path exists.",
+      "question": "Can a caller granted USE CONNECTION read the credential the connection stores?",
+      "recorded_at": "2026-07-29T16:04:55+00:00",
       "status": "pass"
     }
   }
