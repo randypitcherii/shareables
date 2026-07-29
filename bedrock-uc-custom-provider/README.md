@@ -83,6 +83,20 @@ also available). Passthrough traffic is fully logged — it lands in the provide
 service's `aws_bedrock_payload` inference table and the gateway usage system
 tables.
 
+## Use as a skill
+
+[`skill/`](skill/) packages this setup for a coding agent:
+[`skill/SKILL.md`](skill/SKILL.md) is the flow (store the key as a secret →
+`uv run deploy.py` → invoke via passthrough → explain where the logs land),
+with the constraints and gotchas below turned into agent-actionable triage.
+[`skill/scripts/gateway.py`](skill/scripts/gateway.py) is its companion —
+`preflight` (CLI, auth, and whether the secret exists, without reading its
+value), `status` (provider, model service, and inference tables, including
+orphaned `_payload` tables), and `invoke "<prompt>"` (a passthrough call that
+prints the reply). Stdlib-only; it reads its parameters straight from
+`deploy.py`'s parameter block, so the two cannot drift, and it orchestrates
+`deploy.py` rather than duplicating it.
+
 ## Constraints discovered
 
 Stated plainly, because they shape the opinionated stance:
