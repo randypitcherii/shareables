@@ -1,0 +1,19 @@
+[project]
+name = "udf-privilege-delegation"
+version = "0.1.0"
+description = "Experiment: can a Unity Catalog UDF act as a narrowly scoped privilege wrapper for one administrative action?"
+requires-python = ">=3.11"
+dependencies = ["databricks-sdk>=0.40.0"]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "infrastructure: Tests requiring live Databricks infrastructure",
+]
+
+[tool.ruff]
+line-length = 100

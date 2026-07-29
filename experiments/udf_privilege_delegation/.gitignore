@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Deliberate deviation from the repo's commit-the-lock convention.
+# This lock was resolved through an internal Databricks PyPI mirror, so every
+# `url = ...` in it points at a host no external consumer can reach — committing
+# it to a public repo would ship a lockfile that cannot be installed from.
+# Regenerate with `uv lock` on a machine resolving against public PyPI and drop
+# this line to bring the experiment in line with the rest of the repo.
+uv.lock
