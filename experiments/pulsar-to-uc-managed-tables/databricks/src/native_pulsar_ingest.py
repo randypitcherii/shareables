@@ -10,6 +10,7 @@ import json
 import sys
 import time
 
+from pyspark.dbutils import DBUtils
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -60,6 +61,15 @@ def main() -> None:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
     spark.sql(f"CREATE VOLUME IF NOT EXISTS {catalog}.{schema}.checkpoints")
 
+    # Each evaluation run is a bounded drain of a freshly produced topic, so it
+    # must start from clean state. Reusing the checkpoint across runs is not
+    # merely stale — if the broker was rebuilt, the stored offsets refer to a
+    # topic instance that no longer exists, and the run silently ingests nothing
+    # while the table still holds the previous run's rows. That reads as success.
+    checkpoint = f"/Volumes/{catalog}/{schema}/checkpoints/path_b"
+    spark.sql(f"DROP TABLE IF EXISTS {table}")
+    DBUtils(spark).fs.rm(checkpoint, True)
+
     raw = (
         spark.readStream.format("pulsar")
         .option("service.url", service_url)
@@ -72,7 +82,7 @@ def main() -> None:
     query = (
         parse_events(raw)
         .writeStream.trigger(availableNow=True)
-        .option("checkpointLocation", f"/Volumes/{catalog}/{schema}/checkpoints/path_b")
+        .option("checkpointLocation", checkpoint)
         .toTable(table)
     )
     query.awaitTermination()

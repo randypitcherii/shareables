@@ -30,6 +30,9 @@ resources:
   jobs:
     path_a_kop_kafka:
       name: "pulsar-uc-eval path A: KoP kafka source -> managed Delta"
+      # Each run resets the target table and its streaming checkpoint, so two
+      # overlapping runs would clobber each other's state and report nonsense.
+      max_concurrent_runs: 1
       tasks:
         - task_key: ingest
           spark_python_task:
@@ -56,6 +59,8 @@ resources:
 
     path_b_native_pulsar:
       name: "pulsar-uc-eval path B: native pulsar connector -> managed Delta"
+      # See path A: runs reset table + checkpoint, so they must not overlap.
+      max_concurrent_runs: 1
       tasks:
         - task_key: ingest
           spark_python_task:

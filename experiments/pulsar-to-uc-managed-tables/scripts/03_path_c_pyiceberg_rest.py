@@ -14,11 +14,12 @@ import pulsar
 import pyarrow as pa
 from _common import databricks_config, latency_stats_ms, load_config, record_result
 from pyiceberg.catalog.rest import RestCatalog
-from pyiceberg.exceptions import NoSuchTableError
+from pyiceberg.exceptions import CommitFailedException, NoSuchTableError
 
 TABLE_NAME = "path_c_pyiceberg_rest"
 BATCH_SIZE = 5000
 READ_TIMEOUT_MS = 15000
+COMMIT_RETRIES = 5
 
 ARROW_SCHEMA = pa.schema(
     [
@@ -45,11 +46,14 @@ def open_catalog(cfg):
 
 
 def ensure_table(catalog, cfg):
+    # Each evaluation run measures a full 100k-event ingest, so start from an
+    # empty table rather than appending onto a previous partial run.
     ident = (cfg.uc_schema, TABLE_NAME)
     try:
-        return catalog.load_table(ident)
+        catalog.drop_table(ident)
     except NoSuchTableError:
-        return catalog.create_table(ident, schema=ARROW_SCHEMA)
+        pass
+    return catalog.create_table(ident, schema=ARROW_SCHEMA)
 
 
 def rows_to_arrow(rows: list[dict]) -> pa.Table:
@@ -75,7 +79,18 @@ def main() -> None:
         nonlocal rows, total, appends
         if not rows:
             return
-        table.append(rows_to_arrow(rows))
+        batch = rows_to_arrow(rows)
+        # UC background services (e.g. predictive optimization) can commit to a
+        # managed table between our appends; refresh and retry on conflict.
+        for attempt in range(COMMIT_RETRIES):
+            try:
+                table.append(batch)
+                break
+            except CommitFailedException:
+                if attempt == COMMIT_RETRIES - 1:
+                    raise
+                print(f"commit conflict; refreshing and retrying ({attempt + 1})")
+                table.refresh()
         commit_ms = time.time() * 1000
         commit_latencies.extend(commit_ms - ts for ts in batch_event_ts)
         appends += 1

@@ -74,7 +74,33 @@ token/OAuth auth on Pulsar and SASL on the KoP listener.
 
 ## Findings
 
-_Populated from `results/matrix_results.json` after the live run._
+_Per-path numbers are populated from `results/matrix_results.json` after the live run._
+
+### KoP is archived — this is a standing risk for path A (and D)
+
+Path A depends on the StreamNative KoP protocol handler, and KoP is **no longer
+maintained**. The repository was archived on 2024-01-24; the final release is
+**v3.1.1.1 (2024-01-08)**, which pairs with **Apache Pulsar 3.1.1**. `master` sits at an
+unreleased `3.2.0-SNAPSHOT`. There is no KoP build for Pulsar 3.2, 3.3, or 4.x and none
+is coming — StreamNative's stated successor is KSN (Kafka on StreamNative), a commercial
+layer. So "path A is GA end-to-end" is true of the *Databricks* side only: the Kafka
+source is GA, but the Kafka protocol on Pulsar is supplied by a dead open-source project
+that pins you to Pulsar 3.1.1. Anyone choosing path A is accepting a frozen broker
+version or a commercial dependency. This rig pins `pulsar_version = 3.1.1` /
+`kop_version = 3.1.1.1` for exactly that reason.
+
+### KoP needs broker entry metadata, and it must be set before the first write
+
+KoP >= 2.8.0 derives Kafka offsets from Pulsar's broker entry metadata, stamped onto each
+BookKeeper entry at write time by
+`brokerEntryMetadataInterceptors=...AppendIndexMetadataInterceptor`. If it is unset, the
+failure is quiet and misleading: Kafka **Metadata requests still succeed** — clients see
+the topic and its partitions — but **ListOffsets fails with `UNKNOWN_SERVER_ERROR`**, so
+consumers die resolving `auto.offset.reset` before their first fetch. Spark surfaces this
+only as `UnknownServerException ... SQLSTATE: XXKST`, which points nowhere near the real
+cause. The metadata cannot be backfilled, so messages produced while it was unset stay
+permanently unreadable to Kafka clients: enabling it means re-producing the topic. This
+is an easy way to lose a day, and it is a real operational sharp edge for path A.
 
 ## Structure
 
