@@ -16,12 +16,21 @@ curl -fL -o /opt/pulsar/protocols/pulsar-protocol-handler-kafka-${kop_version}.n
   "https://github.com/streamnative/kop/releases/download/v${kop_version}/pulsar-protocol-handler-kafka-${kop_version}.nar"
 
 # Public IP via IMDSv2 — advertised to both Pulsar and Kafka clients so external
-# lookups redirect to a reachable address.
+# lookups redirect to a reachable address. Note this is advertised via
+# advertisedListeners, NOT advertisedAddress: see the broker/bookie note below.
 TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
 PUBLIC_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
 # entryFormat=pulsar lets one event stream (produced with the native Pulsar client)
 # be consumed over BOTH protocols — that is the whole point of this evaluation.
+#
+# Do NOT use advertisedAddress here. In standalone mode it also applies to the
+# embedded bookie, which then registers itself at <public-ip>:<ephemeral-port>.
+# That port is never published by -p, so the broker's own ledger writes are
+# routed out to an address nothing listens on: ledgers open but no entry is ever
+# confirmed, and every produce fails with "Not enough non-faulty bookies".
+# advertisedListeners scopes the public address to the broker's client-facing
+# listener only, leaving the bookie on its container-internal address.
 docker run -d --name pulsar --restart always \
   -p 6650:6650 -p 8080:8080 -p 9092:9092 \
   -v /opt/pulsar/protocols:/pulsar/protocols \
@@ -30,7 +39,8 @@ docker run -d --name pulsar --restart always \
   -e PULSAR_PREFIX_entryFormat=pulsar \
   -e PULSAR_PREFIX_kafkaListeners=PLAINTEXT://0.0.0.0:9092 \
   -e PULSAR_PREFIX_kafkaAdvertisedListeners=PLAINTEXT://$PUBLIC_IP:9092 \
-  -e PULSAR_PREFIX_advertisedAddress=$PUBLIC_IP \
+  -e PULSAR_PREFIX_advertisedListeners=external:pulsar://$PUBLIC_IP:6650 \
+  -e PULSAR_PREFIX_internalListenerName=external \
   -e PULSAR_PREFIX_allowAutoTopicCreationType=partitioned \
   -e PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled=false \
   apachepulsar/pulsar:${pulsar_version} \

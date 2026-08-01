@@ -32,62 +32,50 @@ data "aws_vpc" "default" {
   default = true
 }
 
+# Rules live in standalone resources (not inline blocks) so the SG resource
+# never reconciles the rule set — inline blocks treat any rule added by another
+# resource (like bookie_hairpin below) as drift and silently delete it on the
+# next apply.
 resource "aws_security_group" "pulsar" {
   name_prefix = "pulsar-uc-eval-"
   description = "Apache Pulsar standalone for UC ingestion evaluation (ephemeral)"
   vpc_id      = data.aws_vpc.default.id
 
-  # Pulsar binary protocol (native + Databricks pulsar connector)
-  ingress {
-    description = "Pulsar binary protocol"
-    from_port   = 6650
-    to_port     = 6650
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidrs
-  }
-
-  # Pulsar admin/HTTP API (health checks, topic stats)
-  ingress {
-    description = "Pulsar admin API"
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidrs
-  }
-
-  # Kafka protocol via KoP protocol handler
-  ingress {
-    description = "Kafka protocol (KoP)"
-    from_port   = 9092
-    to_port     = 9092
-    protocol    = "tcp"
-    cidr_blocks = var.allowed_ingress_cidrs
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = var.tags
 }
 
-# Standalone mode applies advertisedAddress to the embedded bookie too, so the
-# bookie registers at <public-ip>:<ephemeral-port> and the broker's write path
-# hairpins through the IGW back to its own public IP. Without this rule the SG
-# drops those writes: ledgers open but no entry is ever confirmed
-# (pendingAddEntriesCount grows, entriesAddedCounter stays 0) and producers,
-# plus the /brokers/health probe, hang. The bookie port is ephemeral, so allow
-# all TCP — but only from the VM's own public IP.
-resource "aws_vpc_security_group_ingress_rule" "bookie_hairpin" {
+locals {
+  pulsar_ports = {
+    "Pulsar binary protocol" = 6650
+    "Pulsar admin API"       = 8080
+    "Kafka protocol (KoP)"   = 9092
+  }
+  # one rule resource per (port, cidr) pair
+  pulsar_ingress = {
+    for pair in setproduct(keys(local.pulsar_ports), var.allowed_ingress_cidrs) :
+    "${local.pulsar_ports[pair[0]]}-${pair[1]}" => {
+      description = pair[0]
+      port        = local.pulsar_ports[pair[0]]
+      cidr        = pair[1]
+    }
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "service" {
+  for_each          = local.pulsar_ingress
   security_group_id = aws_security_group.pulsar.id
-  description       = "Self-hairpin to embedded bookie (ephemeral port) via IGW"
+  description       = each.value.description
   ip_protocol       = "tcp"
-  from_port         = 1
-  to_port           = 65535
-  cidr_ipv4         = "${aws_instance.pulsar.public_ip}/32"
+  from_port         = each.value.port
+  to_port           = each.value.port
+  cidr_ipv4         = each.value.cidr
+}
+
+resource "aws_vpc_security_group_egress_rule" "all" {
+  security_group_id = aws_security_group.pulsar.id
+  description       = "All egress"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
 }
 
 resource "aws_instance" "pulsar" {
