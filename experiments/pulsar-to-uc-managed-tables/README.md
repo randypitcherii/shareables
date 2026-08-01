@@ -175,7 +175,7 @@ what needs a follow-up pass (**open**). The open rows are the roadmap, not fine 
 | External writer coexisting with UC automatic table maintenance | **live** | Path C hit a real commit conflict with a UC background commit mid-run; refresh-and-retry on `CommitFailedException` is required client behavior (see `scripts/03_path_c_pyiceberg_rest.py`) |
 | No loss / no duplication per drain | **live** | 100k distinct `event_id`s, unbroken `seq` range on all three paths |
 | Low ops complexity, clear monitoring/repair story | **partial** | Paths A/B inherit Databricks job monitoring; path C is a bare process you must supervise yourself — scored qualitatively only |
-| Two freshness tiers: minutes-level microbatch and hourly batch | **open** | This rig drains a pre-produced backlog; measuring steady-state freshness against an SLA needs a continuous producer and a scaled broker |
+| Minutes-level freshness SLA (p95, event → queryable) | **open** | This rig drains a pre-produced backlog; measuring steady-state p95 freshness against an SLA needs a continuous producer and a scaled broker |
 | Production-scale throughput (100k's of events/sec) | **open** | Single-node broker + single-node clusters here; numbers are directional only |
 | In-stream filtering before landing (shift-left, volume reduction) | **open** | The topic arrives pre-shaped; broker-side functions/filtering not exercised — matters when the source topic is far larger than what should land |
 | Schemaless payloads as VARIANT (and the engine-version floor for Iceberg v3 VARIANT) | **open** | Payloads land as a JSON string column here; VARIANT ingestion and its reader-version constraints not exercised |
@@ -189,6 +189,9 @@ what needs a follow-up pass (**open**). The open rows are the roadmap, not fine 
 | External engine reads via the UC Iceberg REST catalog | **open** | The rig proves external **writes** through the REST catalog; third-party engine **reads** of the landed tables are the natural next check |
 | Vendor-managed direct write (hosted Pulsar lakehouse-tables feature → UC) | **open** | Hosted Pulsar vendors can write Iceberg straight to a REST catalog endpoint from the broker side — a real sixth candidate, documented-only here (kin to path D) |
 | Auth between ingest compute and the broker (and serverless auth models) | **open** | This rig runs an open test broker; production needs the broker-auth story (token/OAuth/SASL) per path — see Security posture |
+| Partition layout of the landed managed Iceberg table | **documented** | UC managed Iceberg does not support Iceberg partition transforms (e.g. `bucket()`); the layout tool is liquid clustering (`CLUSTER BY`) plus `OPTIMIZE`. External writers and readers expecting transform-based partitioning must adapt |
+| REST-catalog metadata overhead for external engines under load | **open** | External engines pay a scan-planning hop through the REST catalog (OAuth + credential vending) that catalog-local integrations avoid, and upstream Iceberg has a known serialization bottleneck in concurrent catalog operations (apache/iceberg#16695). Measure planning latency at target concurrency before committing to the REST path for hot reads |
+| Small-file management on write-only streaming tables | **documented** | Automatic optimization is usage/benefit-driven, not a scheduler — a write-only, rarely-read bronze table may never trigger compaction, so streaming ingest needs an explicit maintenance plan. This rig's tables were too small and short-lived to exercise it |
 | Outbound: table changes → Pulsar topic | **out of scope** | This experiment is inbound-only; the reverse path (e.g. CDC to a topic) is a separate evaluation |
 
 Two framing notes. First, when an incumbent stream-compute pipeline (typically Flink)
