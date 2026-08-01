@@ -74,6 +74,22 @@ resource "aws_security_group" "pulsar" {
   tags = var.tags
 }
 
+# Standalone mode applies advertisedAddress to the embedded bookie too, so the
+# bookie registers at <public-ip>:<ephemeral-port> and the broker's write path
+# hairpins through the IGW back to its own public IP. Without this rule the SG
+# drops those writes: ledgers open but no entry is ever confirmed
+# (pendingAddEntriesCount grows, entriesAddedCounter stays 0) and producers,
+# plus the /brokers/health probe, hang. The bookie port is ephemeral, so allow
+# all TCP — but only from the VM's own public IP.
+resource "aws_vpc_security_group_ingress_rule" "bookie_hairpin" {
+  security_group_id = aws_security_group.pulsar.id
+  description       = "Self-hairpin to embedded bookie (ephemeral port) via IGW"
+  ip_protocol       = "tcp"
+  from_port         = 1
+  to_port           = 65535
+  cidr_ipv4         = "${aws_instance.pulsar.public_ip}/32"
+}
+
 resource "aws_instance" "pulsar" {
   ami                         = data.aws_ami.al2023.id
   instance_type               = var.instance_type
