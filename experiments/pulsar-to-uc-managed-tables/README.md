@@ -29,9 +29,9 @@ run end-to-end into real managed tables. Results land in
 
 | Path | Route | Table | Databricks compute in ingest path? | GA status | Verdict |
 |---|---|---|---|---|---|
-| **A** | KoP (Kafka protocol) → Structured Streaming Kafka source | managed Delta | yes | **GA end-to-end** | _pending run_ |
-| **B** | native `format("pulsar")` connector (DBR 14.1+) | managed Delta | yes | source is **Public Preview** | _pending run_ |
-| **C** | Pulsar consumer → PyIceberg → UC Iceberg REST catalog | managed Iceberg | no | **GA** (managed Iceberg + credential vending) | _pending run_ |
+| **A** | KoP (Kafka protocol) → Structured Streaming Kafka source | managed Delta | yes | **GA end-to-end** | ✅ works — 100k rows, 27.3s drain (~3.7k rows/s). Caveat: KoP is archived (see findings) |
+| **B** | native `format("pulsar")` connector (DBR 14.1+) | managed Delta | yes | source is **Public Preview** | ✅ works — 100k rows, 20.3s drain (~4.9k rows/s), fastest and simplest |
+| **C** | Pulsar consumer → PyIceberg → UC Iceberg REST catalog | managed Iceberg | no | **GA** (managed Iceberg + credential vending) | ✅ works — 100k rows in 20 commits, 114.4s (~874 rows/s), no Databricks compute |
 | **D** | KoP → Kafka Connect Iceberg sink → UC Iceberg REST | managed Iceberg | no | GA surface, needs a Connect worker | documented, not run |
 | **E** | pulsar-io-lakehouse sink connector | — | no | n/a | **disqualified** — Iceberg mode has no REST catalog support, so it cannot write UC managed tables |
 
@@ -74,7 +74,36 @@ token/OAuth auth on Pulsar and SASL on the KoP listener.
 
 ## Findings
 
-_Per-path numbers are populated from `results/matrix_results.json` after the live run._
+Live run on 2026-08-01: one Pulsar 3.1.1 standalone broker on `t3.large`, 100k synthetic
+events (512-byte payloads) produced at 4,971 events/s over the **native Pulsar client**,
+then drained by each path. Numbers below are from `results/matrix_results.json`.
+
+| | path A (KoP → Kafka source) | path B (native `pulsar`) | path C (PyIceberg → UC REST) |
+|---|---|---|---|
+| rows landed | 100,000 | 100,000 | 100,000 |
+| distinct `event_id` | 100,000 | 100,000 | 100,000 |
+| `seq` range | 0–99,999 | 0–99,999 | 0–99,999 |
+| table type | **MANAGED** | **MANAGED** | **MANAGED** |
+| format | DELTA | DELTA | ICEBERG |
+| drain time | 27.3s | 20.3s | 114.4s |
+| throughput | ~3,663 rows/s | ~4,926 rows/s | ~874 rows/s |
+| Databricks compute in path | yes | yes | **no** |
+
+**All three paths produce genuine UC managed tables with complete, deduplicated data** —
+100k distinct event ids and an unbroken seq range on every path, so nothing was dropped or
+double-written.
+
+**The headline result is that one event stream, produced once with the native Pulsar
+client, was read back over both the Pulsar binary protocol and the Kafka protocol.** That
+is what `entryFormat=pulsar` buys, and it is what makes a phased migration possible: a
+Kafka-protocol consumer and a Pulsar-protocol consumer can drain the same topic during a
+cutover rather than requiring a dual-write.
+
+Throughput here is **not** a capacity benchmark — it is a single-node broker on one
+`t3.large` and single-node job clusters, with each path draining a pre-produced backlog.
+Treat the ordering as directional. Path C is slowest by design: it commits from a single
+Python process in 20 batches, trading throughput for keeping Databricks compute out of the
+ingest path entirely.
 
 ### KoP is archived — this is a standing risk for path A (and D)
 
@@ -88,6 +117,17 @@ source is GA, but the Kafka protocol on Pulsar is supplied by a dead open-source
 that pins you to Pulsar 3.1.1. Anyone choosing path A is accepting a frozen broker
 version or a commercial dependency. This rig pins `pulsar_version = 3.1.1` /
 `kop_version = 3.1.1.1` for exactly that reason.
+
+### `event_to_commit_latency` is backlog age, not pipeline latency
+
+Path C reports `event_to_commit_latency` as `commit_time - event_ts`, where `event_ts` is
+when the generator created the event. Every path here is a **bounded drain of a topic that
+was fully produced beforehand**, so that number is dominated by how long the backlog sat
+between `make produce` and the run — it moves if you go get coffee first. Read it as
+"oldest-event age at commit" for a cold backlog drain, not as steady-state ingest latency.
+Measuring real end-to-end latency needs a producer running concurrently with the consumer,
+which this rig deliberately does not do (it measures throughput and correctness instead).
+The same caveat applies to any per-event timestamp comparison in paths A and B.
 
 ### KoP needs broker entry metadata, and it must be set before the first write
 

@@ -1,0 +1,87 @@
+{
+  "generator": {
+    "achieved_rate_per_sec": 4971,
+    "elapsed_sec": 20.1,
+    "events_produced": 100000,
+    "payload_bytes": 512,
+    "recorded_at": "2026-08-01T15:48:37Z",
+    "target_rate_per_sec": 5000,
+    "topic": "persistent://public/default/uc-ingest-eval"
+  },
+  "path_a_kop_kafka": {
+    "drain_elapsed_sec": 27.3,
+    "recorded_at": "2026-08-01T16:01:08Z",
+    "rows": 100000,
+    "run_id": 750643121433805,
+    "source": "kafka (KoP) via Structured Streaming, trigger availableNow",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_ingest_eval.path_a_kop_kafka",
+    "throughput_rows_per_sec": 3663
+  },
+  "path_b_native_pulsar": {
+    "drain_elapsed_sec": 20.3,
+    "recorded_at": "2026-08-01T16:01:08Z",
+    "rows": 100000,
+    "run_id": 817084423426723,
+    "source": "format(\"pulsar\") via Structured Streaming, trigger availableNow",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_ingest_eval.path_b_native_pulsar",
+    "throughput_rows_per_sec": 4926
+  },
+  "path_c_pyiceberg_rest": {
+    "batch_size": 5000,
+    "elapsed_sec": 114.4,
+    "event_to_commit_latency": {
+      "count": 100000,
+      "max_ms": 614911,
+      "p50_ms": 574232,
+      "p95_ms": 613912,
+      "p99_ms": 614712
+    },
+    "iceberg_commits": 20,
+    "recorded_at": "2026-08-01T15:58:51Z",
+    "rows_written": 100000,
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_ingest_eval.path_c_pyiceberg_rest",
+    "throughput_rows_per_sec": 874
+  },
+  "verification": {
+    "path_a_kop_kafka": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 100000,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 100000,
+      "seq_range": [
+        0,
+        99999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "path_b_native_pulsar": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 100000,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 100000,
+      "seq_range": [
+        0,
+        99999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "path_c_pyiceberg_rest": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 100000,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 100000,
+      "seq_range": [
+        0,
+        99999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "recorded_at": "2026-08-01T16:00:46Z"
+  }
+}
