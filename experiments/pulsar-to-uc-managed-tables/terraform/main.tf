@@ -71,6 +71,27 @@ resource "aws_vpc_security_group_ingress_rule" "service" {
   cidr_ipv4         = each.value.cidr
 }
 
+locals {
+  ssh_enabled = var.ssh_public_key != "" && var.ssh_ingress_cidr != ""
+}
+
+resource "aws_key_pair" "pulsar" {
+  count      = local.ssh_enabled ? 1 : 0
+  key_name   = "pulsar-uc-eval"
+  public_key = var.ssh_public_key
+  tags       = var.tags
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ssh" {
+  count             = local.ssh_enabled ? 1 : 0
+  security_group_id = aws_security_group.pulsar.id
+  description       = "SSH for broker log access"
+  ip_protocol       = "tcp"
+  from_port         = 22
+  to_port           = 22
+  cidr_ipv4         = var.ssh_ingress_cidr
+}
+
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.pulsar.id
   description       = "All egress"
@@ -83,6 +104,7 @@ resource "aws_instance" "pulsar" {
   instance_type               = var.instance_type
   vpc_security_group_ids      = [aws_security_group.pulsar.id]
   associate_public_ip_address = true
+  key_name                    = local.ssh_enabled ? aws_key_pair.pulsar[0].key_name : null
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     pulsar_version = var.pulsar_version

@@ -38,6 +38,23 @@ variable "allowed_ingress_cidrs" {
   type        = list(string)
 }
 
+variable "ssh_public_key" {
+  description = <<-EOT
+    Optional SSH public key material. When set (together with ssh_ingress_cidr)
+    the VM gets a key pair and port 22, which is how you read broker logs
+    (`docker logs pulsar`) when Pulsar or KoP misbehaves. Leave empty to run
+    with no SSH access at all.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "ssh_ingress_cidr" {
+  description = "CIDR allowed to SSH. Use your own /32 — never widen this."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)
