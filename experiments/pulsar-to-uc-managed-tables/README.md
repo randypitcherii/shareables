@@ -168,7 +168,7 @@ what needs a follow-up pass (**open**). The open rows are the roadmap, not fine 
 
 | Requirement | Status | Where it lands |
 |---|---|---|
-| GA-only components on the critical path | **live** | GA column in the paths table; path B carries the no-GA-timeline flag |
+| GA-only components on the critical path | **live** | GA column in the paths table; path B carries the no-GA-timeline flag. In regulated shops this is one **universal gate**, not a per-path score: preview features are excluded from compliance certifications (e.g. HIPAA) until GA, and a shop that runs regulated and non-regulated data through identical pipelines cannot scope a preview path to "just the non-sensitive stream" |
 | No producer-side changes (drain the existing topic as-is) | **live** | Every path consumes the one pre-existing topic over its native protocols; nothing dual-publishes |
 | Zero Databricks compute in the ingest path | **live** | Path C — external writer through the UC Iceberg REST catalog, verified MANAGED |
 | Native managed Iceberg output (not UniForm) | **live** | Path C lands true managed Iceberg; UniForm never enters the picture |
@@ -179,11 +179,11 @@ what needs a follow-up pass (**open**). The open rows are the roadmap, not fine 
 | Production-scale throughput (100k's of events/sec) | **open** | Single-node broker + single-node clusters here; numbers are directional only |
 | In-stream filtering before landing (shift-left, volume reduction) | **open** | The topic arrives pre-shaped; broker-side functions/filtering not exercised — matters when the source topic is far larger than what should land |
 | Schemaless payloads as VARIANT (and the engine-version floor for Iceberg v3 VARIANT) | **open** | Payloads land as a JSON string column here; VARIANT ingestion and its reader-version constraints not exercised |
-| Compliance certification (e.g. HIPAA) per ingestion feature | **open** | A per-feature certification question for Databricks, not something a rig can test — must be confirmed per path before production |
+| Compliance certification (e.g. HIPAA) per ingestion feature | **open** | Must be confirmed per feature with Databricks even for GA surfaces — GA is necessary but not sufficient — and preview features are categorically excluded until GA (see the GA row) |
 | Hard row-level deletes (e.g. GDPR) on the landed table | **open** | Not exercised; needs SQL DELETE against each landed format plus verification of delete semantics under concurrent maintenance |
 | Upsert ingestion (incl. equality-delete writers like Flink) | **documented** | This rig is append-only by design. Managed Iceberg does not support equality deletes, which rules out Flink-style upsert writers landing directly — the upsert-shaped dataset needs its own evaluation with a different apply pattern |
 | Credential-vending refresh for long-running external writers | **open** | Path C ran minutes, inside one vended-credential lifetime; continuous writers must be verified past the token-refresh boundary |
-| Incremental downstream reads (streaming / CDF) of the landed table | **documented** | Managed Iceberg has no CDF or streaming reads — downstream consumers batch with a high-water mark. Managed Delta (paths A/B) supports both |
+| Incremental downstream reads (streaming / CDF) of the landed table | **documented** | Managed Iceberg has no GA change feed or streaming reads (its change feed is Preview, which a GA-only gate rules out entirely) — downstream consumers batch with a high-water mark. Managed Delta (paths A/B) supports both as GA |
 | Time travel on the landed table | **open** | Not exercised |
 | Stop/start, restart, and replay behavior | **open** | Paths ran as bounded drains with fresh checkpoints; mid-stream restart and replay-under-load not exercised |
 | External engine reads via the UC Iceberg REST catalog | **open** | The rig proves external **writes** through the REST catalog; third-party engine **reads** of the landed tables are the natural next check |
@@ -192,6 +192,7 @@ what needs a follow-up pass (**open**). The open rows are the roadmap, not fine 
 | Partition layout of the landed managed Iceberg table | **documented** | UC managed Iceberg does not support Iceberg partition transforms (e.g. `bucket()`); the layout tool is liquid clustering (`CLUSTER BY`) plus `OPTIMIZE`. External writers and readers expecting transform-based partitioning must adapt |
 | REST-catalog metadata overhead for external engines under load | **open** | External engines pay a scan-planning hop through the REST catalog (OAuth + credential vending) that catalog-local integrations avoid, and upstream Iceberg has a known serialization bottleneck in concurrent catalog operations (apache/iceberg#16695). Measure planning latency at target concurrency before committing to the REST path for hot reads |
 | Small-file management on write-only streaming tables | **documented** | Automatic optimization is usage/benefit-driven, not a scheduler — a write-only, rarely-read bronze table may never trigger compaction, so streaming ingest needs an explicit maintenance plan. This rig's tables were too small and short-lived to exercise it |
+| Readability from AWS-native catalog services (e.g. S3 Tables) | **documented** | Unity Catalog has no supported S3 Tables integration (AWS-managed table buckets expose no stable S3 prefix to register) and no public roadmap — external-engine access to managed tables goes through UC's Iceberg REST catalog, full stop |
 | Outbound: table changes → Pulsar topic | **out of scope** | This experiment is inbound-only; the reverse path (e.g. CDC to a topic) is a separate evaluation |
 
 Two framing notes. First, when an incumbent stream-compute pipeline (typically Flink)
