@@ -1,0 +1,12 @@
+{
+  "generator_backlog": {
+    "achieved_rate_per_sec": 11435,
+    "avg_event_bytes": 985,
+    "elapsed_sec": 174.9,
+    "events_produced": 2000000,
+    "recorded_at": "2026-08-02T19:07:02Z",
+    "target_rate_per_sec": 0,
+    "topic": "persistent://public/default/uc-scale-eval",
+    "where": "on-VM producer (single python process, localhost broker)"
+  }
+}

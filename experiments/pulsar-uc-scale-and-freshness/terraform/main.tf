@@ -107,11 +107,11 @@ resource "aws_instance" "pulsar" {
     topic_partitions = var.topic_partitions
   })
 
+  # NOTE: sized to fit sandbox SCP limits — larger volumes / provisioned
+  # iops+throughput hit an explicit deny (ec2:RunInstances on volume/*).
   root_block_device {
-    volume_size = 200
+    volume_size = 100
     volume_type = "gp3"
-    throughput  = 250
-    iops        = 6000
   }
 
   tags = merge(var.tags, { Name = "pulsar-uc-scale-eval" })

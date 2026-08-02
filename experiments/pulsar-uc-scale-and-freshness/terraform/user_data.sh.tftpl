@@ -7,8 +7,15 @@
 #   9092 - Kafka protocol (KoP)
 set -euxo pipefail
 
-dnf install -y docker
+# dnf can transiently fail to resolve the docker package right at first boot
+# (observed live: "No match for argument: docker" while repos warm up) — retry.
+for attempt in 1 2 3 4 5; do
+  dnf install -y docker && break
+  echo "dnf install docker failed (attempt $attempt); retrying in 15s"
+  sleep 15
+done
 systemctl enable --now docker
+usermod -aG docker ec2-user  # remote-produce runs docker over SSH as ec2-user
 
 mkdir -p /opt/pulsar/protocols /opt/pulsar/nar /opt/pulsar/producer
 # The image runs as uid 10000, so it cannot unpack the NAR into a root-owned
