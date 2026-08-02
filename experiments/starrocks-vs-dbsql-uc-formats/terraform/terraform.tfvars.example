@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+aws_profile = "my-aws-profile"
+
+# The sandbox used for this evaluation rejects a literal 0.0.0.0/0; the two /1
+# halves are equivalent when you truly intend an open, short-lived rig. Prefer
+# your own egress IP /32.
+allowed_ingress_cidrs = ["0.0.0.0/1", "128.0.0.0/1"]
+
+# Optional but strongly recommended from day one — container logs are the only
+# way to debug FE/BE startup and catalog errors.
+# ssh_public_key   = "ssh-ed25519 AAAA... me@laptop"
+# ssh_ingress_cidr = "203.0.113.7/32"
+
+# starrocks_version = "4.0.13"
+# instance_type     = "m5.2xlarge"

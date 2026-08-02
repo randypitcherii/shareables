@@ -1,0 +1,30 @@
+[project]
+name = "starrocks-vs-dbsql-uc-formats"
+version = "0.1.0"
+description = "Evaluation: StarRocks vs Databricks serverless SQL across Unity Catalog table formats (native, managed Iceberg, managed Delta) — support, latency, cost, interop"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk>=0.38.0",
+    "pymysql>=1.1.0",
+    "requests>=2.32.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "infrastructure: tests requiring live StarRocks + Databricks infrastructure",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
