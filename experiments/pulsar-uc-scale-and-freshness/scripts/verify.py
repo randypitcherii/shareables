@@ -40,7 +40,11 @@ def collect_spark_cells(cfg) -> dict:
     )
     out = {}
     for cell, summary in rows:
-        out[cell] = json.loads(summary)
+        d = json.loads(summary)
+        # A driver restart can re-execute the whole cells script within one run
+        # (observed live); keep the latest pass per cell.
+        if cell not in out or d.get("started_ts_ms", 0) > out[cell].get("started_ts_ms", 0):
+            out[cell] = d
     return out
 
 

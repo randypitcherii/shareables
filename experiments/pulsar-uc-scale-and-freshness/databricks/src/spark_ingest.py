@@ -92,6 +92,13 @@ def run_cell(spark, cell, source, endpoint, topic, catalog, schema, run_id):
     spark.sql(f"DROP TABLE IF EXISTS {table}")
     DBUtils(spark).fs.rm(checkpoint, True)
     spark.sql(f"DELETE FROM {batches_table} WHERE run_id = '{run_id}' AND cell = '{name}'")
+    # Same hygiene for cell summaries: a driver restart re-executes the whole
+    # script (observed live: two complete passes in one SUCCESS run), so stale
+    # summary rows for this run_id+cell must go before this pass writes its own.
+    spark.sql(
+        f"DELETE FROM {catalog}.{schema}.ingest_cells "
+        f"WHERE run_id = '{run_id}' AND cell = '{name}'"
+    )
 
     ddl = f"CREATE TABLE {table} ({BASE_COLUMNS})"
     if cluster == "auto":
