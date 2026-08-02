@@ -1,22 +1,432 @@
 {
+  "cell_c_nrt": {
+    "commit_conflicts_retried": 0,
+    "commit_interval_sec": 5.0,
+    "consume_throughput_rows_per_sec": 3525,
+    "credential_reauths": 0,
+    "elapsed_sec": 492.7,
+    "filter": "off",
+    "freshness": {
+      "count": 1736851,
+      "max_ms": 172565,
+      "p50_ms": 94490,
+      "p95_ms": 150133,
+      "p99_ms": 162536
+    },
+    "iceberg_commits": 29,
+    "mode": "window",
+    "recorded_at": "2026-08-02T21:22:18Z",
+    "rows_consumed": 1736851,
+    "rows_written": 1736851,
+    "run_id": "r1-20260802",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_nrt",
+    "volume_reduction_pct": 0.0,
+    "window_sec": 480,
+    "write_throughput_rows_per_sec": 3525
+  },
+  "cell_c_nrt_sustainable": {
+    "commit_conflicts_retried": 0,
+    "commit_interval_sec": 5.0,
+    "consume_throughput_rows_per_sec": 1773,
+    "credential_reauths": 0,
+    "elapsed_sec": 500.7,
+    "filter": "off",
+    "freshness": {
+      "count": 887790,
+      "max_ms": 58760,
+      "p50_ms": 13098,
+      "p95_ms": 18784,
+      "p99_ms": 20159
+    },
+    "iceberg_commits": 38,
+    "mode": "window",
+    "recorded_at": "2026-08-02T22:27:50Z",
+    "rows_consumed": 887790,
+    "rows_written": 887790,
+    "run_id": "r1-20260802",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_nrt_sustainable",
+    "volume_reduction_pct": 0.0,
+    "window_sec": 480,
+    "write_throughput_rows_per_sec": 1773
+  },
+  "cell_c_scale_filtered": {
+    "commit_conflicts_retried": 0,
+    "commit_interval_sec": null,
+    "consume_throughput_rows_per_sec": 4363,
+    "credential_reauths": 0,
+    "elapsed_sec": 458.4,
+    "filter": "on",
+    "freshness": null,
+    "iceberg_commits": 35,
+    "mode": "drain",
+    "recorded_at": "2026-08-02T21:08:43Z",
+    "rows_consumed": 2000000,
+    "rows_written": 699231,
+    "run_id": "r1-20260802",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_scale_filtered",
+    "volume_reduction_pct": 65.0,
+    "window_sec": null,
+    "write_throughput_rows_per_sec": 1525
+  },
   "cell_c_scale_plain": {
     "commit_conflicts_retried": 0,
     "commit_interval_sec": null,
-    "consume_throughput_rows_per_sec": 1839,
+    "consume_throughput_rows_per_sec": 2720,
     "credential_reauths": 0,
-    "elapsed_sec": 184.9,
+    "elapsed_sec": 735.2,
     "filter": "off",
     "freshness": null,
-    "iceberg_commits": 18,
+    "iceberg_commits": 100,
     "mode": "drain",
-    "recorded_at": "2026-08-02T20:43:14Z",
-    "rows_consumed": 340082,
-    "rows_written": 340082,
+    "recorded_at": "2026-08-02T21:00:12Z",
+    "rows_consumed": 2000000,
+    "rows_written": 2000000,
     "run_id": "r1-20260802",
     "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_scale_plain",
     "volume_reduction_pct": 0.0,
     "window_sec": null,
-    "write_throughput_rows_per_sec": 1839
+    "write_throughput_rows_per_sec": 2720
+  },
+  "cell_c_t60": {
+    "commit_conflicts_retried": 0,
+    "commit_interval_sec": 60.0,
+    "consume_throughput_rows_per_sec": 4309,
+    "credential_reauths": 0,
+    "elapsed_sec": 618.1,
+    "filter": "off",
+    "freshness": {
+      "count": 2663551,
+      "max_ms": 161572,
+      "p50_ms": 86923,
+      "p95_ms": 137056,
+      "p99_ms": 151305
+    },
+    "iceberg_commits": 8,
+    "mode": "window",
+    "recorded_at": "2026-08-02T21:33:11Z",
+    "rows_consumed": 2663551,
+    "rows_written": 2663551,
+    "run_id": "r1-20260802",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_t60",
+    "volume_reduction_pct": 0.0,
+    "window_sec": 600,
+    "write_throughput_rows_per_sec": 4309
+  },
+  "clustering_reads": {
+    "clustered": {
+      "files_as_landed": {
+        "num_files": 8,
+        "size_bytes": 470472430
+      },
+      "files_post_optimize": {
+        "num_files": 8,
+        "size_bytes": 470472430
+      },
+      "optimize_full_sec": 9.5,
+      "reads_as_landed": {
+        "q1_hot_tenant_slice": {
+          "iterations_sec": [
+            5.13,
+            2.46,
+            2.8,
+            2.52,
+            2.59
+          ],
+          "median_sec": 2.59,
+          "min_sec": 2.46
+        },
+        "q2_selective_variant_distinct": {
+          "iterations_sec": [
+            4.14,
+            2.52,
+            2.67,
+            2.55,
+            2.53
+          ],
+          "median_sec": 2.55,
+          "min_sec": 2.52
+        },
+        "q3_fullscan_variant_group": {
+          "iterations_sec": [
+            3.78,
+            2.68,
+            2.66,
+            2.65,
+            2.43
+          ],
+          "median_sec": 2.66,
+          "min_sec": 2.43
+        }
+      },
+      "reads_post_optimize": {
+        "q1_hot_tenant_slice": {
+          "iterations_sec": [
+            2.63,
+            2.51,
+            2.55,
+            2.66,
+            2.66
+          ],
+          "median_sec": 2.63,
+          "min_sec": 2.51
+        },
+        "q2_selective_variant_distinct": {
+          "iterations_sec": [
+            2.4,
+            2.6,
+            2.56,
+            2.51,
+            2.46
+          ],
+          "median_sec": 2.51,
+          "min_sec": 2.4
+        },
+        "q3_fullscan_variant_group": {
+          "iterations_sec": [
+            2.59,
+            2.36,
+            2.49,
+            2.46,
+            2.37
+          ],
+          "median_sec": 2.46,
+          "min_sec": 2.36
+        }
+      },
+      "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.a_scale_clustered"
+    },
+    "plain": {
+      "files_as_landed": {
+        "num_files": 4,
+        "size_bytes": 464747123
+      },
+      "files_post_optimize": {
+        "num_files": 4,
+        "size_bytes": 464747123
+      },
+      "optimize_full_sec": 3.9,
+      "reads_as_landed": {
+        "q1_hot_tenant_slice": {
+          "iterations_sec": [
+            3.2,
+            2.46,
+            2.53,
+            2.33,
+            2.38
+          ],
+          "median_sec": 2.46,
+          "min_sec": 2.33
+        },
+        "q2_selective_variant_distinct": {
+          "iterations_sec": [
+            3.83,
+            2.44,
+            2.44,
+            2.55,
+            2.46
+          ],
+          "median_sec": 2.46,
+          "min_sec": 2.44
+        },
+        "q3_fullscan_variant_group": {
+          "iterations_sec": [
+            3.19,
+            2.36,
+            2.44,
+            2.39,
+            2.4
+          ],
+          "median_sec": 2.4,
+          "min_sec": 2.36
+        }
+      },
+      "reads_post_optimize": {
+        "q1_hot_tenant_slice": {
+          "iterations_sec": [
+            2.36,
+            2.48,
+            2.44,
+            2.53,
+            2.36
+          ],
+          "median_sec": 2.44,
+          "min_sec": 2.36
+        },
+        "q2_selective_variant_distinct": {
+          "iterations_sec": [
+            2.4,
+            2.44,
+            2.58,
+            2.56,
+            2.36
+          ],
+          "median_sec": 2.44,
+          "min_sec": 2.36
+        },
+        "q3_fullscan_variant_group": {
+          "iterations_sec": [
+            2.34,
+            2.23,
+            2.57,
+            2.53,
+            2.44
+          ],
+          "median_sec": 2.44,
+          "min_sec": 2.23
+        }
+      },
+      "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.a_scale_plain"
+    },
+    "recorded_at": "2026-08-02T22:22:49Z",
+    "run_id": "r1-20260802"
+  },
+  "cost_model": {
+    "path_a_kafka": {
+      "extrapolated_nodes_at_target": 12,
+      "extrapolated_usd_per_hr_continuous": 4.06,
+      "extrapolated_usd_per_month_continuous": 2965.0,
+      "label": "extrapolated",
+      "measured_from": "spark_cells.a_scale_plain",
+      "measured_rows_per_sec_single_node": 22173,
+      "notes": "Linear scale-out from one m5d.xlarge worker-equivalent; assumes the broker side fans out (partitions >= cores) and no skew. Scheduled (non-continuous) triggers cut cost roughly by duty cycle: usd/hr x (processing_time / interval)."
+    },
+    "path_b_pulsar": {
+      "extrapolated_nodes_at_target": 11,
+      "extrapolated_usd_per_hr_continuous": 3.72,
+      "extrapolated_usd_per_month_continuous": 2718.0,
+      "label": "extrapolated",
+      "measured_from": "spark_cells.b_scale_plain",
+      "measured_rows_per_sec_single_node": 23121,
+      "notes": "Linear scale-out from one m5d.xlarge worker-equivalent; assumes the broker side fans out (partitions >= cores) and no skew. Scheduled (non-continuous) triggers cut cost roughly by duty cycle: usd/hr x (processing_time / interval)."
+    },
+    "path_c_pyiceberg": {
+      "extrapolated_usd_per_hr_continuous": 4.05,
+      "extrapolated_usd_per_month_continuous": 2955.0,
+      "extrapolated_writer_hosts_c6i_xlarge": 23,
+      "extrapolated_writer_processes_at_target": 92,
+      "label": "extrapolated",
+      "measured_from": "cell_c_scale_plain",
+      "measured_rows_per_sec_single_process": 2720,
+      "notes": "Single-process Python writer scaled by process count (one consumer per topic partition subset). Excludes Databricks-side cost entirely (none in the ingest path) but a real estate pays a silver-hop job to convert JSON->VARIANT. Commit-rate drives both S3 PUTs and REST-catalog load; at 250k events/s the catalog-commit path itself needs validation (concurrent-commit serialization)."
+    },
+    "rates": {
+      "c6i_xlarge_ec2_usd_per_hr": 0.17,
+      "dbu_usd_jobs_premium": 0.15,
+      "m5d_xlarge_ec2_usd_per_hr": 0.226,
+      "m5d_xlarge_jobs_dbu_per_hr": 0.75,
+      "m6i_2xlarge_ec2_usd_per_hr": 0.384,
+      "s3_put_usd_per_1k": 0.005,
+      "s3_storage_usd_per_gb_month": 0.023
+    },
+    "recorded_at": "2026-08-02T22:34:07Z",
+    "shared_broker_note": "Broker-side cost (here one m6i.2xlarge, $0.384/hr) belongs to the existing Pulsar estate in every path and is excluded from per-path comparisons.",
+    "target_events_per_sec": 250000
+  },
+  "filter_reduction_path_a": {
+    "input_rows": 2000000,
+    "landed_rows": 699231,
+    "recorded_at": "2026-08-02T22:33:55Z",
+    "volume_reduction_pct": 65.0
+  },
+  "freshness_measured": {
+    "a_nrt": {
+      "all_batches": {
+        "count": 2335300,
+        "max_sec": 25.96,
+        "p50_sec": 7.73,
+        "p95_sec": 13.6
+      },
+      "steady_state": {
+        "count": 2334750,
+        "max_sec": 25.96,
+        "p50_sec": 7.73,
+        "p95_sec": 13.6
+      }
+    },
+    "a_t300": {
+      "all_batches": {
+        "count": 2916850,
+        "max_sec": 362.29,
+        "p50_sec": 205.94,
+        "p95_sec": 337.2
+      },
+      "steady_state": {
+        "count": 2916500,
+        "max_sec": 362.29,
+        "p50_sec": 205.95,
+        "p95_sec": 337.2
+      }
+    },
+    "a_t60": {
+      "all_batches": {
+        "count": 2654950,
+        "max_sec": 77.43,
+        "p50_sec": 44.49,
+        "p95_sec": 71.83
+      },
+      "steady_state": {
+        "count": 2654600,
+        "max_sec": 77.43,
+        "p50_sec": 44.49,
+        "p95_sec": 71.83
+      }
+    },
+    "b_nrt": {
+      "all_batches": {
+        "count": 4651245,
+        "max_sec": 23.99,
+        "p50_sec": 12.01,
+        "p95_sec": 17.46
+      },
+      "steady_state": {
+        "count": 4649945,
+        "max_sec": 23.99,
+        "p50_sec": 12.01,
+        "p95_sec": 17.46
+      }
+    },
+    "b_t60": {
+      "all_batches": {
+        "count": 3994568,
+        "max_sec": 83.03,
+        "p50_sec": 46.54,
+        "p95_sec": 76.09
+      },
+      "steady_state": {
+        "count": 3993568,
+        "max_sec": 83.03,
+        "p50_sec": 46.55,
+        "p95_sec": 76.1
+      }
+    },
+    "recorded_at": "2026-08-02T22:33:55Z"
+  },
+  "freshness_modeled": {
+    "cells": {
+      "15min": {
+        "predicted_p95_sec": 1058.0
+      },
+      "hourly": {
+        "predicted_p95_sec": 4231.8
+      }
+    },
+    "inputs": {
+      "drain_rows_per_sec_measured": 22173,
+      "producer_rate": 5000
+    },
+    "label": "modeled",
+    "model": "p95 ~= 0.95*T + (rate*T)/drain_rate; see _common.modeled_freshness_p95_sec",
+    "recorded_at": "2026-08-02T22:33:55Z",
+    "validation_against_measured": {
+      "a_t300": {
+        "measured_p95_sec": 337.2,
+        "predicted_p95_sec": 352.6
+      },
+      "a_t60": {
+        "measured_p95_sec": 71.83,
+        "predicted_p95_sec": 70.5
+      }
+    }
   },
   "generator_backlog": {
     "achieved_rate_per_sec": 11435,
@@ -28,6 +438,24 @@
     "topic": "persistent://public/default/uc-scale-eval",
     "where": "on-VM producer (single python process, localhost broker)"
   },
+  "job_run_ladder-a": {
+    "databricks_run_id": 873136371678193,
+    "duration_sec": 2328,
+    "job_key": "path_a_kafka",
+    "preset": "ladder-a",
+    "recorded_at": "2026-08-02T21:48:26Z",
+    "result_state": "SUCCESS",
+    "run_page_url": "https://<workspace-host>/?o=977594739011404#job/252155044774099/run/873136371678193"
+  },
+  "job_run_ladder-b": {
+    "databricks_run_id": 414770882259178,
+    "duration_sec": 1331,
+    "job_key": "path_b_pulsar",
+    "preset": "ladder-b",
+    "recorded_at": "2026-08-02T22:11:03Z",
+    "result_state": "SUCCESS",
+    "run_page_url": "https://<workspace-host>/?o=977594739011404#job/497391208623948/run/414770882259178"
+  },
   "job_run_scale-a": {
     "databricks_run_id": 698720956912324,
     "duration_sec": 907,
@@ -35,7 +463,7 @@
     "preset": "scale-a",
     "recorded_at": "2026-08-02T19:33:53Z",
     "result_state": "SUCCESS",
-    "run_page_url": "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com/?o=977594739011404#job/252155044774099/run/698720956912324"
+    "run_page_url": "https://<workspace-host>/?o=977594739011404#job/252155044774099/run/698720956912324"
   },
   "job_run_scale-b": {
     "databricks_run_id": 970414344375433,
@@ -44,6 +472,356 @@
     "preset": "scale-b",
     "recorded_at": "2026-08-02T20:29:20Z",
     "result_state": "SUCCESS",
-    "run_page_url": "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com/?o=977594739011404#job/497391208623948/run/970414344375433"
+    "run_page_url": "https://<workspace-host>/?o=977594739011404#job/497391208623948/run/970414344375433"
+  },
+  "spark_cells": {
+    "a_nrt": {
+      "batches": 66,
+      "cell": "a_nrt",
+      "cluster": "none",
+      "elapsed_sec": 482.1,
+      "filter": "off",
+      "input_rows": 2335300,
+      "landed_rows": 2335300,
+      "mode": "window",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785705421276.9666,
+      "starting": "latest",
+      "trigger_sec": 0,
+      "window_sec": 480
+    },
+    "a_scale_clustered": {
+      "batches": 1,
+      "cell": "a_scale_clustered",
+      "cluster": "auto",
+      "elapsed_sec": 105.2,
+      "filter": "off",
+      "input_rows": 2000000,
+      "landed_rows": 2000000,
+      "mode": "drain",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785699118465.4382,
+      "starting": "earliest",
+      "trigger_sec": 0,
+      "window_sec": 0
+    },
+    "a_scale_filtered": {
+      "batches": 1,
+      "cell": "a_scale_filtered",
+      "cluster": "none",
+      "elapsed_sec": 78.2,
+      "filter": "on",
+      "input_rows": 2000000,
+      "landed_rows": 699231,
+      "mode": "drain",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785699034330.1978,
+      "starting": "earliest",
+      "trigger_sec": 0,
+      "window_sec": 0
+    },
+    "a_scale_plain": {
+      "batches": 1,
+      "cell": "a_scale_plain",
+      "cluster": "none",
+      "elapsed_sec": 90.2,
+      "filter": "off",
+      "input_rows": 2000000,
+      "landed_rows": 2000000,
+      "mode": "drain",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785698937986.038,
+      "starting": "earliest",
+      "trigger_sec": 0,
+      "window_sec": 0
+    },
+    "a_t300": {
+      "batches": 3,
+      "cell": "a_t300",
+      "cluster": "none",
+      "elapsed_sec": 780.2,
+      "filter": "off",
+      "input_rows": 2916850,
+      "landed_rows": 2916850,
+      "mode": "window",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785706516026.793,
+      "starting": "latest",
+      "trigger_sec": 300,
+      "window_sec": 780
+    },
+    "a_t60": {
+      "batches": 10,
+      "cell": "a_t60",
+      "cluster": "none",
+      "elapsed_sec": 602.7,
+      "filter": "off",
+      "input_rows": 2654950,
+      "landed_rows": 2654950,
+      "mode": "window",
+      "run_id": "r1-20260802",
+      "source": "kafka",
+      "started_ts_ms": 1785705908208.2617,
+      "starting": "latest",
+      "trigger_sec": 60,
+      "window_sec": 600
+    },
+    "b_nrt": {
+      "batches": 46,
+      "cell": "b_nrt",
+      "cluster": "none",
+      "elapsed_sec": 482.1,
+      "filter": "off",
+      "input_rows": 4651245,
+      "landed_rows": 4651245,
+      "mode": "window",
+      "run_id": "r1-20260802",
+      "source": "pulsar",
+      "started_ts_ms": 1785707542505.794,
+      "starting": "latest",
+      "trigger_sec": 0,
+      "window_sec": 480
+    },
+    "b_scale_plain": {
+      "batches": 1,
+      "cell": "b_scale_plain",
+      "cluster": "none",
+      "elapsed_sec": 86.5,
+      "filter": "off",
+      "input_rows": 2000000,
+      "landed_rows": 2000000,
+      "mode": "drain",
+      "run_id": "r1-20260802",
+      "source": "pulsar",
+      "started_ts_ms": 1785702445747.4565,
+      "starting": "earliest",
+      "trigger_sec": 0,
+      "window_sec": 0
+    },
+    "b_t60": {
+      "batches": 11,
+      "cell": "b_t60",
+      "cluster": "none",
+      "elapsed_sec": 600.3,
+      "filter": "off",
+      "input_rows": 3994568,
+      "landed_rows": 3994568,
+      "mode": "window",
+      "run_id": "r1-20260802",
+      "source": "pulsar",
+      "started_ts_ms": 1785708029685.964,
+      "starting": "latest",
+      "trigger_sec": 60,
+      "window_sec": 600
+    },
+    "recorded_at": "2026-08-02T22:31:41Z"
+  },
+  "verification": {
+    "a_nrt": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2363050,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2363050,
+      "seq_range": [
+        2319767,
+        4682816
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "a_scale_clustered": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2000000,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2000000,
+      "seq_range": [
+        0,
+        1999999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "a_scale_filtered": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 699231,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 699231,
+      "seq_range": [
+        0,
+        1999992
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "a_scale_plain": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2000000,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2000000,
+      "seq_range": [
+        0,
+        1999999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "a_t300": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2916850,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2916850,
+      "seq_range": [
+        7780917,
+        10697766
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "a_t60": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2654950,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2654950,
+      "seq_range": [
+        4742867,
+        7397816
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "b_nrt": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 4651245,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 4651245,
+      "seq_range": [
+        1056826,
+        15248976
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "b_scale_plain": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 2000000,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2000000,
+      "seq_range": [
+        0,
+        1999999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "b_t60": {
+      "data_source_format": "DELTA",
+      "distinct_event_ids": 3994568,
+      "event_column_type": "variant",
+      "event_is_variant": true,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 3994568,
+      "seq_range": [
+        3485036,
+        16499999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "c_nrt": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 1736851,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 1736851,
+      "seq_range": [
+        1423867,
+        3226267
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "c_nrt_sustainable": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 887790,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 887790,
+      "seq_range": [
+        912210,
+        1799999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "c_scale_filtered": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 699231,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 699231,
+      "seq_range": [
+        0,
+        1999992
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "c_scale_plain": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 2000000,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2000000,
+      "seq_range": [
+        0,
+        1999999
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "c_t60": {
+      "data_source_format": "ICEBERG",
+      "distinct_event_ids": 2663551,
+      "format_matches": true,
+      "is_managed": true,
+      "row_count": 2663551,
+      "seq_range": [
+        4065167,
+        6790117
+      ],
+      "status": "OK",
+      "table_type": "MANAGED"
+    },
+    "recorded_at": "2026-08-02T22:33:29Z"
   }
 }

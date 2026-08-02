@@ -28,7 +28,7 @@ DELTA_CELLS = {
     "b_nrt": "pulsar",
     "b_t60": "pulsar",
 }
-ICEBERG_CELLS = ["c_scale_plain", "c_scale_filtered", "c_nrt", "c_t60"]
+ICEBERG_CELLS = ["c_scale_plain", "c_scale_filtered", "c_nrt", "c_t60", "c_nrt_sustainable"]
 LADDER_CELLS = ["a_nrt", "a_t60", "a_t300", "b_nrt", "b_t60"]
 
 
