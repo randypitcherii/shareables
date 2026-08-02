@@ -1,0 +1,31 @@
+[project]
+name = "pulsar-uc-scale-and-freshness"
+version = "0.1.0"
+description = "Evaluation: scaling Pulsar -> UC managed tables for load, freshness, filtering, VARIANT, and liquid clustering"
+requires-python = ">=3.11"
+dependencies = [
+    "pulsar-client>=3.5.0",
+    "pyiceberg[pyarrow]>=0.9.0",
+    "pyarrow>=17.0.0",
+    "databricks-sdk>=0.38.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "infrastructure: tests requiring live Pulsar + Databricks infrastructure",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
