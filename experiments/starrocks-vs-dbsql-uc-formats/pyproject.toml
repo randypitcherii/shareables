@@ -11,6 +11,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "boto3>=1.43.56",
     "pytest>=8.0.0",
     "ruff>=0.8.0",
 ]
@@ -21,6 +22,10 @@ addopts = "-v --tb=short"
 markers = [
     "infrastructure: tests requiring live StarRocks + Databricks infrastructure",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi-proxy.dev.databricks.com/simple/"
+default = true
 
 [tool.ruff]
 line-length = 100

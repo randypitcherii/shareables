@@ -5,16 +5,31 @@ token from the configured Databricks profile — StarRocks catalog properties ar
 static strings, so each run rebuilds the catalog inside the token's TTL.
 """
 
+import os
+
 from _common import Config, databricks_config, oauth_token, sr_exec
 
 UC_ICEBERG_CATALOG = "uc_ice"
+
+
+def _irc_uri(host: str) -> str:
+    """UC Iceberg REST URI as seen FROM THE STARROCKS NODE.
+
+    UC_ICEBERG_REST_URI overrides the default when the node's route to the
+    workspace differs from the operator's (e.g. a workspace IP ACL requires
+    relaying through an allowlisted address). The hostname must still match the
+    workspace TLS certificate.
+    """
+    return os.environ.get(
+        "UC_ICEBERG_REST_URI", f"{host}/api/2.1/unity-catalog/iceberg-rest"
+    )
 
 
 def _props(cfg: Config, token: str, host: str, style: str) -> dict:
     base = {
         "type": "iceberg",
         "iceberg.catalog.type": "rest",
-        "iceberg.catalog.uri": f"{host}/api/2.1/unity-catalog/iceberg-rest",
+        "iceberg.catalog.uri": _irc_uri(host),
         "iceberg.catalog.warehouse": cfg.uc_catalog,
     }
     if style == "v4":

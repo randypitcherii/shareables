@@ -121,6 +121,24 @@ def main() -> None:
         "identity": identity,
     }
     try:
+        # StarRocks CREATEd this table but could not bulk-INSERT into it (see
+        # battery 02); fill it from the warehouse so read-agreement is over real
+        # data. This is itself a write-interop datapoint (DBSQL DML on an
+        # externally-created managed Iceberg table).
+        from _common import gen_select_dbsql
+
+        count_rows, _ = dbsql_exec(cfg, f"SELECT COUNT(*) FROM {fqn}.{SR_AUTHORED}", w)
+        if int(count_rows[0][0]) == 0:
+            _, fill_elapsed = dbsql_exec(
+                cfg,
+                f"INSERT INTO {fqn}.{SR_AUTHORED} {EVENT_COLUMNS} "
+                f"{gen_select_dbsql(cfg.row_count)}",
+                w,
+            )
+            payload["dbsql_bulk_fill_elapsed_ms"] = round(fill_elapsed * 1000)
+    except Exception as e:  # noqa: BLE001
+        payload["dbsql_bulk_fill_error"] = str(e)[:1200]
+    try:
         sr_rows, _ = sr_exec(
             conn, CHECKSUM_SQL.format(table=f"{UC_ICEBERG_CATALOG}.{cfg.uc_schema}.{SR_AUTHORED}")
         )
