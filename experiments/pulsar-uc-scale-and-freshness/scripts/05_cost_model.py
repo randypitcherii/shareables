@@ -15,7 +15,10 @@ from _common import RESULTS_PATH, record_result
 
 TARGET_EVENTS_PER_SEC = 250_000
 
-# List prices, us-east-1, on-demand, 2026-08 (see README sources note).
+# List prices, us-east-1, on-demand, 2026-08. The per-instance DBU rate is from
+# the public Databricks AWS instance table (m5.xlarge = 0.69 DBU/hr is confirmed
+# public; the m5d "d" variant is listed slightly higher at ~0.75) — verify against
+# the live pricing calculator before quoting externally.
 RATES = {
     "dbu_usd_jobs_premium": 0.15,  # Jobs Compute, premium tier, AWS
     "m5d_xlarge_jobs_dbu_per_hr": 0.75,  # Databricks AWS instance-DBU table

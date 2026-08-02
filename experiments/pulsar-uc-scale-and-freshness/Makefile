@@ -12,6 +12,7 @@ export
 
 DATABRICKS_CONFIG_PROFILE ?= DEFAULT
 AWS_PROFILE ?= your-aws-profile-name
+PYTHONUNBUFFERED := 1
 TF := terraform -chdir=terraform
 SSH_OPTS := -i $(SSH_KEY) -o StrictHostKeyChecking=accept-new
 
