@@ -1,4 +1,23 @@
 {
+  "cell_c_scale_plain": {
+    "commit_conflicts_retried": 0,
+    "commit_interval_sec": null,
+    "consume_throughput_rows_per_sec": 1839,
+    "credential_reauths": 0,
+    "elapsed_sec": 184.9,
+    "filter": "off",
+    "freshness": null,
+    "iceberg_commits": 18,
+    "mode": "drain",
+    "recorded_at": "2026-08-02T20:43:14Z",
+    "rows_consumed": 340082,
+    "rows_written": 340082,
+    "run_id": "r1-20260802",
+    "table": "fe_randy_pitcher_workspace_catalog.pulsar_uc_scale_eval.c_scale_plain",
+    "volume_reduction_pct": 0.0,
+    "window_sec": null,
+    "write_throughput_rows_per_sec": 1839
+  },
   "generator_backlog": {
     "achieved_rate_per_sec": 11435,
     "avg_event_bytes": 985,
@@ -17,5 +36,14 @@
     "recorded_at": "2026-08-02T19:33:53Z",
     "result_state": "SUCCESS",
     "run_page_url": "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com/?o=977594739011404#job/252155044774099/run/698720956912324"
+  },
+  "job_run_scale-b": {
+    "databricks_run_id": 970414344375433,
+    "duration_sec": 484,
+    "job_key": "path_b_pulsar",
+    "preset": "scale-b",
+    "recorded_at": "2026-08-02T20:29:20Z",
+    "result_state": "SUCCESS",
+    "run_page_url": "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com/?o=977594739011404#job/497391208623948/run/970414344375433"
   }
 }

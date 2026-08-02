@@ -98,9 +98,14 @@ def main() -> None:
     initial = (
         pulsar.InitialPosition.Earliest if args.mode == "drain" else pulsar.InitialPosition.Latest
     )
+    # Subscription name must be unique PER INVOCATION: a crashed prior attempt
+    # leaves its subscription (and acked cursor) behind, and re-subscribing to
+    # the same name silently resumes from that cursor instead of
+    # initial_position — observed live as a drain that "completed" with only
+    # the leftover tail of the backlog.
     consumer = client.subscribe(
         cfg.pulsar_topic,
-        subscription_name=f"eval-{cfg.run_id}-{args.cell}",
+        subscription_name=f"eval-{cfg.run_id}-{args.cell}-{int(time.time())}",
         initial_position=initial,
         receiver_queue_size=10000,
     )
@@ -113,17 +118,24 @@ def main() -> None:
     commits = 0
     freshness_ms: list[float] = []
     conflicts = 0
+    reauths = 0
     started = time.time()
     deadline = started + args.window_sec if args.mode == "window" else None
     last_commit = started
 
     def flush():
-        nonlocal rows, rows_event_ts_ms, written, commits, conflicts
+        nonlocal rows, rows_event_ts_ms, written, commits, conflicts, reauths, table
         if not rows:
             return
         batch = pa.Table.from_pylist(rows, schema=ARROW_SCHEMA)
-        # UC background services (automatic maintenance) can commit between our
-        # appends; refresh and retry on conflict — required client behavior.
+        # Two live-observed failure modes an external writer MUST handle:
+        # 1. CommitFailedException — UC background services (automatic
+        #    maintenance) commit between our appends; refresh and retry.
+        # 2. OSError ACCESS_DENIED from the FileIO — the vended S3 credential
+        #    cached inside the table's FileIO stops working mid-run (observed
+        #    live ~9 min in, after 82 clean commits). Recovery is a full
+        #    reauth: new OAuth token, new REST catalog session, reload the
+        #    table so a fresh credential is vended.
         for attempt in range(COMMIT_RETRIES):
             try:
                 table.append(batch)
@@ -134,6 +146,20 @@ def main() -> None:
                     raise
                 print(f"commit conflict; refreshing and retrying ({attempt + 1})")
                 table.refresh()
+            except OSError as e:
+                # Transient S3/network faults (curl timeouts on multipart
+                # upload) also surface as OSError — retry those with backoff;
+                # reauth only for the credential failure signature.
+                if attempt == COMMIT_RETRIES - 1:
+                    raise
+                if "ACCESS_DENIED" in str(e):
+                    reauths += 1
+                    print(f"vended-credential failure; reauthenticating ({attempt + 1}): {e}")
+                    table = open_catalog(cfg).load_table((cfg.uc_schema, args.cell))
+                else:
+                    print(f"transient I/O failure; retrying ({attempt + 1}): {e}")
+                    time.sleep(5 * (attempt + 1))
+                    table.refresh()
         commit_ms = time.time() * 1000
         freshness_ms.extend(commit_ms - ts for ts in rows_event_ts_ms)
         commits += 1
@@ -200,6 +226,7 @@ def main() -> None:
         "volume_reduction_pct": round(100 * (1 - written / consumed), 1) if consumed else None,
         "iceberg_commits": commits,
         "commit_conflicts_retried": conflicts,
+        "credential_reauths": reauths,
         "elapsed_sec": round(elapsed, 1),
         "consume_throughput_rows_per_sec": round(consumed / elapsed) if elapsed else 0,
         "write_throughput_rows_per_sec": round(written / elapsed) if elapsed else 0,
