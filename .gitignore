@@ -83,6 +83,7 @@ tfplan
 # Claude Code
 .claude/
 .worktrees/
+*checkpoint*.md
 
 # System Files
 .DS_Store

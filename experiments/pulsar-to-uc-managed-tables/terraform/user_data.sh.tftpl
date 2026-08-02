@@ -1,0 +1,67 @@
+#!/bin/bash
+# Bootstraps a single-node Apache Pulsar standalone with the KoP (Kafka-on-Pulsar)
+# protocol handler, exposing:
+#   6650 - Pulsar binary protocol
+#   8080 - Pulsar admin API
+#   9092 - Kafka protocol (KoP)
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+mkdir -p /opt/pulsar/protocols /opt/pulsar/nar
+# The image runs as uid 10000, so it cannot unpack the NAR into a root-owned
+# bind mount: the broker dies with "Cannot create .../pulsar-nar/...nar-unpacked"
+# and then "No protocol handler is found for protocol `kafka`".
+chown -R 10000:0 /opt/pulsar/nar
+
+# KoP NAR is Apache-2.0 licensed; version must pair with the Pulsar release.
+curl -fL -o /opt/pulsar/protocols/pulsar-protocol-handler-kafka-${kop_version}.nar \
+  "https://github.com/streamnative/kop/releases/download/v${kop_version}/pulsar-protocol-handler-kafka-${kop_version}.nar"
+
+# Public IP via IMDSv2 — advertised to both Pulsar and Kafka clients so external
+# lookups redirect to a reachable address. Note this is advertised via
+# advertisedListeners, NOT advertisedAddress: see the broker/bookie note below.
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PUBLIC_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# entryFormat=pulsar lets one event stream (produced with the native Pulsar client)
+# be consumed over BOTH protocols — that is the whole point of this evaluation.
+#
+# Do NOT use advertisedAddress here. In standalone mode it also applies to the
+# embedded bookie, which then registers itself at <public-ip>:<ephemeral-port>.
+# That port is never published by -p, so the broker's own ledger writes are
+# routed out to an address nothing listens on: ledgers open but no entry is ever
+# confirmed, and every produce fails with "Not enough non-faulty bookies".
+# advertisedListeners scopes the public address to the broker's client-facing
+# listener only, leaving the bookie on its container-internal address.
+#
+# brokerEntryMetadataInterceptors is REQUIRED by KoP >= 2.8.0: Kafka offsets are
+# derived from Pulsar's broker entry metadata, which the index interceptor
+# stamps onto each BookKeeper entry AT WRITE TIME. Without it, Kafka Metadata
+# requests still succeed but ListOffsets fails with UNKNOWN_SERVER_ERROR, so
+# consumers die resolving auto.offset.reset before their first fetch. The
+# metadata cannot be backfilled — messages written while it was unset stay
+# unreadable to Kafka clients, so this must be set before producing.
+#
+# narExtractionDirectory is moved off its /tmp default: periodic /tmp cleanup
+# removes the extracted NAR and the handler dies with NoClassDefFoundError.
+docker run -d --name pulsar --restart always \
+  -p 6650:6650 -p 8080:8080 -p 9092:9092 \
+  -v /opt/pulsar/protocols:/pulsar/protocols \
+  -v /opt/pulsar/nar:/pulsar/nar \
+  -e PULSAR_PREFIX_messagingProtocols=kafka \
+  -e PULSAR_PREFIX_protocolHandlerDirectory=./protocols \
+  -e PULSAR_PREFIX_narExtractionDirectory=/pulsar/nar \
+  -e PULSAR_PREFIX_entryFormat=pulsar \
+  -e PULSAR_PREFIX_brokerEntryMetadataInterceptors=org.apache.pulsar.common.intercept.AppendIndexMetadataInterceptor \
+  -e PULSAR_PREFIX_kafkaListeners=PLAINTEXT://0.0.0.0:9092 \
+  -e PULSAR_PREFIX_kafkaAdvertisedListeners=PLAINTEXT://$PUBLIC_IP:9092 \
+  -e PULSAR_PREFIX_kafkaTransactionCoordinatorEnabled=true \
+  -e PULSAR_PREFIX_brokerDeduplicationEnabled=true \
+  -e PULSAR_PREFIX_advertisedListeners=external:pulsar://$PUBLIC_IP:6650 \
+  -e PULSAR_PREFIX_internalListenerName=external \
+  -e PULSAR_PREFIX_allowAutoTopicCreationType=partitioned \
+  -e PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled=false \
+  apachepulsar/pulsar:${pulsar_version} \
+  sh -c "bin/apply-config-from-env.py conf/standalone.conf && bin/pulsar standalone --no-functions-worker --no-stream-storage"

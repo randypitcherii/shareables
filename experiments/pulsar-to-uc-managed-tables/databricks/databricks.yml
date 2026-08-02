@@ -1,0 +1,76 @@
+# Databricks Asset Bundle for the two Databricks-compute ingestion paths.
+# Deploy/run with a named profile (no PATs):
+#   databricks bundle deploy --profile DEFAULT --target dev \
+#     --var="kafka_bootstrap=<ip>:9092" --var="pulsar_service_url=pulsar://<ip>:6650" \
+#     --var="uc_catalog=<catalog>"
+#   databricks bundle run path_a_kop_kafka --profile DEFAULT --target dev (same --var flags)
+bundle:
+  name: pulsar_to_uc_managed_tables
+
+variables:
+  pulsar_service_url:
+    description: Pulsar binary protocol URL (pulsar://<ip>:6650)
+  kafka_bootstrap:
+    description: Kafka protocol bootstrap servers exposed by KoP (<ip>:9092)
+  topic:
+    description: Fully qualified Pulsar topic
+    default: persistent://public/default/uc-ingest-eval
+  uc_catalog:
+    description: Target Unity Catalog
+  uc_schema:
+    description: Target schema
+    default: pulsar_uc_ingest_eval
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+resources:
+  jobs:
+    path_a_kop_kafka:
+      name: "pulsar-uc-eval path A: KoP kafka source -> managed Delta"
+      # Each run resets the target table and its streaming checkpoint, so two
+      # overlapping runs would clobber each other's state and report nonsense.
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: ingest
+          spark_python_task:
+            python_file: src/kop_kafka_ingest.py
+            parameters:
+              - "${var.kafka_bootstrap}"
+              - "${var.topic}"
+              - "${var.uc_catalog}"
+              - "${var.uc_schema}"
+          job_cluster_key: single_node
+      job_clusters:
+        - job_cluster_key: single_node
+          new_cluster: &single_node_cluster
+            spark_version: 16.4.x-scala2.12
+            node_type_id: m5d.xlarge
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+              project: pulsar-to-uc-managed-tables
+
+    path_b_native_pulsar:
+      name: "pulsar-uc-eval path B: native pulsar connector -> managed Delta"
+      # See path A: runs reset table + checkpoint, so they must not overlap.
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: ingest
+          spark_python_task:
+            python_file: src/native_pulsar_ingest.py
+            parameters:
+              - "${var.pulsar_service_url}"
+              - "${var.topic}"
+              - "${var.uc_catalog}"
+              - "${var.uc_schema}"
+          job_cluster_key: single_node
+      job_clusters:
+        - job_cluster_key: single_node
+          new_cluster: *single_node_cluster

@@ -1,0 +1,46 @@
+# ── House theme: Mono Bold. Copy verbatim. ──
+**.style: {
+  fill: "#FFFFFF"
+  stroke: "#000000"
+  stroke-width: 1
+  font-color: "#000000"
+  bold: true
+  border-radius: 4
+}
+(** -> **)[*].style: {
+  stroke: "#000000"
+  stroke-width: 1
+  font-color: "#000000"
+  bold: true
+  italic: false
+}
+
+direction: down
+
+generator: "00_generate_events\nnative Pulsar client, produced once"
+
+topic: "shared topic (Pulsar standalone, EC2 OSS + KoP)\nports: 6650 pulsar / 9092 kafka / 8080 admin\none event stream, two wire protocols" {
+  style.fill: "#FFE066"
+}
+
+pathA: "A: Databricks Kafka source\n(Spark job via KoP)"
+pathB: "B: Databricks native pulsar\nconnector (Spark job)"
+pathC: "C: Pulsar consumer -> PyIceberg\nno Databricks compute in ingest path" {
+  style.stroke-width: 3
+}
+
+catalogC: "UC Iceberg REST catalog\n+ credential vending"
+
+deltaA: "managed Delta"
+deltaB: "managed Delta"
+icebergC: "managed Iceberg"
+
+generator -> topic: produces
+topic -> pathA: kafka
+topic -> pathB: pulsar
+topic -> pathC: pulsar
+
+pathA -> deltaA
+pathB -> deltaB
+pathC -> catalogC
+catalogC -> icebergC
