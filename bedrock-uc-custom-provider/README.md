@@ -95,7 +95,25 @@ value), `status` (provider, model service, and inference tables, including
 orphaned `_payload` tables), and `invoke "<prompt>"` (a passthrough call that
 prints the reply). Stdlib-only; it reads its parameters straight from
 `deploy.py`'s parameter block, so the two cannot drift, and it orchestrates
-`deploy.py` rather than duplicating it.
+`deploy.py` rather than duplicating it. Pass `--catalog` / `--schema` when you
+deployed somewhere other than the defaults, and `--profile` to pick a CLI
+profile.
+
+**Run `deploy.py` from a shell, not from an in-workspace coding agent.** Tested
+with Genie Code (2026-07-29): given only this folder's URL it cloned the repo,
+read the skill, planned correctly, and created the catalog and schema — then
+its safety layer denied the provider-creation step as credential egress,
+because the step reads the Bedrock secret and posts it in the request body.
+That objection can't be satisfied: the beta API accepts the credential only as
+`config.custom.direct.api_key.plaintext`, with no secret-reference form. A
+human running the same script is fine; an autonomous agent inside the workspace
+is not the path.
+
+One more environment note from that run: on a metastore with no default
+storage, `deploy.py`'s catalog creation fails, because it deliberately creates
+catalogs without a `storage_root`. Point `TARGET_CATALOG` at a catalog you
+already own rather than attaching the demo to whatever external location
+happens to be lying around.
 
 ## Constraints discovered
 

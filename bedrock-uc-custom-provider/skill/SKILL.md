@@ -102,6 +102,14 @@ A re-run prints `exists — leaving as-is` for objects already there. That is
 deliberate, not a bug: `config.custom` and `config.routing` are not patchable,
 so the script never tries (see Constraints).
 
+**If catalog creation fails** with a managed-location / storage-root error,
+this metastore has no default storage, and `deploy.py` deliberately creates
+catalogs without a `storage_root`. Do **not** go scavenging the workspace for
+an external location to borrow — that silently plants the demo's data in
+someone else's bucket. Point `TARGET_CATALOG` at a catalog that already exists
+and that the human owns, or have them create one with an explicit storage root.
+Then re-run, and pass `--catalog <name>` to `gateway.py` so it follows you.
+
 To change the region, catalog, schema, or model, edit the parameter block at
 the top of `deploy.py`. Changing the key, `base_url`, or routing of an
 *existing* object requires delete + recreate — see the recreate recipe below.
@@ -183,6 +191,8 @@ not instant; give the tables a few minutes after a call.
 | Table `<name>_payload` already exists on create | Deleting a provider/model service **orphans its inference table** | Drop the orphan (or change `table_name_prefix`) before recreating. `gateway.py status` flags orphans. |
 | Need to change key, `base_url`, or routing | `config.custom` and `config.routing` are **not updatable** | Delete + recreate (recipe below). Do not attempt a PATCH. |
 | Provider create rejects `targets[]` | Entries require `native_api_types` | Keep `"anthropic/v1/messages"` as `deploy.py` sets it. |
+| Catalog create fails on managed location / storage root | The metastore has no default storage | Point `TARGET_CATALOG` at an existing catalog the human owns; don't borrow a storage location you found lying around. Match it with `gateway.py --catalog <name>`. |
+| An in-workspace coding agent refuses to run `deploy.py` | Agent safety layers read "secret value into an API request body" as credential egress | Expected — see below. Run `deploy.py` from a shell or a notebook the human drives. |
 
 **Recreate recipe** (the only way to change an existing provider's key, base
 URL, or routing):
@@ -196,3 +206,18 @@ URL, or routing):
 
 Confirm the delete with the human first — it is destructive, and dropping the
 `_payload` table discards logged traffic.
+
+## Where this runs
+
+Run `deploy.py` from a shell (or a notebook the human is driving). **An
+in-workspace coding agent will not get through it.** Tested with Genie Code on
+2026-07-29: given only the repo URL it cloned the repo, found and read this
+skill, planned correctly, and created the catalog and schema — then its safety
+layer denied the provider-creation step, on the grounds that reading a secret
+and posting it in an API body is credential egress, and suggested a secret
+reference instead. There is no secret-reference form in this beta API;
+`api_key.plaintext` is the only shape it accepts, so the objection cannot be
+satisfied — it can only be overridden by a human who understands the trade.
+
+If you are that agent: say this plainly to your human and hand them the shell
+command. Do not try to reshape the request until the guardrail stops noticing.

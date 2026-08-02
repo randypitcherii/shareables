@@ -72,11 +72,15 @@ def row(check: str, status: str, detail: str = "") -> None:
 # ── deploy.py is the single source of truth for parameters ──────────────────
 
 
-def deploy_params() -> dict:
+def deploy_params(overrides: dict | None = None) -> dict:
     """Literal module-level assignments from deploy.py's parameter block.
 
     Computed values (f-strings, os.environ lookups) are skipped — they are
     derived here instead, the same way deploy.py derives them.
+
+    `overrides` (from --catalog / --schema) win over the file. A workspace
+    where you cannot create a catalog is a real case: deploy.py gets pointed
+    at an existing catalog, and this helper has to follow it there.
     """
     try:
         tree = ast.parse(DEPLOY_PY.read_text())
@@ -98,6 +102,8 @@ def deploy_params() -> dict:
     missing = [p for p in REQUIRED_PARAMS if p not in params]
     if missing:
         die(f"{DEPLOY_PY.name} is missing expected parameters: {', '.join(missing)}")
+
+    params.update({k: v for k, v in (overrides or {}).items() if v})
 
     params["SCHEMA_FQN"] = f"{params['TARGET_CATALOG']}.{params['TARGET_SCHEMA']}"
     params["PROVIDER_FQN"] = f"{params['SCHEMA_FQN']}.{params['PROVIDER_ID']}"
@@ -466,6 +472,11 @@ def main() -> int:
         default=os.environ.get("DATABRICKS_CONFIG_PROFILE"),
         help="Databricks CLI profile (default: DATABRICKS_CONFIG_PROFILE, else the CLI default)",
     )
+    parser.add_argument(
+        "--catalog",
+        help="override TARGET_CATALOG from deploy.py (use when you deployed elsewhere)",
+    )
+    parser.add_argument("--schema", help="override TARGET_SCHEMA from deploy.py")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("preflight", help="CLI, auth, uv, and Bedrock-secret checks")
@@ -484,7 +495,7 @@ def main() -> int:
     )
 
     args = parser.parse_args()
-    params = deploy_params()
+    params = deploy_params({"TARGET_CATALOG": args.catalog, "TARGET_SCHEMA": args.schema})
     return {
         "preflight": cmd_preflight,
         "status": cmd_status,
