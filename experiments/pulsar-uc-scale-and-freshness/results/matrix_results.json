@@ -8,5 +8,14 @@
     "target_rate_per_sec": 0,
     "topic": "persistent://public/default/uc-scale-eval",
     "where": "on-VM producer (single python process, localhost broker)"
+  },
+  "job_run_scale-a": {
+    "databricks_run_id": 208275170202938,
+    "duration_sec": 635,
+    "job_key": "path_a_kafka",
+    "preset": "scale-a",
+    "recorded_at": "2026-08-02T19:17:47Z",
+    "result_state": "FAILED",
+    "run_page_url": "https://fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com/?o=977594739011404#job/252155044774099/run/208275170202938"
   }
 }

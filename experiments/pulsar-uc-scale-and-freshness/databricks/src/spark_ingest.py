@@ -113,7 +113,9 @@ def run_cell(spark, cell, source, endpoint, topic, catalog, schema, run_id):
         out = batch_df
         if filter_on:
             out = out.where(F.col("event_type").isin(*KEEP_EVENT_TYPES))
-        out = out.withColumn("batch_id", F.lit(batch_id)).withColumn(
+        # lit() of a Python int is INT; the table column is BIGINT and Delta
+        # refuses to merge them (DELTA_FAILED_TO_MERGE_FIELDS, seen live).
+        out = out.withColumn("batch_id", F.lit(batch_id).cast("bigint")).withColumn(
             "ingest_ts", F.current_timestamp()
         )
         out.write.format("delta").mode("append").saveAsTable(table)
