@@ -222,6 +222,120 @@
       "uri_host": "https://<workspace-host>"
     }
   },
+  "battery_02_starrocks_uc_managed_iceberg__rerun_no_ip_acl": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          769,
+          652,
+          542,
+          641,
+          538,
+          664,
+          515
+        ],
+        "cost_usd_per_query_p50": 6.8e-05,
+        "first_run_ms": 769,
+        "max_ms": 769,
+        "min_ms": 515,
+        "p50_ms": 641,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          715,
+          974,
+          561,
+          775,
+          664,
+          620,
+          677
+        ],
+        "cost_usd_per_query_p50": 7.2e-05,
+        "first_run_ms": 715,
+        "max_ms": 974,
+        "min_ms": 561,
+        "p50_ms": 677,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          1054,
+          625,
+          519,
+          530,
+          577,
+          580,
+          1055
+        ],
+        "cost_usd_per_query_p50": 6.2e-05,
+        "first_run_ms": 1054,
+        "max_ms": 1055,
+        "min_ms": 519,
+        "p50_ms": 580,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.001026,
+        "elapsed_ms": 9615,
+        "status": "ok"
+      },
+      "bulk_update": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      },
+      "create": {
+        "cost_usd": 0.000255,
+        "elapsed_ms": 2389,
+        "status": "ok"
+      },
+      "delete_1": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "final_checksum": {
+        "cost_usd": 8.6e-05,
+        "elapsed_ms": 806,
+        "rows": [
+          100001,
+          5100050001,
+          4999954242,
+          5001
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 0.000461,
+        "elapsed_ms": 4317,
+        "status": "ok"
+      },
+      "update_1": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      }
+    },
+    "recorded_at": "2026-08-03T18:53:13Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "table": "uc_ice.interop_rerun.events_sr_iceberg",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
   "battery_03_starrocks_uc_managed_delta": {
     "engine": "starrocks-4.0.13-b55eab7",
     "format": "uc-managed-delta",
@@ -244,6 +358,31 @@
     },
     "ops": {},
     "recorded_at": "2026-08-02T19:27:58Z",
+    "verdict": "unsupported"
+  },
+  "battery_03_starrocks_uc_managed_delta__rerun_no_ip_acl": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-delta",
+    "grounds": {
+      "delta_catalog_metastore_types": "hive metastore and AWS Glue only (docs)",
+      "delta_write_support": "none \u2014 Delta Lake integration is read-only (docs)",
+      "probe_rest_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe2]. msg: Getting analyzing error. Detail message: hive metastore type [rest] is not supported.}')",
+        "status": "error"
+      },
+      "probe_unity_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe1]. msg: Getting analyzing error. Detail message: hive metastore type [unity] is not supported.}')",
+        "status": "error"
+      },
+      "write_via_iceberg_rest_uniform": "see interop_07 write probe"
+    },
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {},
+    "recorded_at": "2026-08-03T18:54:11Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
     "verdict": "unsupported"
   },
   "battery_04_dbsql_uc_managed_delta": {
@@ -514,6 +653,46 @@
     "table": "<uc_catalog>.starrocks_uc_eval.events_dbsql_iceberg",
     "warehouse_size": "X-Small"
   },
+  "env_reachability_from_starrocks_node__rerun_no_ip_acl": {
+    "conclusion": "No S3 403. Both the read path (GetObject/HEAD/List) and the write path (PutObject, CreateMultipartUpload) succeed from the engine node using UC-vended credentials. This is the exact surface that returned 403 / SCP-denied PutObject on the earlier IP-access-list-enforcing workspace.",
+    "identity": {
+      "dbsql": "<operator>",
+      "probe_host": "starrocks EC2 node (same host that runs FE+BE)"
+    },
+    "probes": {
+      "irc_get_config": {
+        "http_status": 200
+      },
+      "irc_load_table_vended_credentials": {
+        "credentials_returned": true,
+        "http_status": 200
+      },
+      "s3_abort_multipart_upload": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_create_multipart_upload": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_head_object_current_metadata": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_list_objects_table_prefix": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_put_object_under_table_root": {
+        "exit_code": 0,
+        "result": "ok"
+      }
+    },
+    "question": "Can the StarRocks node itself reach UC and use vended credentials against S3?",
+    "recorded_at": "2026-08-03T18:56:01Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "workspace_ip_access_list": "not enabled; access-list collection empty"
+  },
   "interop_read_dbsql_delta_to_starrocks": {
     "accessor": "starrocks",
     "creator": "dbsql-serverless",
@@ -541,6 +720,51 @@
       "uri_host": "https://<workspace-host>"
     }
   },
+  "interop_read_dbsql_delta_to_starrocks__rerun_no_ip_acl": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "format": "uc-managed-delta-uniform",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "read_timing": {
+      "all_ms": [
+        718,
+        567,
+        112
+      ],
+      "first_run_ms": 718,
+      "max_ms": 718,
+      "min_ms": 112,
+      "p50_ms": 567,
+      "runs": 3
+    },
+    "recorded_at": "2026-08-03T18:53:50Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "status": "ok",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
   "interop_read_dbsql_iceberg_to_starrocks": {
     "accessor": "starrocks",
     "creator": "dbsql-serverless",
@@ -562,6 +786,51 @@
     "operation": "read",
     "recorded_at": "2026-08-02T19:29:22Z",
     "status": "error",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "interop_read_dbsql_iceberg_to_starrocks__rerun_no_ip_acl": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "read_timing": {
+      "all_ms": [
+        1265,
+        593,
+        1270
+      ],
+      "first_run_ms": 1265,
+      "max_ms": 1270,
+      "min_ms": 593,
+      "p50_ms": 1265,
+      "runs": 3
+    },
+    "recorded_at": "2026-08-03T18:53:49Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "status": "ok",
     "uc_catalog_info": {
       "catalog": "uc_ice",
       "property_style": "v4",
@@ -686,6 +955,40 @@
     },
     "warehouse_size": "X-Small"
   },
+  "interop_write_starrocks_to_uc_iceberg_verified__rerun_no_ip_acl": {
+    "accessor": "dbsql-serverless",
+    "creator": "starrocks (CREATE + INSERT via UC Iceberg REST)",
+    "dbsql_checksum": [
+      100001,
+      5100050001,
+      4999954242,
+      5001
+    ],
+    "dbsql_read_elapsed_ms": 1006,
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "write-then-verify",
+    "recorded_at": "2026-08-03T18:54:55Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100001,
+      5100050001,
+      4999954242,
+      5001
+    ],
+    "status": "ok",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
   "uc_describe_detail_formats": {
     "identity": {
       "dbsql": "<operator>"
@@ -704,6 +1007,18 @@
         "describe_detail_format": "iceberg",
         "location_tail": "itcher_workspace_catalog.starrocks_uc_eval.events_sr_iceberg"
       }
+    }
+  },
+  "uc_describe_detail_formats__rerun_no_ip_acl": {
+    "identity": {
+      "dbsql": "<operator>"
+    },
+    "recorded_at": "2026-08-03T18:55:28Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "tables": {
+      "events_sr_iceberg": "iceberg",
+      "interop_delta": "delta",
+      "interop_ice": "iceberg"
     }
   },
   "uc_table_format_registry": {

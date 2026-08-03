@@ -71,3 +71,26 @@ def test_record_result_fails_closed_without_identity(tmp_path, monkeypatch):
         _common.record_result("row", {"ops": {}})
     _common.record_result("row", {"ops": {}, "identity": {"user": "someone"}})
     assert (tmp_path / "matrix_results.json").exists()
+
+
+def test_record_result_rerun_supersedes_without_erasing(tmp_path, monkeypatch):
+    """A rerun under a key suffix must leave the first attempt's row intact."""
+    import json
+
+    import _common
+
+    results = tmp_path / "matrix_results.json"
+    monkeypatch.setattr(_common, "RESULTS_PATH", results)
+    monkeypatch.delenv("RESULT_KEY_SUFFIX", raising=False)
+    monkeypatch.delenv("RESULT_RUN_NOTE", raising=False)
+
+    _common.record_result("cell", {"identity": {"user": "u"}, "status": "environment_blocked"})
+
+    monkeypatch.setenv("RESULT_KEY_SUFFIX", "__rerun")
+    monkeypatch.setenv("RESULT_RUN_NOTE", "workspace with no IP access list")
+    _common.record_result("cell", {"identity": {"user": "u"}, "status": "ok"})
+
+    data = json.loads(results.read_text())
+    assert data["cell"]["status"] == "environment_blocked"
+    assert data["cell__rerun"]["status"] == "ok"
+    assert data["cell__rerun"]["run_note"] == "workspace with no IP access list"

@@ -25,3 +25,18 @@ independently, failures record the server's error verbatim, and a row is only
 recorded with a proven engine identity. Timings are client wall-clock from the
 operator machine for both engines; costs use the documented model in
 `template.env` (EC2 $/hr for StarRocks, warehouse DBU/hr × $/DBU for DBSQL).
+
+## Re-running a cell in a different environment
+
+A cell that failed for environmental reasons has to be re-runnable without
+erasing what the first attempt found. Two optional environment variables control
+that, both honored by `record_result`:
+
+| Variable | Effect |
+|---|---|
+| `RESULT_KEY_SUFFIX` | Appended to every row key the run writes, so the rerun lands beside the original row instead of on top of it. |
+| `RESULT_RUN_NOTE` | Stored on each row as `run_note` — say which environment produced it. |
+
+The rows suffixed `__rerun_no_ip_acl` come from re-running the StarRocks→UC cells
+on a workspace with no IP access list; the unsuffixed rows are the first attempt,
+kept intact.

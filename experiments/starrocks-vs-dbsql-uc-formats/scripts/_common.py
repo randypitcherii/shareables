@@ -281,9 +281,18 @@ def record_result(row_key: str, payload: dict) -> None:
     """Merge one matrix row into results/matrix_results.json.
 
     Fail closed: refuses rows that carry no proven engine identity.
+
+    Re-running a cell in a different environment must not erase what the first
+    attempt found. Set RESULT_KEY_SUFFIX to write the rerun under its own key
+    (the original row stays intact), and RESULT_RUN_NOTE to say on the row
+    itself which environment produced it.
     """
     if not payload.get("identity"):
         raise SystemExit(f"refusing to record {row_key}: no proven identity in payload")
+    row_key = f"{row_key}{os.environ.get('RESULT_KEY_SUFFIX', '')}"
+    note = os.environ.get("RESULT_RUN_NOTE")
+    if note:
+        payload = payload | {"run_note": note}
     RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     existing = {}
     if RESULTS_PATH.exists():
