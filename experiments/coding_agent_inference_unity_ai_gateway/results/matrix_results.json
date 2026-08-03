@@ -15,23 +15,23 @@
     "result": "❌"
   },
   "guardrails_pii_injection_unsafe": {
-    "notes": "Guardrail surface exists and accepts configuration (input.pii behavior=BLOCK, input.safety=true via PUT ai-gateway; restored afterwards). NOT ENFORCED in this test: config was accepted, but a request containing synthetic PII still returned HTTP 200 (model echoed the values) on every probe up to ~90s after enablement — settable is not the same as enforcing. Probe trail: [('0s', 200), ('30s', 200), ('90s', 200)]. Last body: {\"choices\": [{\"finish_reason\": \"length\", \"index\": 0, \"message\": {\"content\": \"I want to be straightforward with you: I'll repeat back what you shared, since you've framed it as a.... No dedicated prompt-injection knob in the schema — knobs are pii/safety/valid_topics/invalid_keywords.",
-    "recorded_at": "2026-07-10T21:27:18.802137+00:00",
-    "result": "❌"
+    "notes": "PARTIAL — guardrails are real but route-scoped. Endpoint guardrails ({\"input\": {\"safety\": true, \"pii_detection\": true, \"pii\": {\"behavior\": \"BLOCK\"}}}) blocked the synthetic-PII request on ['classic /serving-endpoints/chat/completions'] and were bypassed on ['gateway /ai-gateway/mlflow/v1/chat/completions']. Guardrails configured on a serving endpoint govern the classic /serving-endpoints/* routes only; the /ai-gateway/* routes resolve the model in the UC catalog and do not inherit them, so a coding agent pointed at /ai-gateway/* is UNGUARDED by this config. Probe trail: [gateway /ai-gateway/mlflow/v1/chat/completions] PII=200 benign=200; [classic /serving-endpoints/chat/completions] PII=400 benign=200. Benign controls returned 200 everywhere, so the block is guardrail-specific, not an outage. No dedicated prompt-injection knob in this endpoint's schema — knobs are pii/safety/valid_topics/invalid_keywords (jailbreak/hallucination/custom keys are silently dropped by this API).",
+    "recorded_at": "2026-08-03T22:44:38.514400+00:00",
+    "result": "❓"
   },
   "per_user_hard_cap": {
-    "notes": "No hard per-user budget cap: ai_gateway exposes only alert-style surfaces (usage tracking) and rate caps (rate_limits per user/endpoint), no spend-denominated block-at-budget field. Per-user rate limits found: 0. ai_gateway key paths=['usage_tracking_config', 'usage_tracking_config.enabled']; cap-like keys=NONE; rate_limits(verbatim)=[].",
-    "recorded_at": "2026-07-09T12:56:41.856632+00:00",
-    "result": "❌"
+    "notes": "No hard per-user budget cap ON THE ENDPOINT: ai_gateway exposes only usage tracking and rate caps (rate_limits per user/endpoint), no spend-denominated block-at-budget field. Per-user rate limits found: 0. ai_gateway key paths=['usage_tracking_config', 'usage_tracking_config.enabled']; cap-like keys=NONE; rate_limits(verbatim)=[]. Account budgets: 440 configured, 47 carry a real BLOCK_USAGE action (action types present: ['BLOCK_USAGE', 'EMAIL_NOTIFICATION']). These are spend-denominated and blocking — e.g. 'Genie_tracking' triggers on CUMULATIVE_SPENDING_EXCEEDED at ['25000 LIST_PRICE_DOLLARS_USD/MONTH']. A block-at-budget surface therefore EXISTS at account scope (it is not a field on the serving endpoint). BUT the per-USER half is unproven: every budget returned by this API version is scoped by workspace_id and/or tags, with no per-user threshold or per-user override field, so a triggered cap blocks the whole filtered scope rather than one over-spending engineer. The docs describe per-user thresholds and overrides; they are not exposed by this API/CLI version, so confirm them in the account console before promising per-user caps.",
+    "recorded_at": "2026-08-03T22:37:39.256508+00:00",
+    "result": "❓"
   },
   "per_user_spend_alerting": {
     "notes": "Per-user alerting surface present: usage tracking is ON (per-user attribution into system.serving usage tables — the documented basis for spend alerts via SQL alerts/budget policies). Note: no direct 'alert at $X per user' field exists ON the endpoint; alerting is composed from these knobs. ai_gateway keys=['usage_tracking_config']; usage_tracking_config={\"enabled\": true}; rate_limits=[]; per-user rate limits=0",
-    "recorded_at": "2026-07-09T12:56:41.220600+00:00",
+    "recorded_at": "2026-08-03T22:10:17.240134+00:00",
     "result": "✅"
   },
   "query_via_gateway_sso": {
     "notes": "HTTP 200 with SSO OAuth token only (zero PATs); model=system.ai.claude-sonnet-4-6; reply=pong. Baseline gate for all other rows.",
-    "recorded_at": "2026-07-09T13:14:40.720932+00:00",
+    "recorded_at": "2026-08-03T22:10:13.702731+00:00",
     "result": "✅"
   },
   "revoke_gateway_no_fallback": {
@@ -40,13 +40,13 @@
     "result": "❓"
   },
   "three_part_identifier_resolves": {
-    "notes": "Three-part id got HTTP 200. three-part 'system.ai.claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1783602894, \"id\": \"msg_bdrk_01QngKE9c5LM2BouVHRrSH4B\", \"model\": \"us.anthropic.cl...); legacy 'databricks-claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1783602895, \"id\": \"msg_bdrk_01QDWaKJ6sBxL2DzNQMLwsEe\", \"model\": \"us.anthropic.cl...)",
-    "recorded_at": "2026-07-09T13:14:55.633596+00:00",
+    "notes": "Three-part id got HTTP 200. three-part 'system.ai.claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1785795015, \"id\": \"msg_bdrk_01P93t4xi1C92sPkzGEP7rnM\", \"model\": \"us.anthropic.cl...); legacy 'databricks-claude-sonnet-4-6' -> HTTP 200 ({\"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"message\": {\"content\": \"pong\", \"role\": \"assistant\"}}], \"created\": 1785795016, \"id\": \"msg_bdrk_01GZyQCPQLs4u6WMtdi141in\", \"model\": \"us.anthropic.cl...)",
+    "recorded_at": "2026-08-03T22:10:16.741957+00:00",
     "result": "✅"
   },
   "usage_tracking_per_user_agent": {
-    "notes": "Per-user attribution PROVEN (populated), but per-agent attribution unproven: the agent/client columns exist in the schema yet were empty/null in every sampled row — callers must send user_agent/usage_context metadata for it to populate. table=system.serving.endpoint_usage; user columns=['requester'] (populated: ['requester']); agent/client columns=['client_request_id', 'usage_context'] (populated: []); sampled rows=10. fresh inference HTTP 200 with marker 'uag-experiment-row09-354ea3b008d9' in User-Agent + usage_context. Marker hunt: 0 row(s) matched 'uag-experiment-row09-354ea3b008d9' (ingestion latency likely exceeds this run). Table-wide: usage_context is populated on 5825 historical row(s) (0 in the last 2 days) — the per-agent mechanism works for some client paths, but the gateway chat-completions route used here did not propagate our usage_context/User-Agent marker into the table.",
-    "recorded_at": "2026-07-10T21:30:16.025553+00:00",
-    "result": "❓"
+    "notes": "Per-user AND per-agent attribution proven with populated values. table=system.ai_gateway.usage (Unity AI Gateway); user columns=['requester', 'requester_type'] (populated: ['requester', 'requester_type']); per-agent columns=['user_agent', 'request_tags'] (populated: ['user_agent', 'request_tags']); population counts={'requester': 27071175, 'requester_type': 27071175, 'user_agent': 2669201, 'request_tags': 284506}. fresh inference HTTP 200 with marker 'uag-row09-3c29f286ba74' in Databricks-Ai-Gateway-Request-Tags + User-Agent + legacy usage_context. On the gateway chat-completions route specifically, request_tags is populated on 170954 row(s) (37966 tagged rows across all routes in the last 2 days). Marker hunt: 0 row(s) matched 'uag-row09-3c29f286ba74' — the table's newest row is ~23 min old, so this run's own request has not been ingested yet (lag, not absence).",
+    "recorded_at": "2026-08-03T22:42:50.850130+00:00",
+    "result": "✅"
   }
 }

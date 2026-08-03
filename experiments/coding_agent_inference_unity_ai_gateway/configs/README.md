@@ -28,6 +28,45 @@ config for agents ucode covers, and the primary path for the one it doesn't
 | `<path-to-this-experiment>` | Absolute path to this experiment directory (so `bin/get-databricks-token.sh` resolves) |
 | `<your-databricks-cli-profile>` | The `databricks auth login` profile to mint tokens with (helper defaults to `DEFAULT`) |
 | `<your-mcp-server-command>` | (Claude Desktop only) the MCP server executable that calls Databricks serving endpoints |
+| `<your-team>` / `<your-project>` | Values for the attribution tags described below; keys and values are yours to choose |
+
+## Per-agent usage attribution
+
+Every template sets the `Databricks-Ai-Gateway-Request-Tags` header — a JSON
+object of string→string that lands in
+`system.ai_gateway.usage.request_tags`, so you can tell one coding agent's
+spend from another's:
+
+| Agent | How the header is set |
+|---|---|
+| Claude Code | `ANTHROPIC_CUSTOM_HEADERS` in the `env` block |
+| Codex CLI | `[model_providers.databricks.http_headers]` |
+| OpenCode | `provider.databricks.options.headers` |
+
+Live-tested 2026-08-03 on both `/ai-gateway/mlflow/v1/chat/completions` and
+`/ai-gateway/anthropic/v1/messages`. Two gotchas:
+
+- This is the **gateway** mechanism. The classic `/serving-endpoints/*`
+  routes use a different one — a `usage_context` map in the request *body*,
+  landing in `system.serving.endpoint_usage`. Crossing them fails silently:
+  neither the header nor the body field works on the other route family.
+- Ingestion into these tables ran **15–25 minutes behind** during testing, so
+  a tag you just sent will not be queryable immediately.
+
+`system.ai_gateway.usage` also records `user_agent`, `url` and `api_type`
+without any client cooperation, so agents you have not templated still show
+up — just less legibly.
+
+## Guardrails do NOT apply to these templates
+
+Guardrails (`input.pii`, `input.safety`) configured on a foundation-model
+serving endpoint are enforced on the classic `/serving-endpoints/*` routes.
+They are **not** enforced on the `/ai-gateway/*` routes that every template
+here points at — live-tested 2026-08-03, synthetic PII returns `400` on the
+former and `200` on the latter under one config. Content filtering for the
+gateway path comes from service policies on model services (Beta). Do not
+assume an admin's endpoint guardrail covers your fleet; see the experiment
+README's Key Findings.
 
 ## Base URLs
 

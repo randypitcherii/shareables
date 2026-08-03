@@ -6,7 +6,10 @@
       "name": "Databricks Unity AI Gateway",
       "options": {
         "baseURL": "https://<your-workspace-host>/ai-gateway/mlflow/v1",
-        "apiKey": "{env:DATABRICKS_TOKEN}"
+        "apiKey": "{env:DATABRICKS_TOKEN}",
+        "headers": {
+          "Databricks-Ai-Gateway-Request-Tags": "{\"coding_agent\":\"opencode\",\"team\":\"<your-team>\",\"project\":\"<your-project>\"}"
+        }
       },
       "models": {
         "system.ai.claude-sonnet-4-6": {

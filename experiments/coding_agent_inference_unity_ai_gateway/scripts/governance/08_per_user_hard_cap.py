@@ -1,26 +1,37 @@
 """Matrix row: per_user_hard_cap — a HARD per-user budget cap (block mode).
 
 Claim/source: a Data+AI Summit talk claimed per-user budget caps that BLOCK
-at budget. Current AI Gateway docs only show usage tracking (alert-style,
-after-the-fact) and rate limits (requests/tokens per renewal period — rate
-caps, not spend caps). Believed ❌ today.
+at budget. The AI Gateway budgets docs now describe exactly that — per-user
+monthly thresholds whose action is "Send alert" OR "Block usage" — announced
+GA on 2026-07-06. But that surface is ACCOUNT-scoped (account console →
+budgets), not a field on the serving endpoint, so a workspace-scoped token
+cannot see or set it.
 
-✅ means: a real block-at-budget knob exists on the endpoint/gateway config
-AND accepts a value (e.g. a spend/budget field with a block/enforce mode).
-❌ means: only alert-style surfaces exist — usage tracking and/or rate
-limits, with NO spend-denominated cap that blocks; the verbatim field list
-is in notes.
-❓ means: the endpoint config could not be read at all.
+This script therefore probes both levels:
+
+1. the serving endpoint's ``ai_gateway`` block (workspace scope), and
+2. the account budgets API, when an account-level CLI profile is supplied
+   via ``DATABRICKS_ACCOUNT_PROFILE``.
+
+✅ means: a block-at-budget surface was found AND is spend-denominated —
+either a cap field on the endpoint, or an account budget carrying a
+blocking action rather than an alert-only threshold.
+❌ means: only alert-style surfaces exist — usage tracking, alert
+thresholds, and/or rate limits (requests per period, not dollars).
+❓ means: the endpoint could not be read, or the endpoint has no cap and the
+account budgets API was unreachable, leaving the documented account-level
+feature unverified.
 
 Configuration-surface probe ONLY — never generates spend. Read-only by
-default; with ALLOW_ENDPOINT_MUTATION=1 it additionally offers the API a
-hypothetical budget-cap payload to prove the schema rejects it, restoring
-the original config in a finally block.
+default; with ALLOW_ENDPOINT_MUTATION=1 it additionally offers the endpoint
+API a hypothetical budget-cap payload to prove the schema rejects it.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +44,107 @@ ROW_KEY = "per_user_hard_cap"
 
 # Key fragments that would indicate a spend-denominated cap with block-mode.
 CAP_MARKERS = ("budget", "spend", "cost", "dollar", "cap", "block")
+
+# Env var naming a databrickscfg profile whose host is the account console.
+ACCOUNT_PROFILE_ENV = "DATABRICKS_ACCOUNT_PROFILE"
+
+# The enum that makes a budget a hard cap rather than a notification. Match
+# the field exactly — several budgets have the word "block" in their display
+# name while carrying nothing but EMAIL_NOTIFICATION.
+BLOCK_ACTION_TYPE = "BLOCK_USAGE"
+
+# Field names that would prove the *per-user* half of the claim, as opposed
+# to a workspace- or tag-scoped cap that blocks everyone at once.
+PER_USER_MARKERS = ("per_user", "user_threshold", "user_override", "principal")
+
+
+def probe_account_budgets() -> tuple[bool | None, str]:
+    """Look for a BLOCKING account budget. Returns (found_block, note).
+
+    found_block is None when the account API could not be reached at all —
+    that is the difference between "no hard cap exists" and "we could not
+    look", and the matrix verdict depends on which one it is.
+    """
+    profile = os.environ.get(ACCOUNT_PROFILE_ENV, "").strip()
+    if not profile:
+        return None, (
+            f" Account budgets NOT probed: set {ACCOUNT_PROFILE_ENV} to a "
+            "databrickscfg profile authenticated against "
+            "https://accounts.cloud.databricks.com (databricks auth login "
+            "--host https://accounts.cloud.databricks.com --account-id <id>). "
+            "The documented per-user 'Block usage' budget action lives there, "
+            "not on the serving endpoint."
+        )
+    try:
+        proc = subprocess.run(
+            ["databricks", "account", "budgets", "list", "-p", profile, "-o", "json"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f" Account budgets probe failed to run: {exc}."
+    if proc.returncode != 0:
+        return None, (
+            f" Account budgets unreachable via profile '{profile}': "
+            f"{gov.snip(proc.stderr.strip(), 200)}."
+        )
+    try:
+        budgets = json.loads(proc.stdout or "[]") or []
+    except ValueError:
+        return None, f" Account budgets returned unparseable output: {gov.snip(proc.stdout, 160)}."
+
+    def action_types(budget: dict) -> set[str]:
+        found: set[str] = set()
+        for alert in budget.get("alert_configurations") or []:
+            for action in alert.get("action_configurations") or []:
+                if action.get("action_type"):
+                    found.add(action["action_type"])
+        return found
+
+    blocking = [b for b in budgets if BLOCK_ACTION_TYPE in action_types(b)]
+    all_actions = sorted({a for b in budgets for a in action_types(b)})
+    blob = json.dumps(budgets).lower()
+    per_user_fields = [m for m in PER_USER_MARKERS if m in blob]
+
+    print(
+        f"  Account budgets found: {len(budgets)}; carrying {BLOCK_ACTION_TYPE}: "
+        f"{len(blocking)}; action types seen: {all_actions}"
+    )
+    if not blocking:
+        return False, (
+            f" Account budgets: {len(budgets)} configured via profile '{profile}', "
+            f"none carrying a {BLOCK_ACTION_TYPE} action (action types present: "
+            f"{all_actions}) — only alert-style budgets exist here."
+        )
+
+    example = blocking[0]
+    thresholds = [
+        f"{a.get('quantity_threshold', '?').split('.')[0]} {a.get('quantity_type')}/{a.get('time_period')}"
+        for a in (example.get("alert_configurations") or [])
+    ]
+    hard_cap_note = (
+        f" Account budgets: {len(budgets)} configured, {len(blocking)} carry a real "
+        f"{BLOCK_ACTION_TYPE} action (action types present: {all_actions}). These are "
+        f"spend-denominated and blocking — e.g. '{example.get('display_name')}' triggers "
+        f"on CUMULATIVE_SPENDING_EXCEEDED at {thresholds}. A block-at-budget surface "
+        "therefore EXISTS at account scope (it is not a field on the serving endpoint)."
+    )
+
+    if per_user_fields:
+        return True, hard_cap_note + (
+            f" Per-user scoping is visible in the API response ({per_user_fields})."
+        )
+    # The block half is proven; the per-user half is not observable here.
+    return None, hard_cap_note + (
+        " BUT the per-USER half is unproven: every budget returned by this API "
+        "version is scoped by workspace_id and/or tags, with no per-user threshold "
+        "or per-user override field, so a triggered cap blocks the whole filtered "
+        "scope rather than one over-spending engineer. The docs describe per-user "
+        "thresholds and overrides; they are not exposed by this API/CLI version, so "
+        "confirm them in the account console before promising per-user caps."
+    )
 
 
 def main() -> int:
@@ -123,20 +235,26 @@ def main() -> int:
         )
         return 0
 
+    # The endpoint has no cap. The documented feature is account-scoped, so
+    # the verdict now turns on whether we could look there.
+    account_block, account_note = probe_account_budgets()
+
     _common.fail("No spend-denominated block-at-budget knob exists on this endpoint.")
-    print("  What DOES exist: usage tracking (after-the-fact attribution) and")
-    print("  rate_limits (requests/tokens per renewal period — rate caps, not")
-    print("  spend caps). The Summit-talk claim of a per-user block-at-budget")
-    print("  cap is not present in this workspace's API surface.")
-    gov.conclude(
-        ROW_KEY,
-        False,
-        "No hard per-user budget cap: ai_gateway exposes only alert-style "
-        "surfaces (usage tracking) and rate caps (rate_limits per user/"
-        "endpoint), no spend-denominated block-at-budget field. "
-        f"Per-user rate limits found: {len(per_user_rate)}. {field_report}."
-        f"{mutation_probe_note}",
+    print("  What DOES exist on the endpoint: usage tracking (after-the-fact")
+    print("  attribution) and rate_limits (requests/tokens per renewal period —")
+    print("  rate caps, not spend caps).")
+
+    endpoint_report = (
+        "No hard per-user budget cap ON THE ENDPOINT: ai_gateway exposes only "
+        "usage tracking and rate caps (rate_limits per user/endpoint), no "
+        "spend-denominated block-at-budget field. Per-user rate limits found: "
+        f"{len(per_user_rate)}. {field_report}.{mutation_probe_note}"
     )
+
+    if account_block:
+        gov.conclude(ROW_KEY, True, endpoint_report + account_note)
+        return 0
+    gov.conclude(ROW_KEY, account_block, endpoint_report + account_note)
     return 0
 
 

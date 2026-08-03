@@ -32,6 +32,13 @@ base_url = "https://<your-workspace-host>/ai-gateway/mlflow/v1"
 # Codex sends the value of this env var as the Bearer token.
 env_key = "OPENAI_API_KEY"
 wire_api = "chat"
+
+# Per-agent usage attribution. Live-tested 2026-08-03: this header lands in
+# system.ai_gateway.usage.request_tags on the /ai-gateway/* routes, which is
+# how you tell one coding agent's spend from another's. The value must be a
+# JSON object of string->string; keys are yours to choose.
+[model_providers.databricks.http_headers]
+"Databricks-Ai-Gateway-Request-Tags" = '{"coding_agent":"codex","team":"<your-team>","project":"<your-project>"}'
 # VERIFY: Databricks' coding-agent integration docs also describe a dedicated
 # Codex route at https://<your-workspace-host>/ai-gateway/codex/v1 with
 # wire_api = "responses". Live-tested 2026-07-09: the route exists but
