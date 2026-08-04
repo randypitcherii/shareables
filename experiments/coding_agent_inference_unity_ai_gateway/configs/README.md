@@ -57,16 +57,15 @@ Live-tested 2026-08-03 on both `/ai-gateway/mlflow/v1/chat/completions` and
 without any client cooperation, so agents you have not templated still show
 up — just less legibly.
 
-## Guardrails do NOT apply to these templates
+## Endpoint-level guardrails do not cover these templates
 
 Guardrails (`input.pii`, `input.safety`) configured on a foundation-model
 serving endpoint are enforced on the classic `/serving-endpoints/*` routes.
-They are **not** enforced on the `/ai-gateway/*` routes that every template
-here points at — live-tested 2026-08-03, synthetic PII returns `400` on the
-former and `200` on the latter under one config. Content filtering for the
-gateway path comes from service policies on model services (Beta). Do not
-assume an admin's endpoint guardrail covers your fleet; see the experiment
-README's Key Findings.
+They are not enforced on the `/ai-gateway/*` routes that every template here
+points at — live-tested 2026-08-03, synthetic PII returns `400` on the former
+and `200` on the latter under one config. Content filtering for the gateway
+path comes from service policies on model services (Beta). See the experiment
+README's Key Findings for the full probe trail.
 
 ## Base URLs
 

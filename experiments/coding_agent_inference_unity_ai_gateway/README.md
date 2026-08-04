@@ -25,10 +25,9 @@ app, not a replacement. Phase 2 (a polished copy/paste demo) is intentionally
 out of scope until the matrix says what deserves demoing: anything ❌ or
 gated below is documented as such, never demoed as if it works.
 
-The gateway is moving fast enough that a matrix has a shelf life. This one has
-been re-validated once (July → August 2026) and four rows moved — two of them
-(9 and 10) because the *original probe was wrong*, not because the product
-changed. Re-run it against your own workspace before quoting it.
+The gateway moves fast enough that a matrix has a shelf life. This one was
+re-validated in August 2026, four weeks after the first run, and four rows
+moved. Re-run it against your own workspace before relying on it.
 
 ## Results Matrix
 
@@ -62,29 +61,26 @@ records stand.
 | 5 | DENY on model + GRANT on gateway → user can still infer | Definer's-rights invocation per docs | ❓ | **❓** | Same blocker as row 4 plus no per-principal ACL on pay-per-token FM endpoints. Needs model services (Beta) or a custom / provisioned-throughput endpoint |
 | 6 | Revoke gateway access → no fallback to old endpoints | Field sandbox observation | ❓ | **❓** | Unchanged. Pay-per-token FM endpoints still expose no per-principal permission to revoke |
 | 7 | Per-user alerting on spend threshold | [Budgets](https://docs.databricks.com/aws/en/admin/account-settings/budgets) | ✅ | **✅** | Unchanged. Usage tracking ON; alerting is composed from the usage system tables, not set as a field on the endpoint |
-| 8 | Per-user hard cap (block at budget) | [AI Gateway budgets](https://docs.databricks.com/aws/en/ai-gateway/budgets) | ❌ | **❓ (was ❌)** | **The blocking half is now real.** Account budgets carry a genuine `BLOCK_USAGE` action alongside `EMAIL_NOTIFICATION`, spend-denominated (`LIST_PRICE_DOLLARS_USD`, `CUMULATIVE_SPENDING_EXCEEDED`, monthly) — 47 of 440 budgets on a probed account use it. The **per-user** half stays unproven: every budget this API version returns is scoped by `workspace_id`/tags, with no per-user threshold or override field |
-| 9 | Usage tracking per user / per agent | [Usage tracking](https://docs.databricks.com/aws/en/ai-gateway/usage-tracking-beta) | ◑ | **✅ (was ◑)** | **Solved by a new table.** `system.ai_gateway.usage` populates `requester` (27.0M rows), `user_agent` (2.67M) and `request_tags` (284K), fed by the `Databricks-Ai-Gateway-Request-Tags` header. Our own marker landed on both `/ai-gateway/mlflow/v1/chat/completions` and `/ai-gateway/anthropic/v1/messages`. 170,924 tagged rows exist on the gateway chat-completions route — the exact path July found empty |
-| 10 | Guardrails (PII / injection / unsafe) on service | [Guardrails](https://docs.databricks.com/aws/en/ai-gateway/guardrails) | ❌ | **◑ (was ❌)** | **They enforce now — but not on the routes this experiment recommends.** With `input.pii=BLOCK` + `input.safety` set, synthetic PII is rejected `HTTP 400` on `/serving-endpoints/chat/completions` (`input_guardrail` flagged, categories `['privacy']`) and sails through `HTTP 200` on `/ai-gateway/mlflow/v1/chat/completions`. Benign controls return 200 on both, so the block is guardrail-specific. See Key Findings — this is the headline change |
+| 8 | Per-user hard cap (block at budget) | [AI Gateway budgets](https://docs.databricks.com/aws/en/ai-gateway/budgets) | ❌ | **❓ (was ❌)** | Account budgets carry a `BLOCK_USAGE` action alongside `EMAIL_NOTIFICATION`, spend-denominated (`LIST_PRICE_DOLLARS_USD`, `CUMULATIVE_SPENDING_EXCEEDED`, monthly) — 47 of 440 budgets on a probed account use it. The **per-user** half stays unproven: every budget this API version returns is scoped by `workspace_id`/tags, with no per-user threshold or override field |
+| 9 | Usage tracking per user / per agent | [Usage tracking](https://docs.databricks.com/aws/en/ai-gateway/usage-tracking-beta) | ◑ | **✅ (was ◑)** | `system.ai_gateway.usage` populates `requester` (27.0M rows), `user_agent` (2.67M) and `request_tags` (284K), fed by the `Databricks-Ai-Gateway-Request-Tags` header. A marker sent by this experiment landed on both `/ai-gateway/mlflow/v1/chat/completions` and `/ai-gateway/anthropic/v1/messages`; 170,924 tagged rows exist on the gateway chat-completions route |
+| 10 | Guardrails (PII / injection / unsafe) on service | [Guardrails](https://docs.databricks.com/aws/en/ai-gateway/guardrails) | ❌ | **◑ (was ❌)** | Endpoint-level guardrails enforce on the classic serving routes only. With `input.pii=BLOCK` + `input.safety` set, synthetic PII is rejected `HTTP 400` on `/serving-endpoints/chat/completions` (`input_guardrail` flagged, categories `['privacy']`) and returns `HTTP 200` on `/ai-gateway/mlflow/v1/chat/completions`. Benign controls return 200 on both. The gateway routes are governed by service policies on model services instead — see Key Findings |
 
-The July ❌ on row 10 was **partly our own bug**: the probe called only the
-gateway route, so it never saw the enforcement that was happening one route
-family over. [`10_guardrails_pii_injection_unsafe.py`](./scripts/governance/10_guardrails_pii_injection_unsafe.py)
-now probes both families with a benign control, which is how the split
-surfaced. Row 9's July ❌ came from sampling ten rows instead of counting the
-whole table; that script now counts table-wide.
+Two scripts changed method between runs, which accounts for part of the
+movement. [`10_guardrails_pii_injection_unsafe.py`](./scripts/governance/10_guardrails_pii_injection_unsafe.py)
+now probes both route families with a benign control rather than the gateway
+route alone; [`09_usage_tracking_per_user_agent.py`](./scripts/governance/09_usage_tracking_per_user_agent.py)
+now counts column population table-wide rather than sampling ten rows.
 
 ## Key Findings
 
-### The route split now cuts both ways: `/ai-gateway/*` resolves three-part ids AND skips endpoint guardrails
+### There are two guardrail systems, and they attach to different route families
 
-This is the single most important thing in the experiment, and the August
-re-validation is what exposed the second half of it.
-
-Guardrails are configured on a *serving endpoint*
-(`PUT /api/2.0/serving-endpoints/<name>/ai-gateway`). They are enforced when
-you call that endpoint. The Unity AI Gateway routes resolve the model in the
-Unity Catalog model catalog instead, so they never consult that endpoint's
-config. Same workspace, same model, same minute, one guardrail config:
+Endpoint-level guardrails are configured on a *serving endpoint*
+(`PUT /api/2.0/serving-endpoints/<name>/ai-gateway`) and are enforced when
+that endpoint is called. The Unity AI Gateway routes resolve the model in the
+Unity Catalog model catalog and are governed by **service policies on model
+services** instead, so they do not consult the endpoint's guardrail config.
+Same workspace, same model, same minute, one guardrail config:
 
 | Route | benign prompt | synthetic PII |
 |---|---|---|
@@ -95,33 +91,30 @@ Reproduced across four guardrail configurations (`pii` alone, `safety`
 alone, both, both plus output) and confirmed by a no-guardrail control run
 where every cell returned 200.
 
-**The practical consequence:** every config template in this repo points at
-`/ai-gateway/*`, because that is the only route family that resolves
-three-part ids. So a fleet configured this way gets three-part identifiers
-and gateway usage tracking, and gets **no PII or safety guardrail at all**
-from the endpoint config an admin is most likely to have set. If you need
-guardrails on the gateway path today, they come from **service policies** on
-model services — Beta, and not enabled on this workspace (see the enablement
-probe). Do not tell a customer that setting `input.pii = BLOCK` on the
-foundation-model endpoint protects their coding agents. It does not.
+This matters for coding agents specifically. Every config template in this
+repo points at `/ai-gateway/*`, because that is the only route family that
+resolves three-part ids. A fleet configured that way gets three-part
+identifiers and gateway usage tracking, and is not covered by an
+endpoint-level `input.pii` / `input.safety` config. Coverage on that path
+comes from service policies, which are Beta and not enabled on this
+workspace — [`00_enablement_probe.py`](./scripts/governance/00_enablement_probe.py)
+reports which of the two systems is available on yours.
 
-Two smaller notes from the same probe:
+Two smaller observations from the same probe:
 
 - `pii.behavior = BLOCK` fires on a strong signal (a card number), not on an
   SSN alone. `safety = true` flags both under a `privacy` category, so the
   two knobs overlap more than the names suggest.
-- The endpoint API **silently drops guardrail keys it does not understand.**
-  `PUT`ting `jailbreak`, `hallucination`, `custom`, or `pii.behavior =
-  SANITIZE` all return `HTTP 200` and come back with those keys gone and the
-  remaining ones reset to `false`/`NONE`. The richer guardrail types in the
-  current docs are not on this API surface, and an operator who sets them
-  will believe they are protected. Always read back the response body.
+- The endpoint API accepts and then drops guardrail keys it does not
+  recognise. `PUT`ting `jailbreak`, `hallucination`, `custom`, or
+  `pii.behavior = SANITIZE` returns `HTTP 200` with those keys absent from
+  the response and the remaining ones reset to `false` / `NONE`. Read back
+  the response body to confirm what was actually stored.
 
-### Per-agent attribution is solved — by a different table and a different header
+### Per-agent attribution: two surfaces, one per route family
 
-July's finding ("the mechanism exists but the gateway route doesn't feed
-it") is obsolete. There are now two attribution surfaces, and they line up
-exactly with the two route families:
+There are two attribution mechanisms, and they line up with the two route
+families:
 
 | Route family | Mechanism | Lands in | Verified |
 |---|---|---|---|
@@ -139,30 +132,28 @@ as `user_agent = claude-code/1.0.44` on `/ai-gateway/mlflow/v1/chat/completions`
 The [`configs/`](./configs/) templates now set the request-tags header for
 Claude Code, Codex and OpenCode.
 
-Budget your validation time accordingly: **ingestion lag on both tables ran
-15–25 minutes**, so a script that sends a marker and immediately queries for
-it will always come up empty. That is lag, not absence — the row-09 script
-now says so explicitly and prints the observed lag.
+**Ingestion lag on both tables ran 15–25 minutes**, so a script that sends a
+marker and immediately queries for it will come up empty. That is lag, not
+absence — the row-09 script prints the observed lag and reports it as such.
 
-### Hard spend caps exist; the per-user dimension is the unproven half
+### Block-at-budget exists at account scope; the per-user dimension is unproven
 
-`BLOCK_USAGE` is a real `action_type` in the account budgets API, sitting
-next to `EMAIL_NOTIFICATION` on an alert configuration with a
+`BLOCK_USAGE` is an `action_type` in the account budgets API, sitting next to
+`EMAIL_NOTIFICATION` on an alert configuration with a
 `LIST_PRICE_DOLLARS_USD` threshold and a `CUMULATIVE_SPENDING_EXCEEDED`
-trigger. On a probed account, 47 of 440 budgets use it. So "block at budget"
-is no longer a conference-talk claim — it ships.
+trigger. On a probed account, 47 of 440 budgets use it.
 
-What is still unproven is **per-user**. Every budget this API version returns
-is filtered by `workspace_id` and/or tags; there is no per-user threshold or
-per-user override field in the response, so a triggered cap blocks the whole
-filtered scope rather than the one engineer who overspent. Budgets that
-their owners *named* for per-user AI Gateway demos come back with plain
-workspace filters. The docs describe per-user thresholds and overrides;
-confirm them in the account console before promising them to anyone.
+The per-user dimension is what this experiment could not confirm. Every
+budget this API version returns is filtered by `workspace_id` and/or tags;
+there is no per-user threshold or per-user override field in the response, so
+a triggered cap blocks the whole filtered scope. Budgets whose display names
+reference per-user AI Gateway demos come back with plain workspace filters.
+The docs describe per-user thresholds and overrides; confirm them in the
+account console.
 
-Note also that this surface is **account-scoped**, not a field on the serving
-endpoint — a workspace token cannot see or set it. Point
-`DATABRICKS_ACCOUNT_PROFILE` at an account-console profile to probe it.
+This surface is **account-scoped**, not a field on the serving endpoint — a
+workspace token cannot see or set it. Point `DATABRICKS_ACCOUNT_PROFILE` at
+an account-console profile to probe it.
 
 ### The three-part id / route story is unchanged
 
@@ -197,12 +188,11 @@ The whole flow — `databricks auth login` → short-lived OAuth token from the
 CLI → Bearer header → 200 — works on both route families. No PAT was created
 at any point, and everything in this experiment refuses `dapi` tokens on sight.
 
-### Per-model access control: the blocker moved from "absent" to "not enabled"
+### Per-model access control: each enforcement mechanism is behind its own gate
 
-In July the honest summary was "the governance surface accepts configuration
-but does not enforce it". In August it is more precise, and more actionable:
-**the enforcement mechanisms now exist, and each one is behind its own gate
-that this workspace does not have open.** Run
+Rows 3–6 remain unsettled here, but the blockers are specific and named. Each
+enforcement mechanism exists and each is behind a gate this workspace does not
+have open. Run
 [`00_enablement_probe.py`](./scripts/governance/00_enablement_probe.py) to see
 which apply to yours; here is what it reports on this one:
 
@@ -214,8 +204,7 @@ which apply to yours; here is what it reports on this one:
 | Model services + service policies (Beta) | ❌ `MODEL SERVICE` not a recognised securable | Rows 4–6. Service policies are the only ALLOW/**DENY**/ASK surface for model access, and the only guardrail path for `/ai-gateway/*` |
 | Model provider services header | ❌ 404 on `system.ai.anthropic` | The documented `Databricks-Model-Provider-Service` on-ramp for Claude Code |
 
-Two things did **not** change and are worth stating plainly, because they are
-still commonly asserted otherwise:
+Two things did not change between runs:
 
 - **Unity Catalog still has no `DENY`.** `UC_COMMAND_NOT_SUPPORTED`; grants
   remain additive-only. ABAC did not add one — its `EXCEPT principal` clause
@@ -351,12 +340,11 @@ Each template now also sets `Databricks-Ai-Gateway-Request-Tags`, so an
 agent's traffic is attributable in `system.ai_gateway.usage.request_tags`.
 Edit the team/project values; the keys are yours to choose.
 
-**Know what you are trading.** Pointing an agent at `/ai-gateway/*` is what
-makes three-part identifiers and gateway usage tracking work, and it is also
-what puts the agent outside any PII/safety guardrail configured on the
-serving endpoint (see Key Findings). Until service policies are available on
-your workspace, treat "governed inference" here as *identity, attribution and
-spend* — not content filtering.
+Pointing an agent at `/ai-gateway/*` is what makes three-part identifiers and
+gateway usage tracking work. It also places the agent outside any PII/safety
+guardrail configured on the serving endpoint (see Key Findings). Where service
+policies are unavailable, the governance these templates deliver is identity,
+attribution and spend visibility — not content filtering.
 
 ### MDM / fleet rollout notes
 
