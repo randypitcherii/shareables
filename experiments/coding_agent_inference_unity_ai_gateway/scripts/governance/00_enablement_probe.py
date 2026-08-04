@@ -39,8 +39,10 @@ def _line(name: str, enabled: bool | None, detail: str) -> None:
 def probe_fm_uc_permissions() -> None:
     """Foundation-model UC permissions — 'GA but requires enablement'.
 
-    The tell is the securable type: with the feature off, Unity Catalog
-    answers INVALID_STATE 'MODEL is not enabled' for the MODEL securable,
+    This is the ``MODEL`` securable (registered models). It is a DIFFERENT
+    feature from ``MODEL_SERVICE`` (the Unity AI Gateway securable probed
+    below) — the two can be, and here are, in opposite states. With this
+    feature off, Unity Catalog answers INVALID_STATE 'MODEL is not enabled'
     and system.ai models are only addressable as FUNCTION.
     """
     status, body = gov.api_request(
@@ -93,18 +95,88 @@ def probe_abac_policies() -> None:
 
 
 def probe_model_services() -> None:
-    """Model services / service policies (Beta) — the new DENY-capable surface."""
-    res = gov.sql_exec("SHOW GRANTS ON MODEL SERVICE a.b.c")
-    supported = res["ok"] or "PARSE_SYNTAX_ERROR" not in (res["error"] or "")
-    _line(
-        "Model services + service policies (Beta)",
-        supported,
-        "MODEL SERVICE is a securable here."
-        if supported
-        else f"MODEL SERVICE securable not recognised by SQL: "
-        f"{gov.snip(res['error'], 130)} — service policies (the only ALLOW/DENY/ASK "
-        "surface for model access) are unavailable, so rows 4-6 stay untestable.",
+    """Unity AI Gateway model services — the MODEL_SERVICE UC securable.
+
+    Probe over REST, not SQL. There is no ``SHOW GRANTS ON MODEL SERVICE``
+    DDL — asking SQL about it returns PARSE_SYNTAX_ERROR whether or not the
+    feature is live, so a SQL probe reports a false OFF. The securable is
+    real and carries its own per-principal ACL; that is what to ask.
+    """
+    status, body = gov.api_request(
+        "GET",
+        "/api/2.1/unity-catalog/model-services"
+        "?catalog_name=system&schema_name=ai&max_results=200",
     )
+    services = (body or {}).get("model_services", []) if isinstance(body, dict) else []
+    if status != 200:
+        _line("Model services (MODEL_SERVICE securable)", False,
+              f"GET model-services -> {status} {gov.snip(body, 150)} — the Unity AI "
+              "Gateway model catalog is not available on this workspace.")
+        return
+
+    # Show an ACL that actually carries a grant when one exists — a service
+    # with no direct assignments reads as "ACL broken" when it only means
+    # nobody granted on that specific service.
+    acl_note = ""
+    for service in services[:5]:
+        name = service["name"].split("/")[-1]
+        acl_status, acl = gov.api_request(
+            "GET", f"/api/2.1/unity-catalog/permissions/model_service/{name}"
+        )
+        if acl_status != 200:
+            acl_note = (
+                f" Per-service ACL unreadable: permissions/model_service/{name} -> "
+                f"HTTP {acl_status} {gov.snip(acl, 120)}."
+            )
+            break
+        holders = [
+            f"{a.get('principal')}:{','.join(a.get('privileges') or [])}"
+            for a in ((acl or {}).get("privilege_assignments") or [])
+        ]
+        acl_note = (
+            f" Per-service ACL is live: permissions/model_service/{name} -> "
+            f"HTTP 200 {holders or '(no direct assignments on this one)'}."
+        )
+        if holders:
+            break
+    _line(
+        "Model services (MODEL_SERVICE securable)",
+        True,
+        f"{len(services)} model service(s) in system.ai.{acl_note} This is the "
+        "per-model ACL surface for the /ai-gateway/* routes — distinct from the "
+        "MODEL securable above, and distinct from service policies below.",
+    )
+
+
+def probe_service_policies() -> None:
+    """Service policies (Beta) — the only ALLOW/DENY/ASK surface for AI assets.
+
+    Service policies are ABAC policies scoped to a MODEL_SERVICE or
+    MCP_SERVICE. The honest test is whether the policy API accepts those
+    securable types at all; its rejection message enumerates the types it
+    does support, which is the most legible evidence available.
+    """
+    status, body = gov.api_request(
+        "GET",
+        "/api/2.1/unity-catalog/policies/MODEL_SERVICE/system.ai.claude-sonnet-4-6",
+    )
+    text = json.dumps(body) if not isinstance(body, str) else body
+    if status == 200:
+        count = len((body or {}).get("policies", []))
+        _line("Service policies on MODEL_SERVICE (Beta)", True,
+              f"policies API accepts MODEL_SERVICE; {count} policy(ies) attached. "
+              "Built-in guardrails are system.ai.block_pii / block_unsafe_content / "
+              "block_jailbreak / block_hallucination.")
+        return
+    # The rejection body is JSON; take only the human-readable type list.
+    supported = ""
+    if "Supported types" in text:
+        supported = text.split("Supported types:", 1)[1].split('"', 1)[0].strip(" .")
+    _line("Service policies on MODEL_SERVICE (Beta)", False,
+          f"policies API rejects MODEL_SERVICE -> HTTP {status}"
+          + (f"; it supports only: {supported}." if supported else f" {gov.snip(text, 150)}")
+          + " Service policies are the guardrail path for /ai-gateway/* and the only "
+          "ALLOW/DENY/ASK surface for model access, so rows 4-6 stay untestable here.")
 
 
 def probe_gateway_usage_table() -> None:
@@ -165,6 +237,7 @@ def main() -> int:
     probe_system_ai_grants()
     probe_abac_policies()
     probe_model_services()
+    probe_service_policies()
     probe_gateway_usage_table()
     probe_model_provider_services()
 

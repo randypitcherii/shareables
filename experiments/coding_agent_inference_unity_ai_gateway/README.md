@@ -57,8 +57,8 @@ records stand.
 | 1 | Query model via gateway with SSO/OAuth (no PAT) | Core goal | ✅ | **✅** | Unchanged. HTTP 200 with a short-lived OAuth token on `/ai-gateway/mlflow/v1/chat/completions` |
 | 2 | Three-part UC identifier (`system.ai.<model>`) resolves | [Unity AI Gateway](https://docs.databricks.com/aws/en/ai-gateway) | ✅ | **✅** | Unchanged. **Gateway routes only** — `/serving-endpoints/*` still 404s on three-part ids |
 | 3 | GRANT/REVOKE EXECUTE on model service enforced | [Govern model services](https://docs.databricks.com/aws/en/ai-gateway/govern-model-services) | ❌ | **❓** | Still not enforceable here, but the *reason* is now a named gate rather than a missing feature: foundation-model UC permissions answer `INVALID_STATE: MODEL is not enabled`, and `system.ai` still carries a schema-wide `EXECUTE` to `account users`. Enabling it is an account-team request |
-| 4 | DENY EXECUTE on a model actually blocks inference | [Govern model services](https://docs.databricks.com/aws/en/ai-gateway/govern-model-services) | ❌ | **❌** | Unity Catalog still has no `DENY` (`UC_COMMAND_NOT_SUPPORTED`; grants are additive-only). ABAC arrived but adds **GRANT** policies only. The one ALLOW/DENY/ASK surface — service policies on model services — is Beta and not enabled here (`MODEL SERVICE` is not a recognised securable) |
-| 5 | DENY on model + GRANT on gateway → user can still infer | Definer's-rights invocation per docs | ❓ | **❓** | Same blocker as row 4 plus no per-principal ACL on pay-per-token FM endpoints. Needs model services (Beta) or a custom / provisioned-throughput endpoint |
+| 4 | DENY EXECUTE on a model actually blocks inference | [Govern model services](https://docs.databricks.com/aws/en/ai-gateway/govern-model-services) | ❌ | **❌** | Unity Catalog still has no `DENY` (`UC_COMMAND_NOT_SUPPORTED`; grants are additive-only). ABAC arrived but adds **GRANT** policies only. The one ALLOW/DENY/ASK surface — service policies on model services — is Beta and not enabled here (the ABAC policy API does not accept `MODEL_SERVICE` as a securable type) |
+| 5 | DENY on model + GRANT on gateway → user can still infer | Definer's-rights invocation per docs | ❓ | **❓** | Same blocker as row 4. The pay-per-token *endpoint* has no per-principal ACL; the corresponding `MODEL_SERVICE` does, so this is exercisable on a workspace where those grants can be safely mutated |
 | 6 | Revoke gateway access → no fallback to old endpoints | Field sandbox observation | ❓ | **❓** | Unchanged. Pay-per-token FM endpoints still expose no per-principal permission to revoke |
 | 7 | Per-user alerting on spend threshold | [Budgets](https://docs.databricks.com/aws/en/admin/account-settings/budgets) | ✅ | **✅** | Unchanged. Usage tracking ON; alerting is composed from the usage system tables, not set as a field on the endpoint |
 | 8 | Per-user hard cap (block at budget) | [AI Gateway budgets](https://docs.databricks.com/aws/en/ai-gateway/budgets) | ❌ | **❓ (was ❌)** | Account budgets carry a `BLOCK_USAGE` action alongside `EMAIL_NOTIFICATION`, spend-denominated (`LIST_PRICE_DOLLARS_USD`, `CUMULATIVE_SPENDING_EXCEEDED`, monthly) — 47 of 440 budgets on a probed account use it. The **per-user** half stays unproven: every budget this API version returns is scoped by `workspace_id`/tags, with no per-user threshold or override field |
@@ -201,8 +201,20 @@ which apply to yours; here is what it reports on this one:
 | Foundation-model UC permissions (`MODEL` securable) | ❌ `INVALID_STATE: MODEL is not enabled` | Rows 3–6. Docs call it "GA but requires enablement" — an account-team request, not a self-serve toggle |
 | `system.ai` schema-wide `EXECUTE` to `account users` | ✅ still granted | Why row 3 cannot be isolated: while a broad group holds `EXECUTE`, a per-model GRANT is redundant and REVOKE of it changes nothing |
 | ABAC policy engine | ✅ available, 0 policies on `system.ai` | Adds **GRANT** policies (`GRANT EXECUTE FOR MODELS`). There is no DENY form, so row 4 is untouched |
-| Model services + service policies (Beta) | ❌ `MODEL SERVICE` not a recognised securable | Rows 4–6. Service policies are the only ALLOW/**DENY**/ASK surface for model access, and the only guardrail path for `/ai-gateway/*` |
+| Model services (`MODEL_SERVICE` securable) | ✅ 11 in `system.ai`, each with its own ACL | The per-model ACL for the `/ai-gateway/*` routes: `GET permissions/model_service/system.ai.glm-5-2` → `200 ['account users:EXECUTE']` |
+| Service policies on `MODEL_SERVICE` (Beta) | ❌ policy API rejects the securable type | Rows 4–6. Service policies are the only ALLOW/**DENY**/ASK surface for model access, and the guardrail path for `/ai-gateway/*` |
 | Model provider services header | ❌ 404 on `system.ai.anthropic` | The documented `Databricks-Model-Provider-Service` on-ramp for Claude Code |
+
+`MODEL` and `MODEL_SERVICE` are different securables and can be in opposite
+states, as they are here. `MODEL` is the foundation-model-permissions preview
+over registered models; `MODEL_SERVICE` is the Unity AI Gateway object the
+`/ai-gateway/*` routes resolve. Note also that there is no
+`SHOW GRANTS ON MODEL SERVICE` DDL — SQL returns `PARSE_SYNTAX_ERROR` whether
+or not the feature is live, so the probe asks the REST API instead. The
+service-policy verdict comes from the ABAC policy API, which reports the
+securable types it accepts: `CATALOG, FUNCTION, METASTORE, MODEL, SCHEMA,
+SECRET, TABLE, VOLUME` — `MODEL_SERVICE` and `MCP_SERVICE` are not among them
+on this workspace.
 
 Two things did not change between runs:
 
@@ -210,11 +222,14 @@ Two things did not change between runs:
   remain additive-only. ABAC did not add one — its `EXCEPT principal` clause
   excludes a principal from a grant, which is not a deny assignment. "DENY
   EXECUTE blocks inference" is not achievable as documented.
-- **Built-in pay-per-token FM endpoints have no per-principal ACL.** They
+- **Built-in pay-per-token FM *endpoints* have no per-principal ACL.** They
   expose no endpoint `id` and the permissions API rejects their name
   (`not a valid Inference Endpoint ID`), so endpoint-level `CAN_QUERY` grants
   and the "revoke → silent fallback" repro still need a custom or
-  provisioned-throughput endpoint.
+  provisioned-throughput endpoint. The corresponding **model service** does
+  have a per-principal ACL, which is a different object and a different route
+  family — rows 5 and 6 could be exercised against it on a workspace where
+  mutating those grants is safe.
 
 ### The Codex Responses route exists but rejected a Claude model
 
@@ -323,8 +338,11 @@ blockers are listed under Key Findings. To make them meaningful you need
 foundation-model UC permissions enabled (account-team request), and then to
 revoke the schema-wide `EXECUTE` on `system.ai` from `account users` — which
 affects **every user of that workspace**, so do it somewhere you own. Rows 5
-and 6 additionally need a custom or provisioned-throughput endpoint, since
-built-in pay-per-token endpoints have no per-principal ACL surface.
+and 6 need a per-principal ACL to revoke: either a custom or
+provisioned-throughput endpoint, or the `MODEL_SERVICE` securable, which
+carries its own ACL (`PATCH /api/2.1/unity-catalog/permissions/model_service/
+<catalog>.<schema>.<name>`) — again, on a workspace you own, since the only
+grant on the shared ones is `account users: EXECUTE`.
 
 ## Configuring your coding agents
 
