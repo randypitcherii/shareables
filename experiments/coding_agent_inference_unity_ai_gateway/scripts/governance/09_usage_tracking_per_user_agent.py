@@ -141,8 +141,8 @@ def main() -> int:
     print(f"  Per-agent / client columns: {agent_cols or 'NONE'}")
 
     # --- Step 3: table-wide population, not a 10-row sample -----------------
-    # A sample can miss a column that IS used by other clients, which is
-    # exactly the mistake that produced a false ❌ on this row in July 2026.
+    # A sample can miss a column that IS used by other clients, so count
+    # population across the whole table rather than inspecting N rows.
     populated: dict[str, int] = {}
     for col in user_cols + agent_cols:
         populated[col] = _count(

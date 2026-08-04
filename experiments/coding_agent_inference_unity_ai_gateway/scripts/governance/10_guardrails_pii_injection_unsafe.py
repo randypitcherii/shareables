@@ -5,15 +5,14 @@ detection, safety (unsafe-content) filtering, and topic/keyword restrictions.
 Prompt-injection filtering is often *assumed* to be included; whether a
 dedicated injection knob exists at all is part of what's under test.
 
-THE ROUTE SPLIT IS THE WHOLE ANSWER. Guardrails are configured on a serving
+Both route families must be probed. Guardrails are configured on a serving
 endpoint (``PUT /api/2.0/serving-endpoints/<name>/ai-gateway``) and are
 enforced on the classic ``/serving-endpoints/*`` routes. The Unity AI
-Gateway routes (``/ai-gateway/*``) resolve the model in the UC model
-catalog, not through that endpoint's config, so they do NOT inherit its
-guardrails. A probe that only calls one route family will therefore reach
-the wrong conclusion — which is exactly what happened in the July 2026 run
-of this script, when it probed via the gateway route only and recorded a
-false ❌ "settable but not enforced".
+Gateway routes (``/ai-gateway/*``) resolve the model in the UC model catalog
+rather than through that endpoint's config, and are governed by service
+policies on model services instead. A probe that calls only one route family
+will therefore mis-report enforcement; this script calls both, with a benign
+control on each.
 
 ✅ means: a configured guardrail actually blocked a synthetic-PII request on
 at least one route.
@@ -213,24 +212,26 @@ def main() -> int:
 
         if enforcing and bypassing:
             _common.fail(
-                "Guardrails enforce on the classic serving routes but are "
-                "BYPASSED by the Unity AI Gateway routes."
+                "Guardrails enforce on the classic serving routes and not on "
+                "the Unity AI Gateway routes."
             )
             gov.conclude(
                 ROW_KEY,
                 None,
-                "PARTIAL — guardrails are real but route-scoped. Endpoint "
-                f"guardrails ({json.dumps(effective)}) blocked the synthetic-PII "
-                f"request on {enforcing} and were bypassed on {bypassing}. "
-                "Guardrails configured on a serving endpoint govern the classic "
-                "/serving-endpoints/* routes only; the /ai-gateway/* routes "
-                "resolve the model in the UC catalog and do not inherit them, so "
-                "a coding agent pointed at /ai-gateway/* is UNGUARDED by this "
-                f"config. Probe trail: {summary}. Benign controls returned 200 "
-                "everywhere, so the block is guardrail-specific, not an outage. "
-                "No dedicated prompt-injection knob in this endpoint's schema — "
-                "knobs are pii/safety/valid_topics/invalid_keywords (jailbreak/"
-                "hallucination/custom keys are silently dropped by this API).",
+                "PARTIAL — enforcement is route-scoped. Endpoint guardrails "
+                f"({json.dumps(effective)}) blocked the synthetic-PII request on "
+                f"{enforcing} and did not block it on {bypassing}. Guardrails "
+                "configured on a serving endpoint govern the classic "
+                "/serving-endpoints/* routes; the /ai-gateway/* routes resolve "
+                "the model in the UC catalog and are governed by service "
+                "policies on model services instead, so this config does not "
+                f"cover a client pointed at /ai-gateway/*. Probe trail: {summary}. "
+                "Benign controls returned 200 everywhere, so the block is "
+                "guardrail-specific rather than an outage. No dedicated "
+                "prompt-injection knob in this endpoint's schema — knobs are "
+                "pii/safety/valid_topics/invalid_keywords (jailbreak/"
+                "hallucination/custom keys are dropped by this API without "
+                "error).",
             )
             return 0
         if enforcing:
