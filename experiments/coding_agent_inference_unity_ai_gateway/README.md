@@ -1,5 +1,48 @@
 # Coding Agent Inference over Unity AI Gateway (SSO)
 
+## ⏸️ Paused — further work expected
+
+**This experiment is not finished.** Several matrix rows below are ❓ because the
+capability that would make them testable is not switched on in the environment
+this runs against — not because the tests were skipped. They are expected to be
+answered once those gates open.
+
+| Waiting on | Blocks |
+|---|---|
+| Foundation-model Unity Catalog permissions enabled on the workspace | **Rows 3–6.** While the `MODEL` securable is off and a broad group holds `EXECUTE` on `system.ai`, a per-model GRANT is redundant and a REVOKE changes nothing — the enforcement question cannot be isolated |
+| Service policies attachable to the `MODEL_SERVICE` securable | **Rows 4–6, and the successor to row 10.** This is the only ALLOW/DENY/ASK surface for model access, and the guardrail path for the `/ai-gateway/*` routes every config template here points at |
+| Account-scoped budgets with a blocking action enabled on the account | **The per-user half of row 8.** The blocking action itself is proven; per-user scoping is not |
+
+### To resume
+
+1. **Find out which gates are open.** This is what the preflight exists for:
+   ```bash
+   uv run python scripts/governance/00_enablement_probe.py
+   ```
+2. **Re-run the rows behind any gate now reporting `✅ ON`:**
+   ```bash
+   # Rows 3–6 — also needs a second test principal (see Running the Tests)
+   ALLOW_ENDPOINT_MUTATION=1 uv run python scripts/governance/03_grant_revoke_execute_enforced.py
+   ALLOW_ENDPOINT_MUTATION=1 uv run python scripts/governance/04_deny_execute_blocks_inference.py
+   ALLOW_ENDPOINT_MUTATION=1 uv run python scripts/governance/05_deny_model_grant_gateway.py
+   ALLOW_ENDPOINT_MUTATION=1 uv run python scripts/governance/06_revoke_gateway_no_fallback.py
+
+   # Row 8 — needs a profile authenticated against the account console
+   DATABRICKS_ACCOUNT_PROFILE=<profile> uv run python scripts/governance/08_per_user_hard_cap.py
+
+   # Row 10 — re-probe once a service policy can be attached to the model service
+   ALLOW_ENDPOINT_MUTATION=1 uv run python scripts/governance/10_guardrails_pii_injection_unsafe.py
+   ```
+3. **Update the affected matrix rows and Key Findings.** The scripts rewrite
+   `results/matrix_results.json` themselves; the prose is yours.
+4. **Delete any row of the table above that has cleared.** This block is a live
+   claim about what is still outstanding, not a changelog — resolved gates
+   belong in Key Findings as history.
+
+**Last checked:** 2026-08-06 — the first two gates were verified closed by the
+preflight above. The third could not be checked from the account this experiment
+runs in, and row 8 records it as unproven rather than absent.
+
 ## Overview
 
 This experiment establishes — with hard testing against a real workspace — which
