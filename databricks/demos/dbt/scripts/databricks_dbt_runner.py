@@ -97,8 +97,6 @@ def build_dbt_env(args: argparse.Namespace) -> dict[str, str]:
             "DBT_DEPLOYMENT_ENVIRONMENT": (
                 "ci_testing" if args.mode.startswith("ci-") else "production"
             ),
-            # keep uv's cache + venv on local disk, not workspace/volume FUSE
-            "UV_CACHE_DIR": "/tmp/uv-cache",
             "UV_LINK_MODE": "copy",
         }
     )
@@ -172,6 +170,10 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="dbt_runner_") as tmp:
         workdir = Path(tmp)
+        # per-run cache: tasks of one job run can land on a shared serverless
+        # host under DIFFERENT sandbox users, so a fixed /tmp path 403s for
+        # whoever arrives second
+        env["UV_CACHE_DIR"] = str(workdir / "uv-cache")
         if args.mode.startswith("ci-"):
             project = fetch_project_from_github(args.github_repo, args.git_ref, workdir)
         else:
