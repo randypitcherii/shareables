@@ -73,7 +73,13 @@ cd "${RUNNER_HOME}"
 # --- supervisor loop: ephemeral runners exit after one job, so re-register each cycle ---
 while true; do
   if [ -n "${RUNNER_PAT}" ]; then
-    if ! REG_TOKEN=$(mint_registration_token); then
+    # Assign via a temp var: `REG_TOKEN=$(...)` would clobber a manually
+    # provided GH_RUNNER_REG_TOKEN even when minting fails.
+    if MINTED_TOKEN=$(mint_registration_token); then
+      REG_TOKEN="${MINTED_TOKEN}"
+    elif [ -n "${REG_TOKEN}" ]; then
+      log "PAT mint failed — falling back to the provided registration token"
+    else
       log "failed to mint a registration token (GitHub API unreachable or PAT invalid) — retrying in 60s"
       sleep 60
       continue
