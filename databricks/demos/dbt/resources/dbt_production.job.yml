@@ -31,6 +31,7 @@ resources:
             python_file: ../scripts/databricks_dbt_runner.py
             parameters:
               - "--mode=prod-source-freshness"
+              - "--project-dir=${workspace.file_path}"
               - "--warehouse-id=${var.warehouse_id}"
               - "--catalog=${var.production_catalog}"
               - "--schema=${var.production_schema}"
@@ -42,6 +43,7 @@ resources:
             python_file: ../scripts/databricks_dbt_runner.py
             parameters:
               - "--mode=prod-build"
+              - "--project-dir=${workspace.file_path}"
               - "--warehouse-id=${var.warehouse_id}"
               - "--catalog=${var.production_catalog}"
               - "--schema=${var.production_schema}"
@@ -55,6 +57,7 @@ resources:
             python_file: ../scripts/databricks_dbt_runner.py
             parameters:
               - "--mode=prod-docs"
+              - "--project-dir=${workspace.file_path}"
               - "--warehouse-id=${var.warehouse_id}"
               - "--catalog=${var.production_catalog}"
               - "--schema=${var.production_schema}"

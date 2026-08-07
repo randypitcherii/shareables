@@ -62,6 +62,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--git-ref", default="main", help="repo ref to build (CI modes only)")
     parser.add_argument("--github-repo", default="randypitcherii/shareables")
     parser.add_argument("--artifacts-volume", default="", help="/Volumes/... root for state + docs")
+    parser.add_argument(
+        "--project-dir",
+        default="",
+        help=(
+            "workspace path of the bundle-deployed project (prod modes; the bundle "
+            "passes ${workspace.file_path} -- __file__ is undefined in serverless "
+            "spark_python_task execution, so the script cannot locate itself)"
+        ),
+    )
     parser.add_argument("--usage-history-days", default="", help="override DBT_USAGE_HISTORY_DAYS")
     return parser.parse_args()
 
@@ -114,10 +123,12 @@ def fetch_project_from_github(repo: str, ref: str, workdir: Path) -> Path:
     return project
 
 
-def copy_project_from_workspace(workdir: Path) -> Path:
-    """Copy the bundle-synced project (this script's parent dir) to local disk --
-    dbt writes target/ etc., which we keep off the read-through workspace FUSE."""
-    source = Path(__file__).resolve().parent.parent
+def copy_project_from_workspace(project_dir: str, workdir: Path) -> Path:
+    """Copy the bundle-synced project to local disk -- dbt writes target/ etc.,
+    which we keep off the read-through workspace FUSE."""
+    if not project_dir:
+        sys.exit("--project-dir is required for prod modes")
+    source = Path(project_dir)
     project = workdir / "project"
     shutil.copytree(
         source,
@@ -164,7 +175,7 @@ def main() -> None:
         if args.mode.startswith("ci-"):
             project = fetch_project_from_github(args.github_repo, args.git_ref, workdir)
         else:
-            project = copy_project_from_workspace(workdir)
+            project = copy_project_from_workspace(args.project_dir, workdir)
 
         run(["uv", "sync", "--python", sys.executable], project, env)
         dbt(["deps"], project, env)
