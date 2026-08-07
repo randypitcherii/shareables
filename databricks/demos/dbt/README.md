@@ -255,15 +255,33 @@ DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NU
 Because the schema name carries the PR number **and** the build number, a re-run after a fix
 builds fully isolated from the previous attempt.
 
-**Where it runs.** The target workspace has IP access lists, so GitHub-hosted runners can't
-reach it. CI runs on a **self-hosted runner inside a Databricks App**
-([`databricks/apps/github-actions-runner-spike/`](../../apps/github-actions-runner-spike/)):
-the runner long-polls GitHub over outbound HTTPS, and all workspace API traffic originates
-in-network. CI steps inherit the app service principal's M2M OAuth credentials from the
-container environment, so the workflow needs **zero Databricks secrets in GitHub** — even
-the SQL warehouse `http_path` is resolved at runtime by warehouse name. Because this is a
-public repo, the workflow refuses to schedule for fork PRs (job-level head-repo + actor
-guards); see the workflow header for the full security model.
+**Where it runs.** GitHub is only the gate and the trigger — dbt executes in the
+`rpw-dbt-databricks-reference CI` **Databricks job** ([`resources/dbt_ci.job.yml`](resources/dbt_ci.job.yml)):
+defined, unscheduled, parameterized, serverless. The workflow passes job parameters
+(`git_ref` = PR head SHA, `ci_schema`, `mode`) and polls the run. Why a job instead of
+running dbt on the runner:
+
+* **centralized logs** — every dbt run (CI and prod) lives in the Jobs UI;
+* **uv pins dbt** — the tasks run `dbt` via `uv sync` from `pyproject.toml`
+  ([`scripts/databricks_dbt_runner.py`](scripts/databricks_dbt_runner.py)), so a dbt
+  upgrade is a one-line PR, never a job edit (no managed `dbt_task` type anywhere);
+* **`--fail-fast`** — CI builds stop at the first failure;
+* **one committed `profiles.yml`** — dev/ci/prod all resolve from the same file with
+  env-var placeholders; no platform-generated profile to drift from it.
+
+**Auth: `run_as` is the whole setup.** The CI and prod jobs run as the `dbt_prod_sp`
+service principal, and the task wrapper resolves a short-lived token from its ambient
+runtime credentials. No OAuth client secret is provisioned, stored, or rotated anywhere —
+and the GitHub side holds zero Databricks secrets either (the trigger runs on a
+self-hosted runner inside a Databricks App —
+[`databricks/apps/github-actions-runner-spike/`](../../apps/github-actions-runner-spike/) —
+because the workspace's IP access lists block even the Jobs API from GitHub-hosted
+runners; the runner app's SP has CAN_MANAGE_RUN on the CI job and nothing else).
+
+Because this is a public repo, PR code **never executes on the runner** — the job
+downloads the repo tarball at the PR head SHA and runs it on serverless compute — and the
+workflow refuses to schedule for fork PRs (job-level head-repo + actor guards); see the
+workflow header for the full security model.
 
 **Slim CI.** The production job captures dbt state (`manifest.json`) to the artifacts volume,
 and the CI workflow downloads it to build **only changed models and their descendants**
@@ -271,10 +289,11 @@ and the CI workflow downloads it to build **only changed models and their descen
 the production relations. If the state download fails (first run, missing permissions), CI
 falls back to a full build.
 
-**Hygiene.** The per-PR teardown drops the ephemeral schema and is *not* allowed to fail
-silently. Cancelled runs can still leak schemas, so
-[`.github/workflows/dbt-ci-sweep.yml`](../../../.github/workflows/dbt-ci-sweep.yml) runs the
-sweep run-operation weekly. The same sweep can be run by hand:
+**Hygiene.** Teardown happens *inside the CI task* (try/finally), so even a cancelled
+GitHub workflow can't leak a schema — only cancelling the Databricks run itself can, and
+it is *not* allowed to fail silently. For that case,
+[`.github/workflows/dbt-ci-sweep.yml`](../../../.github/workflows/dbt-ci-sweep.yml)
+triggers the same CI job in `ci-sweep` mode weekly. The same sweep can be run by hand:
 
 ```bash
 # dry run by default; pass dry_run: false to actually drop

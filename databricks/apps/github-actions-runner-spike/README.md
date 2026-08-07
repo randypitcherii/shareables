@@ -210,8 +210,9 @@ All three go/no-go conditions are implemented for the dbt CI use case:
    (a fine-grained PAT in a Databricks secret, wired via an app resource in
    `databricks.yml`), and the app auto-starts the supervisor at boot. Restarts and
    redeploys self-heal with no manual token paste.
-3. **Dedicated least-privilege SP** — the app is CI-only; its auto-created service
-   principal needs exactly: SELECT on `system.billing`, CREATE SCHEMA + write on the CI
-   catalog, CAN_USE on the `dbt_wh` warehouse, and READ on the production artifacts
-   volume (for Slim CI deferral). Grant nothing else, and don't reuse this app's SP
-   elsewhere.
+3. **Dedicated least-privilege SP** — the runner only *triggers* the dbt CI Databricks
+   job (dbt executes there as the job's `run_as` SP, on serverless compute, against code
+   the job downloads itself). The app SP therefore needs exactly one grant:
+   CAN_MANAGE_RUN on the `rpw-dbt-databricks-reference CI` job. Zero UC grants, and PR
+   code never executes in this container — which is also what makes the PAT exposure
+   (previous caveat) tolerable.

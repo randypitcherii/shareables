@@ -1,12 +1,12 @@
 # Stale CI schema sweep for databricks/demos/dbt.
 #
-# dbt-ci.yml drops its ephemeral schema in an `if: always()` teardown step, but
-# CANCELLED runs (superseded pushes, concurrency cancellation) never execute
-# teardown and leak their schema. This weekly sweep drops any leaked CI schemas
-# older than 3 days via the `drop_stale_ci_schemas` run-operation.
+# CI teardown runs in-task (try/finally inside the Databricks CI job), so the
+# only way to leak a schema is cancelling the Databricks run itself. This
+# weekly trigger runs the same CI job in `ci-sweep` mode, which drops any
+# leaked CI schemas older than 3 days.
 #
-# Runs on the same in-workspace Databricks App runner as dbt-ci.yml, with the
-# same zero-GitHub-secrets auth. See dbt-ci.yml for the security model.
+# Same trigger-and-poll pattern and security model as dbt-ci.yml — GitHub only
+# passes parameters; dbt executes in the Databricks job as its run_as SP.
 name: dbt CI schema sweep
 
 on:
@@ -21,33 +21,15 @@ jobs:
     # Never run for forks / other actors — this schedules onto an in-workspace runner.
     if: github.repository == 'randypitcherii/shareables' && github.actor == 'randypitcherii'
     runs-on: [self-hosted, databricks-app]
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: databricks/demos/dbt
+    timeout-minutes: 30
     env:
-      DBT_DEPLOYMENT_ENVIRONMENT: ci_testing
-      # the sweep itself never builds models; schema value is unused but required
-      DBT_DEFAULT_SCHEMA: dbt_rpw_dbt_databricks_reference_sweep
-      DBT_DEFAULT_CATALOG: ${{ vars.DBT_DEFAULT_CATALOG || 'fe_randy_pitcher_workspace_catalog' }}
-      DBT_WAREHOUSE_NAME: ${{ vars.DBT_WAREHOUSE_NAME || 'dbt_wh' }}
+      DBT_CI_JOB_NAME: rpw-dbt-databricks-reference CI
       DATABRICKS_CLI_VERSION: "1.3.0"
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Adopt app service principal credentials for dbt
-        run: |
-          : "${DATABRICKS_HOST:?not running on the Databricks App runner}"
-          : "${DATABRICKS_CLIENT_ID:?app SP client id missing from container env}"
-          : "${DATABRICKS_CLIENT_SECRET:?app SP client secret missing from container env}"
-          echo "::add-mask::$DATABRICKS_CLIENT_SECRET"
-          echo "DBT_HOST=${DATABRICKS_HOST#https://}" >> "$GITHUB_ENV"
-          echo "DBT_CLIENT_ID=$DATABRICKS_CLIENT_ID" >> "$GITHUB_ENV"
-          echo "DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET=$DATABRICKS_CLIENT_SECRET" >> "$GITHUB_ENV"
-
       - name: Install Databricks CLI (user-space, cached)
         run: |
+          : "${DATABRICKS_HOST:?not running on the Databricks App runner}"
           CLI_DIR="$HOME/.dbx-cli/$DATABRICKS_CLI_VERSION"
           if [ ! -x "$CLI_DIR/databricks" ]; then
             mkdir -p "$CLI_DIR"
@@ -58,28 +40,38 @@ jobs:
           fi
           echo "$CLI_DIR" >> "$GITHUB_PATH"
 
-      - name: Install dependencies
+      - name: Trigger sweep and wait
         run: |
-          command -v uv >/dev/null || { curl -LsSf https://astral.sh/uv/install.sh | sh; echo "$HOME/.local/bin" >> "$GITHUB_PATH"; export PATH="$HOME/.local/bin:$PATH"; }
-          uv sync
-          uv run dbt deps --profiles-dir .
-
-      - name: Resolve SQL warehouse http_path
-        run: |
-          DBT_HTTP_PATH=$(databricks warehouses list -o json | python3 -c '
+          JOB_ID=$(databricks jobs list -o json --name "$DBT_CI_JOB_NAME" | python3 -c '
           import json, os, sys
-          data = json.load(sys.stdin)
-          warehouses = data.get("warehouses", data) if isinstance(data, dict) else data
-          name = os.environ["DBT_WAREHOUSE_NAME"]
-          matches = [w["id"] for w in warehouses if w.get("name") == name]
+          jobs = json.load(sys.stdin)
+          name = os.environ["DBT_CI_JOB_NAME"]
+          matches = [j["job_id"] for j in jobs if j["settings"]["name"] == name]
           if not matches:
-              sys.exit(f"no SQL warehouse named {name!r} visible to the CI service principal")
-          print(f"/sql/1.0/warehouses/{matches[0]}")
+              sys.exit(f"no job named {name!r} visible to the trigger service principal")
+          print(matches[0])
           ')
-          echo "DBT_HTTP_PATH=$DBT_HTTP_PATH" >> "$GITHUB_ENV"
+          RUN_ID=$(databricks api post /api/2.2/jobs/run-now --json "{
+            \"job_id\": $JOB_ID,
+            \"job_parameters\": {\"mode\": \"ci-sweep\", \"git_ref\": \"main\"}
+          }" | python3 -c 'import json, sys; print(json.load(sys.stdin)["run_id"])')
 
-      - name: Drop stale CI schemas (older than 3 days)
-        run: |
-          uv run dbt run-operation drop_stale_ci_schemas \
-            --args '{prefix: dbt_rpw_dbt_databricks_reference_pr, older_than_days: 3, dry_run: false}' \
-            --target ci --profiles-dir .
+          while true; do
+            RUN_JSON=$(databricks api get "/api/2.2/jobs/runs/get?run_id=$RUN_ID")
+            eval "$(echo "$RUN_JSON" | python3 -c '
+          import json, sys
+          run = json.load(sys.stdin)
+          state = run.get("status", run.get("state", {}))
+          print(f"LIFECYCLE={state.get(\"state\", state.get(\"life_cycle_state\", \"\"))}")
+          term = state.get("termination_details", {})
+          print(f"RESULT={term.get(\"type\", state.get(\"result_state\", \"\"))}")
+          print(f"RESULT_CODE={term.get(\"code\", \"\")}")
+          print(f"RUN_URL={run.get(\"run_page_url\", \"\")}")
+          ')"
+            echo "run $RUN_ID: $LIFECYCLE ($RUN_URL)"
+            if [ "$LIFECYCLE" = "TERMINATED" ] || [ "$LIFECYCLE" = "INTERNAL_ERROR" ]; then
+              break
+            fi
+            sleep 20
+          done
+          [ "$RESULT_CODE" = "SUCCESS" ] || [ "$RESULT" = "SUCCESS" ]

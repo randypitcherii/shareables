@@ -1,3 +1,11 @@
+# Production daily job. Serverless Python tasks running dbt VIA UV rather than
+# the managed dbt task type, on purpose:
+#   * pyproject.toml pins the dbt version for every environment -- upgrading dbt
+#     is a one-line PR, never a job-definition edit;
+#   * auth is the job's run_as SP resolved at runtime from the task's ambient
+#     credentials (no OAuth secret provisioned anywhere);
+#   * the committed profiles.yml is the single profile definition for
+#     dev/ci/prod -- no platform-generated profile to drift from it.
 resources:
   jobs:
     dbt_production_daily:
@@ -19,54 +27,45 @@ resources:
         # The singular correctness tests anchor on max(usage_date) -- a relative check --
         # so without this absolute check a stalled pipeline could stay green for weeks.
         - task_key: dbt_source_freshness
-          dbt_task:
-            project_directory: ..
-            source: WORKSPACE
-            warehouse_id: ${var.warehouse_id}
-            catalog: ${var.production_catalog}
-            schema: ${var.production_schema}
-            commands:
-              - dbt deps
-              - >-
-                dbt source freshness
-                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
-          environment_key: dbt
+          spark_python_task:
+            python_file: ../scripts/databricks_dbt_runner.py
+            parameters:
+              - "--mode=prod-source-freshness"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.production_catalog}"
+              - "--schema=${var.production_schema}"
+          environment_key: dbt_via_uv
         - task_key: dbt_build_daily
           depends_on:
             - task_key: dbt_source_freshness
-          dbt_task:
-            project_directory: ..
-            source: WORKSPACE
-            warehouse_id: ${var.warehouse_id}
-            catalog: ${var.production_catalog}
-            schema: ${var.production_schema}
-            commands:
-              - dbt deps
-              - >-
-                dbt build -s tag:daily
-                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
-                --target-path /Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}/state/latest
-          environment_key: dbt
+          spark_python_task:
+            python_file: ../scripts/databricks_dbt_runner.py
+            parameters:
+              - "--mode=prod-build"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.production_catalog}"
+              - "--schema=${var.production_schema}"
+              - "--artifacts-volume=/Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}"
+          environment_key: dbt_via_uv
         - task_key: dbt_generate_docs
           depends_on:
             - task_key: dbt_build_daily
           run_if: ALL_DONE
-          dbt_task:
-            project_directory: ..
-            source: WORKSPACE
-            warehouse_id: ${var.warehouse_id}
-            catalog: ${var.production_catalog}
-            schema: ${var.production_schema}
-            commands:
-              - dbt deps
-              - >-
-                dbt docs generate
-                --vars '{"deployment_environment":"production","default_catalog":"${var.production_catalog}","default_schema":"${var.production_schema}"}'
-                --target-path /Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}/docs/latest
-          environment_key: dbt
+          spark_python_task:
+            python_file: ../scripts/databricks_dbt_runner.py
+            parameters:
+              - "--mode=prod-docs"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.production_catalog}"
+              - "--schema=${var.production_schema}"
+              - "--artifacts-volume=/Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}"
+          environment_key: dbt_via_uv
       environments:
-        - environment_key: dbt
+        - environment_key: dbt_via_uv
           spec:
             environment_version: "3"
+            # no dbt here on purpose -- `uv sync` installs the pyproject-pinned
+            # version inside the task (see header comment)
             dependencies:
-              - dbt-databricks>=1.11.0
+              - uv
+              - databricks-sdk

@@ -21,6 +21,13 @@ variables:
     description: Serverless or Pro SQL warehouse ID used by the dbt workflow.
     lookup:
       warehouse: dbt_wh
+  ci_trigger_principal:
+    description: >-
+      Application ID of the principal allowed to trigger the CI job (the GitHub
+      Actions runner app's auto-created service principal). It gets
+      CAN_MANAGE_RUN on the CI job and nothing else -- dbt itself runs as the
+      job's run_as identity, so the trigger principal needs zero UC grants.
+    default: ba28de80-7216-4294-9134-7e5ae7a85979
   production_service_principal:
     description: >-
       Application ID of the service principal that owns and runs production (looked up
@@ -58,6 +65,11 @@ targets:
     resources:
       jobs:
         dbt_production_daily:
+          run_as:
+            service_principal_name: ${var.production_service_principal}
+        # CI runs as the same SP: run_as is the ONLY auth config CI needs --
+        # the task resolves a runtime token from its ambient credentials.
+        dbt_ci:
           run_as:
             service_principal_name: ${var.production_service_principal}
     workspace:

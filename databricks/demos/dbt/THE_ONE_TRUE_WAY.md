@@ -102,16 +102,21 @@ here: CI defers to it (`dbt build -s state:modified+ --defer --state ...`) so a 
 only changed models and their descendants, falling back to a full build when state is
 unavailable.
 
-- **In this repo:** `.github/workflows/dbt-ci.yml` (live, runs on a self-hosted runner
-  inside a Databricks App to reach the IP-restricted workspace) + the `drop_schema`
-  run-operation, with `.github/workflows/dbt-ci-sweep.yml` sweeping leaked schemas weekly.
+- **In this repo:** GitHub Actions (`.github/workflows/dbt-ci.yml`, on a self-hosted
+  runner inside a Databricks App — the workspace is IP-restricted) only *triggers* the
+  unscheduled `dbt_ci` Databricks job (`resources/dbt_ci.job.yml`) with the PR's git ref
+  and schema as job parameters; dbt executes serverlessly there with `--fail-fast`,
+  tears its schema down in-task, and all logs live in the Jobs UI. Leaked schemas from
+  cancelled runs get swept weekly (`ci-sweep` mode).
 
-### 7. Least privilege, per environment
-Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated M2M service principals,
-credentials only ever in the runtime's secret store. No shared "god" token. Production
-deployments must not run as the deploying human either: the DAB's prod target sets
-`run_as` to a dedicated service principal and deploys to a shared workspace path, so
-production survives people changing teams.
+### 7. Least privilege, per environment — and `run_as` IS the credential
+Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated service principals
+assigned as the Databricks job's `run_as` identity: the task resolves a short-lived token
+from its ambient runtime credentials, so **no OAuth client secret is ever provisioned,
+stored, or rotated** — there is nothing to leak and nothing to expire. No shared "god"
+token. Production deployments must not run as the deploying human either: the DAB's prod
+target sets `run_as` to a dedicated service principal and deploys to a shared workspace
+path, so production survives people changing teams.
 
 - **In this repo:** `run_as` + `/Workspace/Shared` root path in `databricks.yml` (prod target).
 
