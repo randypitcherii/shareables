@@ -132,6 +132,7 @@ jobs:
       - name: Download production state (enables Slim CI)
         continue-on-error: true
         run: |
+          mkdir -p prod_state
           databricks fs cp "$DBT_PROD_STATE_PATH/manifest.json" prod_state/manifest.json
 
       - name: Build & test (isolated CI schema)
