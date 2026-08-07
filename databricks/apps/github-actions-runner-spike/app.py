@@ -100,7 +100,10 @@ class ShellRunRequest(BaseModel):
 
 
 class RunnerStartRequest(BaseModel):
-    registration_token: str = Field(..., min_length=10)
+    # Optional when the app has GH_RUNNER_PAT in its environment (Databricks
+    # secret via app resource): the supervisor then mints registration tokens
+    # itself, which is what makes restarts self-healing.
+    registration_token: str | None = Field(default=None, min_length=10)
     repo_url: str = "https://github.com/randypitcherii/shareables"
     runner_name: str = "gha-runner-spike"
     labels: str = "databricks-app"
@@ -325,17 +328,20 @@ def runner_status() -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/runner/start")
-def runner_start(payload: RunnerStartRequest) -> dict[str, Any]:
-    if _pgrep("runner_supervisor.sh"):
-        raise HTTPException(status_code=409, detail="Runner supervisor already running")
+def _spawn_supervisor(
+    registration_token: str | None,
+    repo_url: str,
+    runner_name: str,
+    labels: str,
+) -> subprocess.Popen[bytes]:
     env = {
         **os.environ,
-        "GH_RUNNER_REG_TOKEN": payload.registration_token,
-        "GH_RUNNER_REPO_URL": payload.repo_url,
-        "GH_RUNNER_NAME": payload.runner_name,
-        "GH_RUNNER_LABELS": payload.labels,
+        "GH_RUNNER_REPO_URL": repo_url,
+        "GH_RUNNER_NAME": runner_name,
+        "GH_RUNNER_LABELS": labels,
     }
+    if registration_token:
+        env["GH_RUNNER_REG_TOKEN"] = registration_token
     with open(RUNNER_SUPERVISOR_LOG, "ab") as log_file:
         process = subprocess.Popen(
             ["bash", str(RUNNER_SUPERVISOR_SCRIPT)],
@@ -345,7 +351,53 @@ def runner_start(payload: RunnerStartRequest) -> dict[str, Any]:
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-    logger.info("runner.supervisor.started pid=%s repo=%s", process.pid, payload.repo_url)
+    logger.info("runner.supervisor.started pid=%s repo=%s", process.pid, repo_url)
+    return process
+
+
+@app.on_event("startup")
+def runner_autostart() -> None:
+    """Self-healing restarts: when the app has a GitHub PAT (GH_RUNNER_PAT via a
+    Databricks secret app resource), start the runner supervisor at boot -- no
+    manual POST /runner/start after each app restart/redeploy.
+
+    Requires UVICORN_WORKERS=1 (set in app.yaml): with multiple workers each one
+    runs this hook and the pgrep guard is racy.
+    """
+    if not os.getenv("GH_RUNNER_PAT"):
+        return
+    if os.getenv("GH_RUNNER_AUTOSTART", "true").lower() in {"0", "false", "no"}:
+        return
+    if _pgrep("runner_supervisor.sh"):
+        logger.info("runner.autostart.skipped supervisor already running")
+        return
+    defaults = RunnerStartRequest()
+    _spawn_supervisor(
+        registration_token=None,
+        repo_url=os.getenv("GH_RUNNER_REPO_URL", defaults.repo_url),
+        runner_name=os.getenv("GH_RUNNER_NAME", defaults.runner_name),
+        labels=os.getenv("GH_RUNNER_LABELS", defaults.labels),
+    )
+
+
+@app.post("/api/v1/runner/start")
+def runner_start(payload: RunnerStartRequest) -> dict[str, Any]:
+    if _pgrep("runner_supervisor.sh"):
+        raise HTTPException(status_code=409, detail="Runner supervisor already running")
+    if not payload.registration_token and not os.getenv("GH_RUNNER_PAT"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "registration_token is required unless the app has GH_RUNNER_PAT "
+                "in its environment (Databricks secret app resource)"
+            ),
+        )
+    process = _spawn_supervisor(
+        registration_token=payload.registration_token,
+        repo_url=payload.repo_url,
+        runner_name=payload.runner_name,
+        labels=payload.labels,
+    )
     return {"started": True, "supervisor_pid": process.pid, "log_path": RUNNER_SUPERVISOR_LOG}
 
 

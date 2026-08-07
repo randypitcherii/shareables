@@ -15,7 +15,14 @@ command:
 env:
   - name: DATABRICKS_OBO_ENABLED
     value: "true"
+  # Single worker ON PURPOSE: the startup hook auto-starts the runner supervisor
+  # when GH_RUNNER_PAT is present, and multiple workers would race to spawn it.
   - name: UVICORN_WORKERS
-    value: "2"
+    value: "1"
   - name: SESSION_STATE_DB_PATH
     value: "/tmp/gha_runner_spike_session_state.sqlite3"
+  # Fine-grained PAT (repo administration:write) from a Databricks secret app
+  # resource (see databricks.yml). Lets the supervisor mint its own registration
+  # tokens: app restarts self-heal with zero manual steps.
+  - name: GH_RUNNER_PAT
+    valueFrom: gh-runner-pat

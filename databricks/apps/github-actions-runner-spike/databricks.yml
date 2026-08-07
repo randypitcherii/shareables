@@ -5,13 +5,31 @@ variables:
   app_name:
     description: Databricks app name.
     default: gha-runner-spike
+  github_pat_secret_scope:
+    description: >-
+      Databricks secret scope holding the fine-grained GitHub PAT (repo
+      administration:write) the runner supervisor uses to mint registration
+      tokens. Create it before deploying:
+        databricks secrets create-scope gha_runner
+        databricks secrets put-secret gha_runner github_pat
+    default: gha_runner
+  github_pat_secret_key:
+    description: Secret key within the scope that holds the GitHub PAT.
+    default: github_pat
 
 resources:
   apps:
     gha_runner_app:
       name: ${var.app_name}
       source_code_path: .
-      description: "Spike: self-hosted GitHub Actions runner inside a Databricks App"
+      description: "Self-hosted GitHub Actions runner inside a Databricks App (dbt CI)"
+      resources:
+        - name: gh-runner-pat
+          description: Fine-grained GitHub PAT for minting runner registration tokens.
+          secret:
+            scope: ${var.github_pat_secret_scope}
+            key: ${var.github_pat_secret_key}
+            permission: READ
 
 targets:
   dev:

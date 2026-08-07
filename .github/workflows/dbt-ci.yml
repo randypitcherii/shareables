@@ -1,0 +1,154 @@
+# dbt CI for databricks/demos/dbt — builds every PR into a disposable, per-PR,
+# per-build schema and tears it down afterward.
+#
+# WHY self-hosted: the target workspace has IP access lists, so GitHub-hosted
+# runners can't reach it. The runner is a Databricks App
+# (databricks/apps/github-actions-runner-spike/) INSIDE the workspace: it
+# long-polls GitHub over outbound HTTPS, and every Databricks API call
+# originates in-network. CI steps inherit the app service principal's OAuth
+# credentials from the container environment, so this workflow needs ZERO
+# GitHub-side Databricks secrets.
+#
+# SECURITY — self-hosted runner on a public repo. Fork PRs must never reach the
+# runner (they would execute arbitrary code inside the workspace as the app SP):
+#   * the job-level `if` requires the PR head to live in THIS repo (fork PRs are
+#     skipped before any job is scheduled), plus a repo + actor guard;
+#   * repo Actions settings additionally require approval for outside collaborators.
+#
+# Isolation model (see databricks/demos/dbt/THE_ONE_TRUE_WAY.md #6):
+# `generate_schema_name` uses `default_schema` UNMODIFIED in the `ci_testing`
+# environment, so injecting a build-scoped schema name gives every build a fully
+# isolated, disposable namespace. The name carries the PR number AND run number,
+# so a re-run after a fix never collides with the previous attempt.
+#
+# Slim CI: the production DAB job captures dbt state (manifest.json) to a UC
+# volume. When CI can download it, only changed models and their descendants are
+# built (`state:modified+`), deferring unmodified parents to production
+# relations. First run / missing state falls back to a full build.
+name: dbt CI
+
+on:
+  pull_request:
+    paths:
+      - "databricks/demos/dbt/**"
+      - ".github/workflows/dbt-ci.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+# cancel superseded runs on the same PR
+concurrency:
+  group: dbt-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Fork PRs must never be scheduled onto the in-workspace runner. The head-repo
+    # check is the load-bearing guard; the repo + actor checks are belt-and-suspenders.
+    if: >-
+      github.repository == 'randypitcherii/shareables' &&
+      github.actor == 'randypitcherii' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, databricks-app]
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: databricks/demos/dbt
+    env:
+      # --- environment selection -------------------------------------------
+      DBT_DEPLOYMENT_ENVIRONMENT: ci_testing
+      # per-PR, per-build schema -> fully isolated, disposable namespace
+      # (workflow_dispatch runs get pr0)
+      DBT_DEFAULT_SCHEMA: dbt_rpw_dbt_databricks_reference_pr${{ github.event.pull_request.number || 0 }}_build${{ github.run_number }}
+
+      # --- connection (non-secret; overridable via repo Actions variables) --
+      DBT_DEFAULT_CATALOG: ${{ vars.DBT_DEFAULT_CATALOG || 'fe_randy_pitcher_workspace_catalog' }}
+      # http_path is RESOLVED AT RUNTIME by warehouse name (nothing internal
+      # stored on the GitHub side) -- see the "Resolve SQL warehouse" step.
+      DBT_WAREHOUSE_NAME: ${{ vars.DBT_WAREHOUSE_NAME || 'dbt_wh' }}
+
+      # --- production state location (enables Slim CI) ----------------------
+      # The same path the production DAB job writes its --target-path to.
+      DBT_PROD_STATE_PATH: ${{ vars.DBT_PROD_STATE_PATH || 'dbfs:/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/state/latest' }}
+
+      DATABRICKS_CLI_VERSION: "1.3.0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app container injects DATABRICKS_HOST / DATABRICKS_CLIENT_ID /
+      # DATABRICKS_CLIENT_SECRET (the app SP's M2M OAuth credentials). Map them to
+      # the dbt spellings the committed profiles.yml expects. No GitHub secrets.
+      - name: Adopt app service principal credentials for dbt
+        run: |
+          : "${DATABRICKS_HOST:?not running on the Databricks App runner}"
+          : "${DATABRICKS_CLIENT_ID:?app SP client id missing from container env}"
+          : "${DATABRICKS_CLIENT_SECRET:?app SP client secret missing from container env}"
+          # public repo => public logs; make sure the secret can never be printed
+          echo "::add-mask::$DATABRICKS_CLIENT_SECRET"
+          echo "DBT_HOST=${DATABRICKS_HOST#https://}" >> "$GITHUB_ENV"
+          echo "DBT_CLIENT_ID=$DATABRICKS_CLIENT_ID" >> "$GITHUB_ENV"
+          # DBT_ENV_SECRET_ prefix => dbt masks it in logs and forbids it outside profiles.yml
+          echo "DBT_ENV_SECRET_DATABRICKS_CLIENT_SECRET=$DATABRICKS_CLIENT_SECRET" >> "$GITHUB_ENV"
+
+      # No root in the app container, so install the CLI into $HOME and cache it
+      # across jobs (the container filesystem persists until the app restarts).
+      - name: Install Databricks CLI (user-space, cached)
+        run: |
+          CLI_DIR="$HOME/.dbx-cli/$DATABRICKS_CLI_VERSION"
+          if [ ! -x "$CLI_DIR/databricks" ]; then
+            mkdir -p "$CLI_DIR"
+            curl -fsSL -o "$CLI_DIR/cli.tar.gz" \
+              "https://github.com/databricks/cli/releases/download/v${DATABRICKS_CLI_VERSION}/databricks_cli_${DATABRICKS_CLI_VERSION}_linux_amd64.tar.gz"
+            tar -xzf "$CLI_DIR/cli.tar.gz" -C "$CLI_DIR"
+            rm -f "$CLI_DIR/cli.tar.gz"
+          fi
+          echo "$CLI_DIR" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: |
+          command -v uv >/dev/null || { curl -LsSf https://astral.sh/uv/install.sh | sh; echo "$HOME/.local/bin" >> "$GITHUB_PATH"; export PATH="$HOME/.local/bin:$PATH"; }
+          uv sync
+          uv run dbt deps --profiles-dir .
+
+      # Resolve http_path from the warehouse NAME at runtime, in-workspace. This
+      # keeps the internal warehouse id/path out of GitHub entirely (the name
+      # `dbt_wh` is already public in databricks.yml's lookup).
+      - name: Resolve SQL warehouse http_path
+        run: |
+          DBT_HTTP_PATH=$(databricks warehouses list -o json | python3 -c '
+          import json, os, sys
+          data = json.load(sys.stdin)
+          warehouses = data.get("warehouses", data) if isinstance(data, dict) else data
+          name = os.environ["DBT_WAREHOUSE_NAME"]
+          matches = [w["id"] for w in warehouses if w.get("name") == name]
+          if not matches:
+              sys.exit(f"no SQL warehouse named {name!r} visible to the CI service principal")
+          print(f"/sql/1.0/warehouses/{matches[0]}")
+          ')
+          echo "DBT_HTTP_PATH=$DBT_HTTP_PATH" >> "$GITHUB_ENV"
+
+      - name: Download production state (enables Slim CI)
+        continue-on-error: true
+        run: |
+          databricks fs cp "$DBT_PROD_STATE_PATH/manifest.json" prod_state/manifest.json
+
+      - name: Build & test (isolated CI schema)
+        run: |
+          echo "Building into schema: $DBT_DEFAULT_SCHEMA"
+          if [ -f prod_state/manifest.json ]; then
+            echo "Production manifest found -> Slim CI: build changed models + descendants, defer the rest to prod"
+            uv run dbt build -s state:modified+ --defer --state prod_state \
+              --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+          else
+            echo "No production manifest -> full build"
+            uv run dbt build --target ci --profiles-dir . --vars '{usage_history_days: 7}'
+          fi
+
+      # Tear down the ephemeral schema. No `|| true`: if the drop fails we want a red
+      # step, because silent failures here mean schemas pile up in the catalog.
+      - name: Drop ephemeral CI schema
+        if: always()
+        run: |
+          uv run dbt run-operation drop_schema --args "{schema: $DBT_DEFAULT_SCHEMA}" --target ci --profiles-dir .

@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Supervises an ephemeral GitHub Actions runner inside the Databricks App container.
 #
-# Each cycle: (re)register with --ephemeral, run one job, repeat. A registration
-# token is valid for ~1 hour and may register multiple runners, so a manually
-# pasted token keeps the loop self-healing for that window. A production setup
-# would mint fresh tokens from a GitHub App or fine-grained PAT instead.
+# Each cycle: (re)register with --ephemeral, run one job, repeat.
 #
-# Required env:
-#   GH_RUNNER_REG_TOKEN  registration token from
-#                        POST /repos/{owner}/{repo}/actions/runners/registration-token
+# Auth — provide ONE of:
+#   GH_RUNNER_PAT        fine-grained PAT (repo `administration:write`) stored in a
+#                        Databricks secret and injected into the app env. The
+#                        supervisor mints a FRESH registration token every cycle,
+#                        so the loop is fully self-healing across app restarts and
+#                        token expiry. This is the production mode.
+#   GH_RUNNER_REG_TOKEN  pre-minted registration token from
+#                        POST /repos/{owner}/{repo}/actions/runners/registration-token.
+#                        Valid ~1 hour and reusable within that window; when it
+#                        expires the supervisor exits. Spike/manual mode.
+#
 # Optional env:
 #   GH_RUNNER_REPO_URL   default https://github.com/randypitcherii/shareables
 #   GH_RUNNER_NAME       default gha-runner-spike
@@ -23,9 +28,24 @@ RUNNER_LABELS="${GH_RUNNER_LABELS:-databricks-app}"
 RUNNER_VERSION="${GH_RUNNER_VERSION:-2.335.1}"
 RUNNER_HOME="${RUNNER_HOME:-/home/app/gha-runner}"
 ICU_HOME="${ICU_HOME:-/home/app/icu}"
-REG_TOKEN="${GH_RUNNER_REG_TOKEN:?GH_RUNNER_REG_TOKEN is required}"
+RUNNER_PAT="${GH_RUNNER_PAT:-}"
+REG_TOKEN="${GH_RUNNER_REG_TOKEN:-}"
+REPO_SLUG="${REPO_URL#https://github.com/}"
 
 log() { printf '%s supervisor: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+
+if [ -z "${RUNNER_PAT}" ] && [ -z "${REG_TOKEN}" ]; then
+  log "one of GH_RUNNER_PAT or GH_RUNNER_REG_TOKEN is required"
+  exit 1
+fi
+
+mint_registration_token() {
+  curl -fsS -X POST \
+    -H "Authorization: Bearer ${RUNNER_PAT}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${REPO_SLUG}/actions/runners/registration-token" \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+}
 
 # --- one-time bootstrap: runner binary + libicu (image has none, and we are not root) ---
 if [ ! -x "${RUNNER_HOME}/run.sh" ]; then
@@ -52,6 +72,14 @@ cd "${RUNNER_HOME}"
 
 # --- supervisor loop: ephemeral runners exit after one job, so re-register each cycle ---
 while true; do
+  if [ -n "${RUNNER_PAT}" ]; then
+    if ! REG_TOKEN=$(mint_registration_token); then
+      log "failed to mint a registration token (GitHub API unreachable or PAT invalid) — retrying in 60s"
+      sleep 60
+      continue
+    fi
+  fi
+
   rm -f .runner .credentials .credentials_rsaparams
   log "registering ephemeral runner '${RUNNER_NAME}' against ${REPO_URL}"
   if ! ./config.sh \
@@ -62,6 +90,11 @@ while true; do
       --ephemeral \
       --unattended \
       --replace; then
+    if [ -n "${RUNNER_PAT}" ]; then
+      log "registration failed — retrying with a fresh token in 60s"
+      sleep 60
+      continue
+    fi
     log "registration failed (token likely expired after ~1h) — exiting"
     exit 1
   fi

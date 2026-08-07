@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+import app as app_module
 from app import SESSION_CWD_STORE, SESSION_STATE_DB_PATH, SessionCwdStore, app
 
 
@@ -221,3 +222,56 @@ def test_runner_status_reports_process_state() -> None:
 def test_runner_start_rejects_short_token() -> None:
     response = client.post("/api/v1/runner/start", json={"registration_token": "short"})
     assert response.status_code == 422
+
+
+def test_runner_start_requires_token_or_pat(monkeypatch) -> None:
+    monkeypatch.delenv("GH_RUNNER_PAT", raising=False)
+    monkeypatch.setattr(app_module, "_pgrep", lambda pattern: [])
+    response = client.post("/api/v1/runner/start", json={})
+    assert response.status_code == 400
+    assert "GH_RUNNER_PAT" in response.json()["detail"]
+
+
+def test_runner_start_without_token_uses_pat_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("GH_RUNNER_PAT", "github_pat_dummy")
+    monkeypatch.setattr(app_module, "_pgrep", lambda pattern: [])
+    spawned: dict = {}
+
+    class FakeProcess:
+        pid = 4242
+
+    def fake_spawn(registration_token, repo_url, runner_name, labels):
+        spawned.update(
+            registration_token=registration_token,
+            repo_url=repo_url,
+            runner_name=runner_name,
+            labels=labels,
+        )
+        return FakeProcess()
+
+    monkeypatch.setattr(app_module, "_spawn_supervisor", fake_spawn)
+    response = client.post("/api/v1/runner/start", json={})
+    assert response.status_code == 200
+    assert response.json()["supervisor_pid"] == 4242
+    # no token in the request: the supervisor mints its own from GH_RUNNER_PAT
+    assert spawned["registration_token"] is None
+
+
+def test_runner_autostart_noop_without_pat(monkeypatch) -> None:
+    monkeypatch.delenv("GH_RUNNER_PAT", raising=False)
+    calls: list = []
+    monkeypatch.setattr(app_module, "_spawn_supervisor", lambda **kwargs: calls.append(kwargs))
+    app_module.runner_autostart()
+    assert calls == []
+
+
+def test_runner_autostart_spawns_with_pat(monkeypatch) -> None:
+    monkeypatch.setenv("GH_RUNNER_PAT", "github_pat_dummy")
+    monkeypatch.setattr(app_module, "_pgrep", lambda pattern: [])
+    calls: list = []
+    monkeypatch.setattr(
+        app_module, "_spawn_supervisor", lambda **kwargs: calls.append(kwargs) or object()
+    )
+    app_module.runner_autostart()
+    assert len(calls) == 1
+    assert calls[0]["registration_token"] is None

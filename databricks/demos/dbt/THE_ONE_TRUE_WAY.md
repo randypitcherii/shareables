@@ -102,7 +102,9 @@ here: CI defers to it (`dbt build -s state:modified+ --defer --state ...`) so a 
 only changed models and their descendants, falling back to a full build when state is
 unavailable.
 
-- **In this repo:** `ci/github-actions-dbt-ci.yml.example` + the `drop_schema` run-operation.
+- **In this repo:** `.github/workflows/dbt-ci.yml` (live, runs on a self-hosted runner
+  inside a Databricks App to reach the IP-restricted workspace) + the `drop_schema`
+  run-operation, with `.github/workflows/dbt-ci-sweep.yml` sweeping leaked schemas weekly.
 
 ### 7. Least privilege, per environment
 Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated M2M service principals,

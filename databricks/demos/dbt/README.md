@@ -244,8 +244,8 @@ single injected value.
 
 # CI/CD
 
-See [`ci/github-actions-dbt-ci.yml.example`](ci/github-actions-dbt-ci.yml.example) for a
-GitHub Actions workflow that builds each PR into its own disposable schema by setting:
+CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
+builds and tests every PR that touches this project, into its own disposable schema:
 
 ```bash
 DBT_DEPLOYMENT_ENVIRONMENT=ci_testing
@@ -255,6 +255,16 @@ DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NU
 Because the schema name carries the PR number **and** the build number, a re-run after a fix
 builds fully isolated from the previous attempt.
 
+**Where it runs.** The target workspace has IP access lists, so GitHub-hosted runners can't
+reach it. CI runs on a **self-hosted runner inside a Databricks App**
+([`databricks/apps/github-actions-runner-spike/`](../../apps/github-actions-runner-spike/)):
+the runner long-polls GitHub over outbound HTTPS, and all workspace API traffic originates
+in-network. CI steps inherit the app service principal's M2M OAuth credentials from the
+container environment, so the workflow needs **zero Databricks secrets in GitHub** — even
+the SQL warehouse `http_path` is resolved at runtime by warehouse name. Because this is a
+public repo, the workflow refuses to schedule for fork PRs (job-level head-repo + actor
+guards); see the workflow header for the full security model.
+
 **Slim CI.** The production job captures dbt state (`manifest.json`) to the artifacts volume,
 and the CI workflow downloads it to build **only changed models and their descendants**
 (`dbt build -s state:modified+ --defer --state prod_state`), deferring unmodified parents to
@@ -262,7 +272,9 @@ the production relations. If the state download fails (first run, missing permis
 falls back to a full build.
 
 **Hygiene.** The per-PR teardown drops the ephemeral schema and is *not* allowed to fail
-silently. Cancelled runs can still leak schemas, so a sweep run-operation exists for that:
+silently. Cancelled runs can still leak schemas, so
+[`.github/workflows/dbt-ci-sweep.yml`](../../../.github/workflows/dbt-ci-sweep.yml) runs the
+sweep run-operation weekly. The same sweep can be run by hand:
 
 ```bash
 # dry run by default; pass dry_run: false to actually drop
