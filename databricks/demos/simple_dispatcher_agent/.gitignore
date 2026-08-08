@@ -1,7 +1,7 @@
-# uv.lock is gitignored because `uv sync` resolves against the Databricks
-# internal PyPI proxy (pypi-proxy.dev.databricks.com), which is not reachable
-# outside the Databricks corporate network. Committing it would break installs
-# for all non-Databricks users. Run `uv sync` to regenerate it in your own env.
+# uv.lock is gitignored because on a corporate-networked machine `uv sync`
+# resolves against an internal PyPI mirror rather than pypi.org. Committing the
+# lockfile would pin those unreachable URLs and break installs for everyone
+# outside that network. Run `uv sync` to regenerate it in your own environment.
 uv.lock
 
 # Local secrets — never commit the real .env (the committed file is .env.template).
