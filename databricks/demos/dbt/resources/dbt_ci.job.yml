@@ -22,7 +22,7 @@ resources:
       # Short human-readable name on purpose (the Jobs UI is cramped); the
       # owning repo / env / deploy date live in tags, and dev deploys get the
       # bundle's isolation name-prefix automatically.
-      name: dbt reference CI
+      name: dbt CI
       description: >-
         Per-PR dbt build into a disposable schema (Slim CI against prod state,
         --fail-fast), then ci_cleanup drops the schema and sweeps stale ones.

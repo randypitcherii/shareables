@@ -23,10 +23,10 @@ variables:
       warehouse: dbt_wh
   ci_trigger_principal:
     description: >-
-      Application ID of the principal allowed to trigger the CI job (the GitHub
-      Actions runner app's auto-created service principal). It gets
-      CAN_MANAGE_RUN on the CI job and nothing else -- dbt itself runs as the
-      job's run_as identity, so the trigger principal needs zero UC grants.
+      Application ID of the principal allowed to trigger the CI and CD jobs
+      (the GitHub Actions runner app's auto-created service principal). It gets
+      CAN_MANAGE_RUN on those two jobs and nothing else -- dbt itself runs as
+      each job's run_as identity, so the trigger principal needs zero UC grants.
     default: ba28de80-7216-4294-9134-7e5ae7a85979
   deployed_at:
     description: >-
@@ -73,14 +73,31 @@ targets:
     # run_as lives on the JOB (not the target) because bundles containing apps reject
     # a target-level run_as that differs from the deployer -- apps always run as
     # their own auto-created service principal.
+    #
+    # The production SP holds CAN_MANAGE on every bundle resource because the
+    # dbt CD job redeploys this bundle AS that SP on merge (self-deployment):
+    # it must be able to update the very jobs it is defined in.
+    permissions:
+      - service_principal_name: ${var.production_service_principal}
+        level: CAN_MANAGE
+      # keep the human deployer explicitly on the ACL too, so manual deploys
+      # and SP-driven CD deploys never strip each other's access
+      - user_name: randy.pitcher@databricks.com
+        level: CAN_MANAGE
     resources:
       jobs:
         dbt_production_daily:
           run_as:
             service_principal_name: ${var.production_service_principal}
-        # CI runs as the same SP: run_as is the ONLY auth config CI needs --
-        # the task resolves a runtime token from its ambient credentials.
+        # CI/CD/hourly run as the same SP: run_as is the ONLY auth config they
+        # need -- each task resolves a runtime token from ambient credentials.
         dbt_ci:
+          run_as:
+            service_principal_name: ${var.production_service_principal}
+        dbt_cd:
+          run_as:
+            service_principal_name: ${var.production_service_principal}
+        dbt_hourly:
           run_as:
             service_principal_name: ${var.production_service_principal}
     workspace:

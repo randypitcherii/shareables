@@ -211,6 +211,6 @@ All three go/no-go conditions are implemented for the dbt CI use case:
 3. **Dedicated least-privilege SP** — the runner only *triggers* the dbt CI Databricks
    job (dbt executes there as the job's `run_as` SP, on serverless compute, against code
    the job downloads itself). The app SP therefore needs exactly one grant:
-   CAN_MANAGE_RUN on the `rpw-dbt-databricks-reference CI` job. Zero UC grants, and PR
+   CAN_MANAGE_RUN on the `dbt CI` and `dbt CD` jobs. Zero UC grants, and PR
    code never executes in this container — which is also what makes the PAT exposure
    (previous caveat) tolerable.

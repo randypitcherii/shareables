@@ -22,15 +22,22 @@ MODES
                          schema and sweeping stale ones. A FAILED build leaves
                          its schema up for debugging; the next green run's
                          sweep reclaims it.
+  cd                     continuous deployment, on merge to production: download
+                         the repo tarball at --git-ref, `databricks bundle deploy
+                         -t prod` (the DAB components redeploy themselves, as
+                         this job's run_as SP), then slim-build only what changed
+                         (state:modified+ --fail-fast vs captured prod state;
+                         full build when no state exists) and refresh the state.
   prod-source-freshness  fail the run when system.billing is stale.
-  prod-build             build the daily-tagged models, capture state to the
-                         artifacts volume.
+  prod-build             build the models selected by --build-select (a cadence
+                         tag: tag:daily, tag:hourly); capture state to the
+                         artifacts volume when --artifacts-volume is given.
   prod-docs              regenerate dbt docs into the artifacts volume.
 
-CI modes fetch the project at an arbitrary git ref via GitHub's tarball
+CI and CD modes fetch the project at an arbitrary git ref via GitHub's tarball
 endpoint (public repo, no git binary needed in the serverless sandbox).
-Prod modes copy the bundle-synced workspace files this script deployed with,
-so prod always runs exactly what the bundle deployed.
+The other prod modes copy the bundle-synced workspace files this script
+deployed with, so scheduled prod runs execute exactly what the bundle deployed.
 """
 
 from __future__ import annotations
@@ -46,6 +53,7 @@ import urllib.request
 from pathlib import Path
 
 REPO_PROJECT_SUBDIR = "databricks/demos/dbt"
+DATABRICKS_CLI_VERSION = "1.3.0"
 
 
 def log(message: str) -> None:
@@ -57,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["ci-build", "prod-source-freshness", "prod-build", "prod-docs"],
+        choices=["ci-build", "cd", "prod-source-freshness", "prod-build", "prod-docs"],
     )
     parser.add_argument("--warehouse-id", required=True)
     parser.add_argument("--catalog", required=True)
@@ -75,6 +83,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--usage-history-days", default="", help="override DBT_USAGE_HISTORY_DAYS")
+    parser.add_argument(
+        "--build-select",
+        default="tag:daily",
+        help="dbt selector for prod-build (a cadence tag: tag:daily, tag:hourly)",
+    )
     return parser.parse_args()
 
 
@@ -139,6 +152,49 @@ def copy_project_from_workspace(project_dir: str, workdir: Path) -> Path:
     return project
 
 
+def install_databricks_cli(workdir: Path) -> Path:
+    """Download the standalone Databricks CLI (the sandbox has none) for the
+    `cd` mode's bundle deploy. Returns the binary path."""
+    url = (
+        "https://github.com/databricks/cli/releases/download/"
+        f"v{DATABRICKS_CLI_VERSION}/databricks_cli_{DATABRICKS_CLI_VERSION}_linux_amd64.tar.gz"
+    )
+    cli_dir = workdir / "cli"
+    cli_dir.mkdir(exist_ok=True)
+    tarball = cli_dir / "cli.tar.gz"
+    log(f"downloading {url}")
+    urllib.request.urlretrieve(url, tarball)
+    with tarfile.open(tarball) as archive:
+        archive.extractall(cli_dir)
+    return cli_dir / "databricks"
+
+
+def bundle_deploy_prod(project: Path, workdir: Path) -> None:
+    """Redeploy this bundle's prod target as the job's run_as identity. The
+    CLI gets a minimal, explicitly token-authed env: the sandbox's ambient
+    auth vars would otherwise make it complain about conflicting auth types."""
+    from datetime import date
+
+    from databricks.sdk import WorkspaceClient
+
+    client = WorkspaceClient()
+    token = client.config.authenticate()["Authorization"].removeprefix("Bearer ")
+    cli = install_databricks_cli(workdir)
+    cli_env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(workdir / "cli_home"),
+        "DATABRICKS_HOST": client.config.host,
+        "DATABRICKS_TOKEN": token,
+        "DATABRICKS_AUTH_TYPE": "pat",
+    }
+    Path(cli_env["HOME"]).mkdir(exist_ok=True)
+    run(
+        [str(cli), "bundle", "deploy", "-t", "prod", f"--var=deployed_at={date.today().isoformat()}"],
+        project,
+        cli_env,
+    )
+
+
 def run(cmd: list[str], cwd: Path, env: dict[str, str]) -> None:
     log(f"$ {' '.join(cmd)}")
     subprocess.run(cmd, cwd=cwd, env=env, check=True)
@@ -177,7 +233,7 @@ def main() -> None:
         # host under DIFFERENT sandbox users, so a fixed /tmp path 403s for
         # whoever arrives second
         env["UV_CACHE_DIR"] = str(workdir / "uv-cache")
-        if args.mode.startswith("ci-"):
+        if args.mode.startswith("ci-") or args.mode == "cd":
             project = fetch_project_from_github(args.github_repo, args.git_ref, workdir)
         else:
             project = copy_project_from_workspace(args.project_dir, workdir)
@@ -207,22 +263,26 @@ def main() -> None:
                 project,
                 env,
             )
+        elif args.mode == "cd":
+            # deploy first: the merged SHA's job/schema/volume/app definitions
+            # go live before any model builds against them
+            bundle_deploy_prod(project, workdir)
+            build = ["build", "--fail-fast", "--target", "prod"]
+            if args.artifacts_volume:
+                # refresh captured state so the next CI/CD diffs against what
+                # is now live (the manifest describes the whole project at the
+                # merged SHA regardless of how few models this run builds)
+                build += ["--target-path", f"{args.artifacts_volume}/state/latest"]
+            if try_download_prod_manifest(args.artifacts_volume, project):
+                build += ["-s", "state:modified+", "--state", "prod_state"]
+            dbt(build, project, env)
         elif args.mode == "prod-source-freshness":
             dbt(["source", "freshness", "--target", "prod"], project, env)
         elif args.mode == "prod-build":
-            dbt(
-                [
-                    "build",
-                    "-s",
-                    "tag:daily",
-                    "--target",
-                    "prod",
-                    "--target-path",
-                    f"{args.artifacts_volume}/state/latest",
-                ],
-                project,
-                env,
-            )
+            build = ["build", "-s", args.build_select, "--target", "prod"]
+            if args.artifacts_volume:
+                build += ["--target-path", f"{args.artifacts_volume}/state/latest"]
+            dbt(build, project, env)
         elif args.mode == "prod-docs":
             dbt(
                 [

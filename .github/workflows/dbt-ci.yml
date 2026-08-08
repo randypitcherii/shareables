@@ -1,5 +1,5 @@
 # dbt CI for databricks/demos/dbt — GitHub is only the GATE and the TRIGGER.
-# dbt itself executes in the `rpw-dbt-databricks-reference CI` Databricks job
+# dbt itself executes in the `dbt CI` Databricks job
 # (databricks/demos/dbt/resources/dbt_ci.job.yml): defined, unscheduled,
 # parameterized, serverless. This workflow passes job parameters and mirrors
 # the result as the PR check.
@@ -58,7 +58,7 @@ jobs:
     runs-on: [self-hosted, databricks-app]
     timeout-minutes: 45
     env:
-      DBT_CI_JOB_NAME: dbt reference CI
+      DBT_CI_JOB_NAME: dbt CI
       # per-PR, per-build schema -> fully isolated, disposable namespace
       # (workflow_dispatch runs get pr0)
       CI_SCHEMA: dbt_rpw_dbt_databricks_reference_pr${{ github.event.pull_request.number || 0 }}_build${{ github.run_number }}

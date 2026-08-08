@@ -4,7 +4,7 @@
     2. sweep stale CI schemas (prefix-matched, older than `older_than_days`)
        leaked by earlier failed or cancelled runs
 
-  House rule (THE_ONE_TRUE_WAY #11): every destructive run-operation takes
+  House rule (THE_ONE_TRUE_WAY #13): every destructive run-operation takes
   `dry_run` as its FINAL argument, defaulting to TRUE, and a dry run prints the
   exact statements a live run would execute. This is a debugging superpower:
   you can always see precisely what a cleanup WOULD do before letting it.
