@@ -154,10 +154,16 @@ def copy_project_from_workspace(project_dir: str, workdir: Path) -> Path:
 
 def install_databricks_cli(workdir: Path) -> Path:
     """Download the standalone Databricks CLI (the sandbox has none) for the
-    `cd` mode's bundle deploy. Returns the binary path."""
+    `cd` mode's bundle deploy. Returns the binary path.
+
+    Serverless hosts are a MIX of x86_64 and arm64 -- download for the arch
+    this run actually landed on, or execve fails with 'Exec format error'."""
+    import platform
+
+    arch = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "amd64"
     url = (
         "https://github.com/databricks/cli/releases/download/"
-        f"v{DATABRICKS_CLI_VERSION}/databricks_cli_{DATABRICKS_CLI_VERSION}_linux_amd64.tar.gz"
+        f"v{DATABRICKS_CLI_VERSION}/databricks_cli_{DATABRICKS_CLI_VERSION}_linux_{arch}.tar.gz"
     )
     cli_dir = workdir / "cli"
     cli_dir.mkdir(exist_ok=True)
