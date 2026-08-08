@@ -3,24 +3,30 @@
 # executes HERE, on serverless compute, so every CI log lives in the Jobs UI
 # next to production's.
 #
+# No mode switching: every run is the same single flow -- dbt build --fail-fast
+# (Slim CI deferral against prod state when available), then ONLY after a green
+# build the `ci_cleanup` run-operation with dry_run=False, which drops this
+# build's schema and sweeps stale ones from earlier failed/cancelled runs. A
+# failed build deliberately leaves its schema up for debugging.
+#
 # Auth: the job's run_as service principal (set in the prod target of
 # databricks.yml) IS the auth -- the task wrapper resolves a runtime token from
 # its ambient credentials. No OAuth client secret exists anywhere.
 #
 # The task downloads the repo tarball at `git_ref` (the PR head SHA), so PR
 # code executes here under the run_as SP -- never inside the GitHub runner's
-# container. Teardown of the disposable schema happens in-task (try/finally),
-# so even a cancelled GitHub workflow can't leak a schema; only cancelling the
-# Databricks run itself can, which the weekly `ci-sweep` mode mops up.
+# container.
 resources:
   jobs:
     dbt_ci:
-      name: rpw-dbt-databricks-reference CI
+      # Short human-readable name on purpose (the Jobs UI is cramped); the
+      # owning repo / env / deploy date live in tags, and dev deploys get the
+      # bundle's isolation name-prefix automatically.
+      name: dbt reference CI
       description: >-
         Per-PR dbt build into a disposable schema (Slim CI against prod state,
-        --fail-fast, in-task teardown). Triggered by GitHub Actions with job
-        parameters; never scheduled -- except the weekly ci-sweep trigger that
-        drops leaked CI schemas.
+        --fail-fast), then ci_cleanup drops the schema and sweeps stale ones.
+        Triggered by GitHub Actions with job parameters; never scheduled.
       max_concurrent_runs: 5
       permissions:
         - group_name: users
@@ -34,14 +40,12 @@ resources:
           default: main
         - name: ci_schema
           default: dbt_rpw_dbt_databricks_reference_pr0_build0
-        - name: mode
-          default: ci-build
       tasks:
         - task_key: dbt_ci
           spark_python_task:
             python_file: ../scripts/databricks_dbt_runner.py
             parameters:
-              - "--mode={{job.parameters.mode}}"
+              - "--mode=ci-build"
               - "--git-ref={{job.parameters.git_ref}}"
               - "--schema={{job.parameters.ci_schema}}"
               - "--warehouse-id=${var.warehouse_id}"

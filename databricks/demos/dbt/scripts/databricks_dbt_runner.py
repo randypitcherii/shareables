@@ -15,10 +15,13 @@ WHY THIS EXISTS (instead of the managed `dbt_task` type):
 
 MODES
   ci-build               download the repo tarball at --git-ref, build + test
-                         into the disposable --schema with --fail-fast, defer
-                         to prod state when the manifest is available (Slim CI),
-                         and ALWAYS drop the schema afterward (try/finally).
-  ci-sweep               drop leaked CI schemas older than 3 days.
+                         into the disposable --schema with --fail-fast (Slim CI
+                         deferral when the prod manifest is available), then --
+                         ONLY after a green build -- run the ci_cleanup
+                         run-operation with dry_run=False, dropping this build's
+                         schema and sweeping stale ones. A FAILED build leaves
+                         its schema up for debugging; the next green run's
+                         sweep reclaims it.
   prod-source-freshness  fail the run when system.billing is stale.
   prod-build             build the daily-tagged models, capture state to the
                          artifacts volume.
@@ -54,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["ci-build", "ci-sweep", "prod-source-freshness", "prod-build", "prod-docs"],
+        choices=["ci-build", "prod-source-freshness", "prod-build", "prod-docs"],
     )
     parser.add_argument("--warehouse-id", required=True)
     parser.add_argument("--catalog", required=True)
@@ -186,23 +189,18 @@ def main() -> None:
             build = ["build", "--fail-fast", "--target", "ci"]
             if try_download_prod_manifest(args.artifacts_volume, project):
                 build += ["-s", "state:modified+", "--defer", "--state", "prod_state"]
-            try:
-                dbt(build, project, env)
-            finally:
-                # teardown must run whether the build passed or failed; its own
-                # failure still fails the task (leaked schemas must be loud)
-                dbt(
-                    ["run-operation", "drop_schema", "--args", f"{{schema: {args.schema}}}", "--target", "ci"],
-                    project,
-                    env,
-                )
-        elif args.mode == "ci-sweep":
+            dbt(build, project, env)
+            # cleanup runs ONLY after a green build: a failed build leaves its
+            # schema up for debugging, and the sweep inside ci_cleanup (stale
+            # prefix-matched schemas) reclaims it on the next green run.
+            # dry_run=False because ci_cleanup, like every destructive
+            # run-operation here, defaults to a printing-only dry run.
             dbt(
                 [
                     "run-operation",
-                    "drop_stale_ci_schemas",
+                    "ci_cleanup",
                     "--args",
-                    "{prefix: dbt_rpw_dbt_databricks_reference_pr, older_than_days: 3, dry_run: false}",
+                    f"{{schema: {args.schema}, dry_run: False}}",
                     "--target",
                     "ci",
                 ],

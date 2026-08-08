@@ -258,7 +258,7 @@ builds fully isolated from the previous attempt.
 **Where it runs.** GitHub is only the gate and the trigger — dbt executes in the
 `rpw-dbt-databricks-reference CI` **Databricks job** ([`resources/dbt_ci.job.yml`](resources/dbt_ci.job.yml)):
 defined, unscheduled, parameterized, serverless. The workflow passes job parameters
-(`git_ref` = PR head SHA, `ci_schema`, `mode`) and polls the run. Why a job instead of
+(`git_ref` = PR head SHA, `ci_schema`) and polls the run. Why a job instead of
 running dbt on the runner:
 
 * **centralized logs** — every dbt run (CI and prod) lives in the Jobs UI;
@@ -289,16 +289,23 @@ and the CI workflow downloads it to build **only changed models and their descen
 the production relations. If the state download fails (first run, missing permissions), CI
 falls back to a full build.
 
-**Hygiene.** Teardown happens *inside the CI task* (try/finally), so even a cancelled
-GitHub workflow can't leak a schema — only cancelling the Databricks run itself can, and
-it is *not* allowed to fail silently. For that case,
-[`.github/workflows/dbt-ci-sweep.yml`](../../../.github/workflows/dbt-ci-sweep.yml)
-triggers the same CI job in `ci-sweep` mode weekly. The same sweep can be run by hand:
+**Hygiene.** Every CI run is one flow: `dbt build --fail-fast` followed — **only after a
+green build** — by the [`ci_cleanup`](macros/operations/ci_cleanup.sql) run-operation with
+`dry_run: False`, which drops this build's schema **and** sweeps stale CI schemas leaked
+by earlier failed or cancelled runs. A failed build deliberately leaves its schema up for
+debugging; the next green run reclaims it. Per the house rule (THE_ONE_TRUE_WAY #11),
+`ci_cleanup`'s final argument is `dry_run` defaulting to `true`, printing exactly what a
+live run would execute:
 
 ```bash
-# dry run by default; pass dry_run: false to actually drop
-uv run dbt run-operation drop_stale_ci_schemas \
-  --args '{prefix: dbt_rpw_dbt_databricks_reference_pr, older_than_days: 3, dry_run: false}' \
+# see what cleanup WOULD do (default: dry run)
+uv run dbt run-operation ci_cleanup \
+  --args '{schema: dbt_rpw_dbt_databricks_reference_pr42_build3}' \
+  --target ci --profiles-dir .
+
+# actually do it (what CI runs after a green build)
+uv run dbt run-operation ci_cleanup \
+  --args '{schema: dbt_rpw_dbt_databricks_reference_pr42_build3, dry_run: False}' \
   --target ci --profiles-dir .
 ```
 

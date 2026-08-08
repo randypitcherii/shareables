@@ -104,10 +104,11 @@ unavailable.
 
 - **In this repo:** GitHub Actions (`.github/workflows/dbt-ci.yml`, on a self-hosted
   runner inside a Databricks App — the workspace is IP-restricted) only *triggers* the
-  unscheduled `dbt_ci` Databricks job (`resources/dbt_ci.job.yml`) with the PR's git ref
-  and schema as job parameters; dbt executes serverlessly there with `--fail-fast`,
-  tears its schema down in-task, and all logs live in the Jobs UI. Leaked schemas from
-  cancelled runs get swept weekly (`ci-sweep` mode).
+  unscheduled `dbt reference CI` Databricks job (`resources/dbt_ci.job.yml`) with the
+  PR's git ref and schema as job parameters; dbt executes serverlessly there with
+  `--fail-fast`, then — only after a green build — the `ci_cleanup` run-operation drops
+  the schema and sweeps stale ones. Failed builds keep their schema for debugging; the
+  next green run reclaims it. All logs live in the Jobs UI.
 
 ### 7. Least privilege, per environment — and `run_as` IS the credential
 Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated service principals
@@ -174,3 +175,32 @@ This draft is synthesized alongside the reference implementation in this folder.
 code as the source of truth and this document as the explanation, until both are finalized
 together for publishing. (Internal source citations are tracked separately, outside this
 public repo.)
+
+### 11. Destructive run-operations end with `dry_run=true`
+Every macro that drops, deletes, or rewrites anything takes `dry_run` as its FINAL
+argument, defaulting to `true`. A dry run prints the exact statements a live run would
+execute — nothing more. Automation that means it passes `dry_run: False` explicitly.
+This is a debugging superpower: you can always ask "what WOULD this cleanup do?" against
+live state with zero risk, and no destructive operation ever runs by accident from a
+half-remembered CLI invocation.
+
+- **In this repo:** `macros/operations/ci_cleanup.sql`; CI calls it with `dry_run: False`
+  only after a green build.
+
+### 12. Short job names; ownership lives in tags
+The Databricks Jobs UI is cramped — job names are for humans scanning a list, so keep
+them short and readable (`dbt reference CI`, `dbt reference daily`). Everything a machine
+or an auditor needs goes in a standard tag set stamped on every bundle resource via
+`presets.tags`:
+
+| tag           | value                              | why                                        |
+|---------------|------------------------------------|--------------------------------------------|
+| `env`         | `dev` / `prod`                     | environment isolation, cleanup targeting    |
+| `repo`        | `randypitcherii/shareables`        | which repo owns (and can redeploy) this     |
+| `owner`       | deploying human (dev) / SP (prod)  | who to ask about it                         |
+| `bundle`      | `${bundle.name}`                   | groups all resources of one DAB             |
+| `deployed_at` | `YYYY-MM-DD` (passed by Makefile)  | human-readable staleness signal             |
+
+Dev deploys additionally get the bundle's automatic name-prefix isolation — that prefix
+convention stays. With `env` + `deployed_at` on everything, "find stale non-prod assets"
+becomes a tag filter instead of archaeology.

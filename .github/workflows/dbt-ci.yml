@@ -26,8 +26,10 @@
 #
 # Isolation model (see databricks/demos/dbt/THE_ONE_TRUE_WAY.md #6): the
 # injected `ci_schema` carries the PR number AND run number, so every build is
-# a fully isolated, disposable namespace and re-runs never collide. Teardown is
-# in-task (try/finally), so cancelled GitHub runs can't leak schemas.
+# a fully isolated, disposable namespace and re-runs never collide. After a
+# green build the task runs the ci_cleanup run-operation (dry_run=False): it
+# drops this build's schema AND sweeps stale ones from earlier failed or
+# cancelled runs. A failed build deliberately leaves its schema for debugging.
 name: dbt CI
 
 on:
@@ -56,7 +58,7 @@ jobs:
     runs-on: [self-hosted, databricks-app]
     timeout-minutes: 45
     env:
-      DBT_CI_JOB_NAME: rpw-dbt-databricks-reference CI
+      DBT_CI_JOB_NAME: dbt reference CI
       # per-PR, per-build schema -> fully isolated, disposable namespace
       # (workflow_dispatch runs get pr0)
       CI_SCHEMA: dbt_rpw_dbt_databricks_reference_pr${{ github.event.pull_request.number || 0 }}_build${{ github.run_number }}
@@ -97,8 +99,7 @@ jobs:
             \"job_id\": $JOB_ID,
             \"job_parameters\": {
               \"git_ref\": \"$GIT_REF\",
-              \"ci_schema\": \"$CI_SCHEMA\",
-              \"mode\": \"ci-build\"
+              \"ci_schema\": \"$CI_SCHEMA\"
             }
           }" | python3 -c 'import json, sys; print(json.load(sys.stdin)["run_id"])')
 

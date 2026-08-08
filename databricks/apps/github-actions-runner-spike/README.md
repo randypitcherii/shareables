@@ -22,8 +22,7 @@ You'll know you want this if you've felt one of these pains:
 
 This started as a spike for [#36](https://github.com/randypitcherii/shareables/issues/36)
 (enabling CI for `databricks/demos/dbt/`) and has since been **promoted to the real dbt CI
-runner**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml) and
-[`dbt-ci-sweep.yml`](../../../.github/workflows/dbt-ci-sweep.yml) run on it. The
+runner**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml) runs on it. The
 [go/no-go conditions](#gono-go-recommendation) from the spike (trigger hygiene, token
 automation, dedicated SP) are implemented — see [Hardening status](#hardening-status).
 
@@ -204,8 +203,7 @@ All three go/no-go conditions are implemented for the dbt CI use case:
 
 1. **Trigger hygiene** — `dbt-ci.yml` uses `pull_request`, but the job-level `if` refuses
    to schedule unless the PR head lives in this repo (fork PRs never touch the runner),
-   with repo + actor guards on top. `dbt-ci-sweep.yml` is `schedule`/`workflow_dispatch`
-   with the same guards.
+   with repo + actor guards on top.
 2. **Token automation** — the supervisor mints registration tokens from `GH_RUNNER_PAT`
    (a fine-grained PAT in a Databricks secret, wired via an app resource in
    `databricks.yml`), and the app auto-starts the supervisor at boot. Restarts and

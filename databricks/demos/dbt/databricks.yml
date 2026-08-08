@@ -28,6 +28,12 @@ variables:
       CAN_MANAGE_RUN on the CI job and nothing else -- dbt itself runs as the
       job's run_as identity, so the trigger principal needs zero UC grants.
     default: ba28de80-7216-4294-9134-7e5ae7a85979
+  deployed_at:
+    description: >-
+      Human-readable last-deploy date (YYYY-MM-DD) stamped as a tag on every
+      resource. The Makefile passes it automatically; a bare `bundle deploy`
+      leaves the honest default.
+    default: unknown
   production_service_principal:
     description: >-
       Application ID of the service principal that owns and runs production (looked up
@@ -51,9 +57,14 @@ targets:
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     presets:
+      # Standard tag set (see THE_ONE_TRUE_WAY #12): env + repo + owner +
+      # bundle + human-readable last-deploy date on every resource.
       tags:
         env: dev
+        repo: randypitcherii/shareables
         owner: ${workspace.current_user.userName}
+        bundle: ${bundle.name}
+        deployed_at: ${var.deployed_at}
 
   prod:
     mode: production
@@ -77,5 +88,10 @@ targets:
       # home directory, and (unlike /Workspace/Shared) not writable by all users.
       root_path: /Workspace/Users/${var.production_service_principal}/.bundle/${bundle.name}/${bundle.target}
     presets:
+      # Standard tag set (see THE_ONE_TRUE_WAY #12).
       tags:
         env: prod
+        repo: randypitcherii/shareables
+        owner: dbt_prod_sp
+        bundle: ${bundle.name}
+        deployed_at: ${var.deployed_at}
