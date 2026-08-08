@@ -1,0 +1,66 @@
+# CI job for the dbt project: DEFINED here, UNSCHEDULED, triggered per-PR by
+# GitHub Actions with job parameters. GitHub is only the gate + trigger; dbt
+# executes HERE, on serverless compute, so every CI log lives in the Jobs UI
+# next to production's.
+#
+# No mode switching: every run is the same single flow -- dbt build --fail-fast
+# (Slim CI deferral against prod state when available), then ONLY after a green
+# build the `ci_cleanup` run-operation with dry_run=False, which drops this
+# build's schema and sweeps stale ones from earlier failed/cancelled runs. A
+# failed build deliberately leaves its schema up for debugging.
+#
+# Auth: the job's run_as service principal (set in the prod target of
+# databricks.yml) IS the auth -- the task wrapper resolves a runtime token from
+# its ambient credentials. No OAuth client secret exists anywhere.
+#
+# The task downloads the repo tarball at `git_ref` (the PR head SHA), so PR
+# code executes here under the run_as SP -- never inside the GitHub runner's
+# container.
+resources:
+  jobs:
+    dbt_ci:
+      # Short human-readable name on purpose (the Jobs UI is cramped); the
+      # owning repo / env / deploy date live in tags, and dev deploys get the
+      # bundle's isolation name-prefix automatically.
+      name: dbt CI
+      description: >-
+        Per-PR dbt build into a disposable schema (Slim CI against prod state,
+        --fail-fast), then ci_cleanup drops the schema and sweeps stale ones.
+        Triggered by GitHub Actions with job parameters; never scheduled.
+      max_concurrent_runs: 5
+      permissions:
+        - group_name: users
+          level: CAN_VIEW
+        # The GitHub Actions runner app's SP may ONLY trigger runs of this job.
+        # It needs no UC grants at all: dbt runs as this job's run_as identity.
+        - service_principal_name: ${var.ci_trigger_principal}
+          level: CAN_MANAGE_RUN
+      parameters:
+        - name: git_ref
+          default: main
+        - name: ci_schema
+          default: dbt_rpw_dbt_databricks_reference_pr0_build0
+      tasks:
+        - task_key: dbt_ci
+          spark_python_task:
+            python_file: ../scripts/databricks_dbt_runner.py
+            parameters:
+              - "--mode=ci-build"
+              - "--git-ref={{job.parameters.git_ref}}"
+              - "--schema={{job.parameters.ci_schema}}"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.production_catalog}"
+              - "--artifacts-volume=/Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}"
+              - "--usage-history-days=7"
+          environment_key: dbt_via_uv
+          timeout_seconds: 2400
+      environments:
+        - environment_key: dbt_via_uv
+          spec:
+            environment_version: "3"
+            # dbt itself is NOT installed here on purpose: the wrapper runs
+            # `uv sync`, so pyproject.toml pins the dbt version for CI and prod
+            # alike -- upgrading dbt is a one-line PR, never a job edit.
+            dependencies:
+              - uv
+              - databricks-sdk

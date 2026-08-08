@@ -1,0 +1,45 @@
+# Hourly cadence job. Exists BEFORE any hourly model does, on purpose
+# (THE_ONE_TRUE_WAY #15): jobs select by frequency tag, so the first model that
+# adds `+tags: [hourly]` starts building here with ZERO job-definition changes
+# -- the job surface is static, the repo's contents decide what runs.
+#
+# The schedule ships PAUSED because a no-op hourly serverless run still costs
+# real spin-up minutes 24x/day. Unpausing when the first tag:hourly model lands
+# is a one-line change here, deployed automatically by dbt CD.
+resources:
+  jobs:
+    dbt_hourly:
+      name: dbt Hourly
+      description: Builds the hourly-tagged models. Paused until the first tag:hourly model exists.
+      permissions:
+        - group_name: users
+          level: CAN_VIEW
+        - service_principal_name: ${resources.apps.dbt_docs.service_principal_client_id}
+          level: CAN_VIEW
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      tasks:
+        - task_key: dbt_build_hourly
+          spark_python_task:
+            python_file: ../scripts/databricks_dbt_runner.py
+            parameters:
+              - "--mode=prod-build"
+              - "--build-select=tag:hourly"
+              # no --artifacts-volume: only dbt Daily and dbt CD capture state
+              - "--project-dir=${workspace.file_path}"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.production_catalog}"
+              - "--schema=${var.production_schema}"
+          environment_key: dbt_via_uv
+          timeout_seconds: 2400
+      environments:
+        - environment_key: dbt_via_uv
+          spec:
+            environment_version: "3"
+            # no dbt here on purpose -- `uv sync` installs the pyproject-pinned
+            # version inside the task
+            dependencies:
+              - uv
+              - databricks-sdk

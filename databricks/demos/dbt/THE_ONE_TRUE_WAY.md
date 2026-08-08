@@ -102,16 +102,25 @@ here: CI defers to it (`dbt build -s state:modified+ --defer --state ...`) so a 
 only changed models and their descendants, falling back to a full build when state is
 unavailable.
 
-- **In this repo:** `ci/github-actions-dbt-ci.yml.example` + the `drop_schema` run-operation.
+- **In this repo:** GitHub Actions (`.github/workflows/dbt-ci.yml`, on a self-hosted
+  runner inside a Databricks App — the workspace is IP-restricted) only *triggers* the
+  unscheduled `dbt CI` Databricks job (`resources/dbt_ci.job.yml`) with the
+  PR's git ref and schema as job parameters; dbt executes serverlessly there with
+  `--fail-fast`, then — only after a green build — the `ci_cleanup` run-operation drops
+  the schema and sweeps stale ones. Failed builds keep their schema for debugging; the
+  next green run reclaims it. All logs live in the Jobs UI.
 
-### 7. Least privilege, per environment
-Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated M2M service principals,
-credentials only ever in the runtime's secret store. No shared "god" token. Production
-deployments must not run as the deploying human either: the DAB's prod target sets
-`run_as` to a dedicated service principal and deploys to a shared workspace path, so
-production survives people changing teams.
+### 7. Least privilege, per environment — and `run_as` IS the credential
+Dev = SSO U2M as the human (no stored secret). CI/prod = dedicated service principals
+assigned as the Databricks job's `run_as` identity: the task resolves a short-lived token
+from its ambient runtime credentials, so **no OAuth client secret is ever provisioned,
+stored, or rotated** — there is nothing to leak and nothing to expire. No shared "god"
+token. Production deployments must not run as the deploying human either: the DAB's prod
+target sets `run_as` to a dedicated service principal and deploys to a shared workspace
+path, so production survives people changing teams.
 
-- **In this repo:** `run_as` + `/Workspace/Shared` root path in `databricks.yml` (prod target).
+- **In this repo:** `run_as` + a root path under the production SP's own workspace folder
+  in `databricks.yml` (prod target).
 
 ### 8. Raw/source data is read-only and shared across environments
 Every environment reads the SAME upstream sources; only the outputs are namespaced. Dev
@@ -135,12 +144,13 @@ fear.
 
 ### 11. Automate warehouse hygiene as run-operations
 Dropping stale CI schemas, empty schemas, old relations — make these `dbt run-operation`
-macros, not manual cleanup. Per-PR teardown must fail loudly (a swallowed drop means
-schemas silently pile up), and a scheduled sweep catches what teardown misses (cancelled
-runs, runner deaths).
+macros, not manual cleanup. Cleanup must fail loudly (a swallowed drop means schemas
+silently pile up), and it must also reclaim what one-shot teardown misses (cancelled
+runs, runner deaths): here, every green CI build's cleanup also sweeps stale schemas
+left by earlier failed or cancelled builds.
 
-- **In this repo:** `macros/operations/drop_schema.sql` (per-PR teardown) +
-  `macros/operations/drop_stale_ci_schemas.sql` (scheduled sweep, dry-run by default).
+- **In this repo:** `macros/operations/ci_cleanup.sql` — drops the current build's schema
+  AND sweeps stale prefix-matched ones, dry-run by default (see #13).
 
 ### 12. Version-control everything; let dbt push docs + lineage + grants into Unity Catalog
 All SQL in git; `persist_docs` pushes model/column descriptions into UC so the catalog is
@@ -149,6 +159,49 @@ of a manual GRANT someone forgets.
 
 - **In this repo:** `+grants` on the marts layer in `dbt_project.yml` — `SELECT` to
   `account users` in production, an empty (revoke-stray-grants) list everywhere else.
+
+### 13. Destructive run-operations end with `dry_run=true`
+Every macro that drops, deletes, or rewrites anything takes `dry_run` as its FINAL
+argument, defaulting to `true`. A dry run prints the exact statements a live run would
+execute — nothing more. Automation that means it passes `dry_run: False` explicitly.
+This is a debugging superpower: you can always ask "what WOULD this cleanup do?" against
+live state with zero risk, and no destructive operation ever runs by accident from a
+half-remembered CLI invocation.
+
+- **In this repo:** `macros/operations/ci_cleanup.sql`; CI calls it with `dry_run: False`
+  only after a green build.
+
+### 14. Short job names; ownership lives in tags
+The Databricks Jobs UI is cramped — job names are for humans scanning a list, so keep
+them short and readable (`dbt CI`, `dbt CD`, `dbt Daily`, `dbt Hourly`). Everything a
+machine or an auditor needs goes in a standard tag set stamped on every bundle resource
+via `presets.tags`:
+
+| tag           | value                              | why                                        |
+|---------------|------------------------------------|--------------------------------------------|
+| `env`         | `dev` / `prod`                     | environment isolation, cleanup targeting    |
+| `repo`        | `randypitcherii/shareables`        | which repo owns (and can redeploy) this     |
+| `owner`       | deploying human (dev) / SP (prod)  | who to ask about it                         |
+| `bundle`      | `${bundle.name}`                   | groups all resources of one DAB             |
+| `deployed_at` | `YYYY-MM-DD` (passed by Makefile)  | human-readable staleness signal             |
+| `ttl`         | `YYYY-MM-DD` (optional)            | experiments only: past this date, cleanup may reclaim it without asking |
+
+Dev deploys additionally get the bundle's automatic name-prefix isolation — that prefix
+convention stays. With `env` + `deployed_at` (+ `ttl` where set) on everything, "find
+stale non-prod assets" becomes a tag filter instead of archaeology.
+
+### 15. Frequency tags drive scheduling; job definitions stay static
+Production jobs select models by cadence tag (`dbt build -s tag:daily`, `-s tag:hourly`),
+so adding a model to a schedule is a one-line `+tags` change in the dbt project — the
+Databricks job definitions never change. Deployment is continuous the same way: on merge,
+a CD job redeploys the bundle and slim-builds only what changed (`state:modified+`
+against captured production state). The job surface (`dbt CI`, `dbt CD`, `dbt Daily`,
+`dbt Hourly`) is fixed; the repo's contents decide what each run actually does.
+
+- **In this repo:** `+tags: [.., daily]` per layer in `dbt_project.yml`;
+  `resources/dbt_hourly.job.yml` exists (paused) before any `tag:hourly` model does —
+  the first hourly model activates it with zero job edits; `resources/dbt_cd.job.yml` +
+  `.github/workflows/dbt-cd.yml` for merge-triggered deploys.
 
 ---
 

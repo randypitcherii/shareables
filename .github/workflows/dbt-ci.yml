@@ -1,0 +1,134 @@
+# dbt CI for databricks/demos/dbt — GitHub is only the GATE and the TRIGGER.
+# dbt itself executes in the `dbt CI` Databricks job
+# (databricks/demos/dbt/resources/dbt_ci.job.yml): defined, unscheduled,
+# parameterized, serverless. This workflow passes job parameters and mirrors
+# the result as the PR check.
+#
+# WHY a self-hosted runner at all: the workspace has IP access lists, so even
+# the Jobs API is unreachable from GitHub-hosted runners. The runner is a
+# Databricks App (databricks/apps/github-actions-runner-spike/) inside the
+# workspace. Its role here is exactly two API calls: run-now + poll.
+#
+# SECURITY — this split is what makes a self-hosted runner on a public repo
+# tolerable: PR code NEVER executes in the runner container (the job downloads
+# the repo tarball at the PR head SHA and runs it on serverless compute as the
+# job's run_as SP). The trigger SP has CAN_MANAGE_RUN on one job and zero UC
+# grants. Fork PRs are still refused outright:
+#   * the job-level `if` requires the PR head to live in THIS repo, plus repo +
+#     actor guards;
+#   * repo Actions settings require approval for all outside collaborators.
+#
+# AUTH — zero secrets anywhere in the chain: the trigger uses the app SP's
+# OAuth credentials injected into the container env by the Databricks Apps
+# runtime, and dbt inside the job authenticates as the job's run_as identity
+# via runtime-resolved credentials. No PATs, no client secrets, no GitHub
+# secrets.
+#
+# Isolation model (see databricks/demos/dbt/THE_ONE_TRUE_WAY.md #6): the
+# injected `ci_schema` carries the PR number AND run number, so every build is
+# a fully isolated, disposable namespace and re-runs never collide. After a
+# green build the task runs the ci_cleanup run-operation (dry_run=False): it
+# drops this build's schema AND sweeps stale ones from earlier failed or
+# cancelled runs. A failed build deliberately leaves its schema for debugging.
+name: dbt CI
+
+on:
+  pull_request:
+    paths:
+      - "databricks/demos/dbt/**"
+      - ".github/workflows/dbt-ci.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+# cancel superseded runs on the same PR
+concurrency:
+  group: dbt-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Fork PRs must never be scheduled onto the in-workspace runner. The head-repo
+    # check is the load-bearing guard; the repo + actor checks are belt-and-suspenders.
+    if: >-
+      github.repository == 'randypitcherii/shareables' &&
+      github.actor == 'randypitcherii' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, databricks-app]
+    timeout-minutes: 45
+    env:
+      DBT_CI_JOB_NAME: dbt CI
+      # per-PR, per-build schema -> fully isolated, disposable namespace
+      # (workflow_dispatch runs get pr0)
+      CI_SCHEMA: dbt_rpw_dbt_databricks_reference_pr${{ github.event.pull_request.number || 0 }}_build${{ github.run_number }}
+      # the exact commit the Databricks job will download and build
+      GIT_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+      DATABRICKS_CLI_VERSION: "1.3.0"
+
+    steps:
+      # No checkout: PR code is never executed (or even present) on this runner.
+      # The app container injects DATABRICKS_HOST / DATABRICKS_CLIENT_ID /
+      # DATABRICKS_CLIENT_SECRET, which the CLI picks up natively.
+      - name: Install Databricks CLI (user-space, cached)
+        run: |
+          : "${DATABRICKS_HOST:?not running on the Databricks App runner}"
+          CLI_DIR="$HOME/.dbx-cli/$DATABRICKS_CLI_VERSION"
+          if [ ! -x "$CLI_DIR/databricks" ]; then
+            mkdir -p "$CLI_DIR"
+            curl -fsSL -o "$CLI_DIR/cli.tar.gz" \
+              "https://github.com/databricks/cli/releases/download/v${DATABRICKS_CLI_VERSION}/databricks_cli_${DATABRICKS_CLI_VERSION}_linux_amd64.tar.gz"
+            tar -xzf "$CLI_DIR/cli.tar.gz" -C "$CLI_DIR"
+            rm -f "$CLI_DIR/cli.tar.gz"
+          fi
+          echo "$CLI_DIR" >> "$GITHUB_PATH"
+
+      - name: Trigger dbt CI job and wait
+        run: |
+          JOB_ID=$(databricks jobs list -o json --name "$DBT_CI_JOB_NAME" | python3 -c '
+          import json, os, sys
+          jobs = json.load(sys.stdin)
+          name = os.environ["DBT_CI_JOB_NAME"]
+          matches = [j["job_id"] for j in jobs if j["settings"]["name"] == name]
+          if not matches:
+              sys.exit(f"no job named {name!r} visible to the trigger service principal")
+          print(matches[0])
+          ')
+          echo "Triggering job $JOB_ID: git_ref=$GIT_REF ci_schema=$CI_SCHEMA"
+          RUN_ID=$(databricks api post /api/2.2/jobs/run-now --json "{
+            \"job_id\": $JOB_ID,
+            \"job_parameters\": {
+              \"git_ref\": \"$GIT_REF\",
+              \"ci_schema\": \"$CI_SCHEMA\"
+            }
+          }" | python3 -c 'import json, sys; print(json.load(sys.stdin)["run_id"])')
+
+          # NB: keep this python free of escaped double quotes -- \" inside a
+          # single-quoted python3 -c string is a SyntaxError that leaves the
+          # loop spinning blind.
+          STATUS_PY='
+          import json, sys
+          run = json.load(sys.stdin)
+          state = run.get("status") or run.get("state") or {}
+          term = state.get("termination_details") or {}
+          print(state.get("state") or state.get("life_cycle_state") or "")
+          print(term.get("code") or state.get("result_state") or "")
+          print(run.get("run_page_url") or "")
+          '
+          while true; do
+            OUT=$(databricks api get "/api/2.2/jobs/runs/get?run_id=$RUN_ID" | python3 -c "$STATUS_PY")
+            LIFECYCLE=$(echo "$OUT" | sed -n 1p)
+            RESULT=$(echo "$OUT" | sed -n 2p)
+            RUN_URL=$(echo "$OUT" | sed -n 3p)
+            if [ -z "${URL_PRINTED:-}" ] && [ -n "$RUN_URL" ]; then
+              echo "Databricks run (all dbt logs live here): $RUN_URL"
+              URL_PRINTED=1
+            fi
+            echo "run $RUN_ID: ${LIFECYCLE:-unknown}"
+            case "$LIFECYCLE" in TERMINATED|INTERNAL_ERROR|SKIPPED) break;; esac
+            sleep 20
+          done
+
+          echo "final: $LIFECYCLE / $RESULT"
+          echo "logs: $RUN_URL"
+          [ "$RESULT" = "SUCCESS" ]

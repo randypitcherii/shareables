@@ -244,8 +244,8 @@ single injected value.
 
 # CI/CD
 
-See [`ci/github-actions-dbt-ci.yml.example`](ci/github-actions-dbt-ci.yml.example) for a
-GitHub Actions workflow that builds each PR into its own disposable schema by setting:
+CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
+builds and tests every PR that touches this project, into its own disposable schema:
 
 ```bash
 DBT_DEPLOYMENT_ENVIRONMENT=ci_testing
@@ -255,19 +255,73 @@ DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NU
 Because the schema name carries the PR number **and** the build number, a re-run after a fix
 builds fully isolated from the previous attempt.
 
-**Slim CI.** The production job captures dbt state (`manifest.json`) to the artifacts volume,
-and the CI workflow downloads it to build **only changed models and their descendants**
+**Where it runs.** GitHub is only the gate and the trigger — dbt executes in the
+`dbt CI` **Databricks job** ([`resources/dbt_ci.job.yml`](resources/dbt_ci.job.yml)):
+defined, unscheduled, parameterized, serverless. The workflow passes job parameters
+(`git_ref` = PR head SHA, `ci_schema`) and polls the run. Why a job instead of
+running dbt on the runner:
+
+* **centralized logs** — every dbt run (CI and prod) lives in the Jobs UI;
+* **uv pins dbt** — the tasks run `dbt` via `uv sync` from `pyproject.toml`
+  ([`scripts/databricks_dbt_runner.py`](scripts/databricks_dbt_runner.py)), so a dbt
+  upgrade is a one-line PR, never a job edit (no managed `dbt_task` type anywhere);
+* **`--fail-fast`** — CI builds stop at the first failure;
+* **one committed `profiles.yml`** — dev/ci/prod all resolve from the same file with
+  env-var placeholders; no platform-generated profile to drift from it.
+
+**Auth: `run_as` is the whole setup.** The CI and prod jobs run as the `dbt_prod_sp`
+service principal, and the task wrapper resolves a short-lived token from its ambient
+runtime credentials. No OAuth client secret is provisioned, stored, or rotated anywhere —
+and the GitHub side holds zero Databricks secrets either (the trigger runs on a
+self-hosted runner inside a Databricks App —
+[`databricks/apps/github-actions-runner-spike/`](../../apps/github-actions-runner-spike/) —
+because the workspace's IP access lists block even the Jobs API from GitHub-hosted
+runners; the runner app's SP has CAN_MANAGE_RUN on the CI + CD jobs and nothing else).
+
+Because this is a public repo, PR code **never executes on the runner** — the job
+downloads the repo tarball at the PR head SHA and runs it on serverless compute — and the
+workflow refuses to schedule for fork PRs (job-level head-repo + actor guards); see the
+workflow header for the full security model.
+
+**Slim CI.** The production jobs capture dbt state (`manifest.json`) to the artifacts volume,
+and CI downloads it to build **only changed models and their descendants**
 (`dbt build -s state:modified+ --defer --state prod_state`), deferring unmodified parents to
 the production relations. If the state download fails (first run, missing permissions), CI
 falls back to a full build.
 
-**Hygiene.** The per-PR teardown drops the ephemeral schema and is *not* allowed to fail
-silently. Cancelled runs can still leak schemas, so a sweep run-operation exists for that:
+**Continuous deployment.** On merge to `main`,
+[`.github/workflows/dbt-cd.yml`](../../../.github/workflows/dbt-cd.yml) fires **only when
+this directory changed** and triggers the `dbt CD` job
+([`resources/dbt_cd.job.yml`](resources/dbt_cd.job.yml)), which does both halves of a
+deploy in one run: `databricks bundle deploy -t prod` at the merged SHA (the DAB
+components — jobs, schema, volume, docs app — redeploy themselves, as the production SP),
+then a slim production build (`dbt build -s state:modified+ --fail-fast`) and a state
+refresh. No deployer identity or credential exists outside the job's `run_as`.
+
+**The job surface is static** (THE_ONE_TRUE_WAY #15): `dbt CI`, `dbt CD`, `dbt Daily`,
+and `dbt Hourly`. Scheduled jobs select by cadence tag (`tag:daily`, `tag:hourly`), so
+moving a model between cadences — or adding the first `tag:hourly` model ever — is a
+one-line `+tags` change in the dbt project; the job definitions never change. (`dbt
+Hourly` ships paused until the first hourly model lands, so no-op runs don't burn
+serverless minutes.)
+
+**Hygiene.** Every CI run is one flow: `dbt build --fail-fast` followed — **only after a
+green build** — by the [`ci_cleanup`](macros/operations/ci_cleanup.sql) run-operation with
+`dry_run: False`, which drops this build's schema **and** sweeps stale CI schemas leaked
+by earlier failed or cancelled runs. A failed build deliberately leaves its schema up for
+debugging; the next green run reclaims it. Per the house rule (THE_ONE_TRUE_WAY #13),
+`ci_cleanup`'s final argument is `dry_run` defaulting to `true`, printing exactly what a
+live run would execute:
 
 ```bash
-# dry run by default; pass dry_run: false to actually drop
-uv run dbt run-operation drop_stale_ci_schemas \
-  --args '{prefix: dbt_rpw_dbt_databricks_reference_pr, older_than_days: 3, dry_run: false}' \
+# see what cleanup WOULD do (default: dry run)
+uv run dbt run-operation ci_cleanup \
+  --args '{schema: dbt_rpw_dbt_databricks_reference_pr42_build3}' \
+  --target ci --profiles-dir .
+
+# actually do it (what CI runs after a green build)
+uv run dbt run-operation ci_cleanup \
+  --args '{schema: dbt_rpw_dbt_databricks_reference_pr42_build3, dry_run: False}' \
   --target ci --profiles-dir .
 ```
 

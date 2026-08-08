@@ -21,10 +21,10 @@ You'll know you want this if you've felt one of these pains:
   most of their minutes waiting on a SQL warehouse anyway.
 
 This started as a spike for [#36](https://github.com/randypitcherii/shareables/issues/36)
-(enabling CI for `databricks/demos/dbt/`). **Verdict: it works end-to-end.** A workflow
-job executed on the runner and `databricks current-user me` authenticated as the app's
-service principal with zero GitHub-side secrets. See
-[go/no-go](#gono-go-recommendation) for the conditions before pointing real CI at it.
+(enabling CI for `databricks/demos/dbt/`) and has since been **promoted to the real dbt CI
+runner**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml) runs on it. The
+[go/no-go conditions](#gono-go-recommendation) from the spike (trigger hygiene, token
+automation, dedicated SP) are implemented — see [Hardening status](#hardening-status).
 
 ## Architecture
 
@@ -45,7 +45,8 @@ flowchart LR
         DBX["Workspace APIs · SQL warehouse · UC"]
     end
 
-    OPERATOR["Operator<br/>(pastes registration token)"] -->|"POST /runner/start"| API
+    PAT["GH_RUNNER_PAT<br/>(Databricks secret app resource)"] -->|"fresh registration token<br/>minted every cycle"| SUP
+    OPERATOR["Operator<br/>(optional manual mode:<br/>pastes registration token)"] -->|"POST /runner/start"| API
     API --> SUP
     SUP -->|"config.sh --ephemeral<br/>re-register after each job"| RUNNER
     RUNNER -->|"outbound-only HTTPS long-poll"| ACTIONS
@@ -88,36 +89,53 @@ self-hosted runner is left attached to this public repo. Re-run via
   (`/api/v1/shell/run|stream|complete`) were the probe tool: every container experiment
   above was run via REST against the deployed app, no redeploys.
 - `scripts/runner_supervisor.sh` does the runner lifecycle: download runner tarball +
-  libicu if missing → `config.sh --ephemeral --unattended` → `run.sh` → loop.
+  libicu if missing → `config.sh --ephemeral --unattended` → `run.sh` → loop. When the
+  app has `GH_RUNNER_PAT` in its environment (a fine-grained PAT with repo
+  `administration:write`, injected from a Databricks secret via an app resource — see
+  `databricks.yml`), the supervisor **mints a fresh registration token every cycle**, so
+  the loop survives token expiry, app restarts, and redeploys with zero manual steps.
 - The FastAPI app manages the supervisor:
+  - **startup hook** — when `GH_RUNNER_PAT` is present, the supervisor auto-starts at app
+    boot (self-healing restarts; `app.yaml` pins `UVICORN_WORKERS=1` so only one worker
+    spawns it). Set `GH_RUNNER_AUTOSTART=false` to opt out.
   - `GET /api/v1/runner/status` — supervisor/listener process state + log tail
-  - `POST /api/v1/runner/start` — body `{"registration_token": "..."}` (plus optional
-    `repo_url`, `runner_name`, `labels`); spawns the supervisor detached
+  - `POST /api/v1/runner/start` — body `{"registration_token": "..."}` (optional when the
+    app has `GH_RUNNER_PAT`; plus optional `repo_url`, `runner_name`, `labels`); spawns
+    the supervisor detached
   - `POST /api/v1/runner/stop` — kills supervisor + listener (runner falls offline and,
     being ephemeral, gets reaped by GitHub)
-- The proof workflow is
+- The original proof workflow is
   [`.github/workflows/self-hosted-runner-spike.yml`](../../../.github/workflows/self-hosted-runner-spike.yml)
-  — `workflow_dispatch` + `push` to the spike branch only. **Deliberately no
-  `pull_request` trigger** (public repo + self-hosted runner, see caveats).
+  (`workflow_dispatch` only). The real consumers are the dbt CI workflows, which DO use a
+  `pull_request` trigger — made safe for a public repo by job-level guards that refuse to
+  schedule fork PRs (head repo must be this repo, plus repo + actor checks; see the
+  workflow headers and caveats below).
 
-## Reproduce
+## Deploy (production mode: PAT in a Databricks secret, fully self-healing)
 
 ```bash
-# 1. deploy + start the app (dev target)
+# 1. store a fine-grained GitHub PAT (repo administration:write, this repo only)
+#    in the secret scope the bundle wires into the app env
+databricks secrets create-scope gha_runner
+databricks secrets put-secret gha_runner github_pat   # paste the PAT when prompted
+
+# 2. deploy + start the app — the supervisor auto-starts at boot and mints its
+#    own registration tokens; no manual token paste, restarts self-heal
 make deploy-dev
 
-# 2. mint a registration token (requires repo admin)
-REG_TOKEN=$(gh api -X POST repos/randypitcherii/shareables/actions/runners/registration-token --jq .token)
+# 3. confirm the runner is online
+gh api repos/randypitcherii/shareables/actions/runners --jq '.runners[].status'
+```
 
-# 3. start the runner supervisor inside the app
+Spike/manual mode still works without the PAT: mint a registration token yourself and
+POST it (valid ~1 hour, supervisor exits when it expires):
+
+```bash
+REG_TOKEN=$(gh api -X POST repos/randypitcherii/shareables/actions/runners/registration-token --jq .token)
 TOKEN=$(databricks auth token --output json | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
 curl -X POST "$APP_URL/api/v1/runner/start" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"registration_token\": \"$REG_TOKEN\"}"
-
-# 4. confirm it's online, then trigger the proof workflow
-gh api repos/randypitcherii/shareables/actions/runners --jq '.runners[].status'
-gh workflow run self-hosted-runner-spike --ref <branch-with-the-workflow>
 ```
 
 `scripts/app-shell.sh` runs ad-hoc commands inside the container for debugging:
@@ -128,9 +146,6 @@ gh workflow run self-hosted-runner-spike --ref <branch-with-the-workflow>
 - **No Docker.** Container actions, `services:`, and docker-based steps won't work.
   Shell steps (and node-based actions like `actions/checkout`) are fine — dbt CI is
   pip/uv + CLI, so it fits.
-- **Restarts are not self-healing yet.** The supervisor dies with the app container and
-  the pasted registration token expires after ~1 hour. Each app restart/redeploy needs a
-  fresh `POST /runner/start`. Fixable (see hardening), deliberately out of spike scope.
 - **One runner = serial CI.** One job at a time. Fine for this repo's volume; more
   concurrency means more app replicas or multiple registered runners per container.
 - **Always-on compute.** The app runs 24/7 whether or not CI jobs arrive. That's the
@@ -143,11 +158,17 @@ gh workflow run self-hosted-runner-spike --ref <branch-with-the-workflow>
   who can get a workflow to run on this runner executes arbitrary code inside the
   Databricks workspace network *as the app's service principal*.
 - **Fork PRs MUST NOT be allowed to reach it.** Concretely:
-  - Never add a `pull_request`-triggered workflow with `runs-on: self-hosted` to this
-    repo. The spike workflow uses `workflow_dispatch` + same-repo `push` only, plus an
-    `if: github.repository == ... && github.actor == 'randypitcherii'` guard.
+  - Any `pull_request`-triggered workflow with `runs-on: self-hosted` in this repo MUST
+    carry a job-level guard requiring
+    `github.event.pull_request.head.repo.full_name == github.repository` (fork PRs are
+    then skipped before a job is ever scheduled), plus the repo + actor belt-and-suspenders
+    checks. `dbt-ci.yml` is the reference implementation.
   - Repo Actions settings should require approval for **all** outside collaborators
     (Settings → Actions → Fork pull request workflows).
+- **The PAT is a repo-admin credential.** `GH_RUNNER_PAT` must be fine-grained, scoped to
+  this single repo, `administration:write` only. Anything that can read the app env
+  (shell endpoints, CI job steps) can read it — another reason the app must not be
+  granted broadly and the runner must never serve fork code.
 - **Job steps can read the app SP's client secret** from the environment. Any workflow
   that lands on this runner owns the SP. Scope the SP to the minimum needed (the dbt CI
   SP needs little beyond its dev schema + warehouse), and prefer a dedicated app/SP for
@@ -175,3 +196,21 @@ of the following:
 Without 1–3, keep this as a demo. The pattern's sweet spot is private repos / internal
 projects, where it deletes both the secrets-in-GitHub problem and external CI spend in
 one move.
+
+## Hardening status
+
+All three go/no-go conditions are implemented for the dbt CI use case:
+
+1. **Trigger hygiene** — `dbt-ci.yml` uses `pull_request`, but the job-level `if` refuses
+   to schedule unless the PR head lives in this repo (fork PRs never touch the runner),
+   with repo + actor guards on top.
+2. **Token automation** — the supervisor mints registration tokens from `GH_RUNNER_PAT`
+   (a fine-grained PAT in a Databricks secret, wired via an app resource in
+   `databricks.yml`), and the app auto-starts the supervisor at boot. Restarts and
+   redeploys self-heal with no manual token paste.
+3. **Dedicated least-privilege SP** — the runner only *triggers* the dbt CI Databricks
+   job (dbt executes there as the job's `run_as` SP, on serverless compute, against code
+   the job downloads itself). The app SP therefore needs exactly one grant:
+   CAN_MANAGE_RUN on the `dbt CI` and `dbt CD` jobs. Zero UC grants, and PR
+   code never executes in this container — which is also what makes the PAT exposure
+   (previous caveat) tolerable.
