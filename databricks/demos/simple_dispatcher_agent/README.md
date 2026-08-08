@@ -237,7 +237,7 @@ picks it up from the docstring.
 | `ValueError: Missing required environment variable(s): ...` | Set the named vars (or add them to `.env`). |
 | `401: Credential was not sent or was of an unsupported type` + a warning that two profiles match the same host | Multiple `~/.databrickscfg` profiles point at one workspace; disambiguate with `export DATABRICKS_PROFILE=<profile>`. |
 | Experiment creation fails on a Databricks-hosted tracking server | Set `MLFLOW_EXPERIMENT` to a writable workspace path like `/Users/<you@example.com>/simple_dispatcher_agent`; a root-level path only works locally. |
-| `uv sync` can't reach `pypi.org` | On Databricks-networked machines, resolve through the proxy: `export UV_INDEX_URL=https://pypi-proxy.dev.databricks.com/simple/`. |
+| `uv sync` can't reach `pypi.org` | Your network routes package installs through an internal mirror. Point uv at it: `export UV_DEFAULT_INDEX=<your-mirror>/simple/`. |
 | `web_search(...)` errors after registration | The compute needs internet egress to `mcp.exa.ai`. Use serverless or allow outbound HTTPS to that host. |
 | `RESOURCE_DOES_NOT_EXIST` for the function | The UDF isn't registered in `{BASE_CATALOG}.{BASE_SCHEMA}` yet. Run the bundle job (or `register_web_search.py` in a notebook). |
 | `ImportError: cannot import name 'ExecutionInfo' from 'langgraph.runtime'` | A stale resolve pulled `langchain` 1.2.x + `langgraph` 1.0.x. The pin is `langchain>=1.3`; rerun `uv sync` to pick a matching `langgraph<1.3`. |
@@ -247,10 +247,10 @@ picks it up from the docstring.
 
 ## Engineering Notes
 
-**`uv.lock` is gitignored.** `uv sync` resolves against the Databricks internal
-PyPI proxy (`pypi-proxy.dev.databricks.com`), which isn't reachable outside the
-Databricks corporate network. Committing the lockfile would pin those URLs and
-break installs for external users. Regenerate it locally with `uv sync`.
+**`uv.lock` is gitignored.** On a corporate-networked machine `uv sync` resolves
+against an internal PyPI mirror rather than `pypi.org`. Committing the lockfile
+would pin those unreachable URLs and break installs for everyone outside that
+network. Regenerate it locally with `uv sync`.
 
 **Python 3.10–3.12.** `databricks-agents` pulls transitive deps (`whenever`)
 that only ship binary wheels for the Databricks runtime interpreters; 3.13+
