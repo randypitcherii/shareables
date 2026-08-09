@@ -87,7 +87,7 @@ targets:
     mode: development
     variables:
       target_schema: "${var.base_schema}_${workspace.current_user.short_name}"
-      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_dev_${workspace.current_user.short_name}"
+      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_dev_${workspace.current_user.short_name}_${var.base_catalog}"
       deploy_endpoint: "false"
     workspace:
       root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}
@@ -100,7 +100,7 @@ targets:
     mode: development
     variables:
       target_schema: "${var.base_schema}_${var.pr_number}"
-      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_test_${var.pr_number}"
+      target_experiment: "/Users/${workspace.current_user.userName}/${bundle.name}_test_${var.pr_number}_${var.base_catalog}"
       deploy_endpoint: "false"
     workspace:
       root_path: /Users/${workspace.current_user.userName}/.bundles/${bundle.name}/pr_${var.pr_number}
@@ -113,7 +113,7 @@ targets:
     mode: production
     variables:
       target_schema: "${var.base_schema}"
-      target_experiment: "/Workspace/deployments/${bundle.name}/${bundle.name}_prod"
+      target_experiment: "/Workspace/deployments/${bundle.name}/${bundle.name}_prod_${var.base_catalog}"
       deploy_endpoint: "true"
     workspace:
       root_path: /Workspace/deployments/${bundle.name}
