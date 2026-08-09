@@ -213,8 +213,8 @@ run, not via manual GRANT statements.
 Default production artifact paths:
 
 ```text
-/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/state/latest
-/Volumes/fe_randy_pitcher_workspace_catalog/dbt_artifacts/dbt_demo_artifacts/docs/latest
+/Volumes/rpw_prod/dbt_artifacts/dbt_demo_artifacts/state/latest
+/Volumes/rpw_prod/dbt_artifacts/dbt_demo_artifacts/docs/latest
 ```
 
 Deploy and run:

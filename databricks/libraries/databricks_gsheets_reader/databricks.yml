@@ -7,7 +7,7 @@ workspace:
 variables:
   base_catalog:
     description: Catalog base that _dev, _test, _prod can be appended to for catalog-level env isolation
-    default: your_catalog
+    default: rpw_prod
   base_schema:
     description: >
       Schema base name.

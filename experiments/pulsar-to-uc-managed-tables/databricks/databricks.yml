@@ -17,6 +17,7 @@ variables:
     default: persistent://public/default/uc-ingest-eval
   uc_catalog:
     description: Target Unity Catalog
+    default: rpw_prod
   uc_schema:
     description: Target schema
     default: pulsar_uc_ingest_eval

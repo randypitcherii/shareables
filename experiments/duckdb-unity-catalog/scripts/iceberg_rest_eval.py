@@ -51,7 +51,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 WORKSPACE = "fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"
-CATALOG = "fe_randy_pitcher_workspace_catalog"
+CATALOG = "rpw_prod"
 SCHEMA = "duckdb_uc_experiment"
 ENDPOINT = f"https://{WORKSPACE}/api/2.1/unity-catalog/iceberg-rest"
 

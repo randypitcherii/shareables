@@ -7,7 +7,7 @@ workspace:
 variables:
   base_catalog:
     description: Catalog hosting the web_search UDF and the registered agent model.
-    default: your_catalog
+    default: rpw_prod
   base_schema:
     description: >
       Schema base name.

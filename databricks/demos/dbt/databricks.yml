@@ -7,7 +7,7 @@ include:
 variables:
   production_catalog:
     description: Unity Catalog catalog used by production dbt runs.
-    default: fe_randy_pitcher_workspace_catalog
+    default: rpw_prod
   production_schema:
     description: Default schema for production dbt models without a layer-specific schema.
     default: dbt

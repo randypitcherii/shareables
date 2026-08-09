@@ -15,7 +15,10 @@
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: deploy-dev deploy-prod deploy-prod-local
+.PHONY: test deploy-dev deploy-prod deploy-prod-local
+
+test:
+	uv run --with pytest pytest tests -q
 
 deploy-dev:
 	databricks bundle deploy -t dev --var="deployed_at=$(DEPLOY_DATE)"

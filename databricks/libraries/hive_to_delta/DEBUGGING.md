@@ -703,7 +703,7 @@ aws glue get-tables --database-name hive_to_delta_test --query 'TableList[].Name
 # Expected: standard_table, cross_bucket_table, cross_region_table
 
 # Check converted tables in Unity Catalog
-export CATALOG=fe_randy_pitcher_workspace_catalog
+export CATALOG=rpw_prod
 export SCHEMA=hive_to_delta_tests
 
 databricks tables list --catalog $CATALOG --schema $SCHEMA --output json | \
@@ -716,7 +716,7 @@ databricks tables list --catalog $CATALOG --schema $SCHEMA --output json | \
 export AWS_PROFILE=fe-sandbox
 export DATABRICKS_CONFIG_PROFILE=fe
 export HIVE_TO_DELTA_TEST_WAREHOUSE_ID=<warehouse-id>
-export HIVE_TO_DELTA_TEST_CATALOG=fe_randy_pitcher_workspace_catalog
+export HIVE_TO_DELTA_TEST_CATALOG=rpw_prod
 export HIVE_TO_DELTA_TEST_SCHEMA=hive_to_delta_tests
 export HIVE_TO_DELTA_TEST_GLUE_DATABASE=hive_to_delta_test
 
