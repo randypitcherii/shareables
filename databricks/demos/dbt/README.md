@@ -244,6 +244,11 @@ single injected value.
 
 # CI/CD
 
+The whole chain — which git event fires which trigger, which Databricks job executes, and
+what each run touches ([source](docs/diagrams/06-git-lifecycle-cicd.d2)):
+
+![Git events → GitHub Actions triggers → Databricks serverless jobs → environments](docs/diagrams/06-git-lifecycle-cicd.png)
+
 CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
 builds and tests every PR that touches this project, into its own disposable schema:
 
