@@ -120,18 +120,18 @@ databricks bundle validate -t prod
 
 # Deploy + run against your dev sandbox
 databricks bundle deploy -t dev \
-  --var base_catalog=<catalog> --var genie_space_id=<space-id>
+  --var base_catalog=rpw_prod --var genie_space_id=<space-id>
 databricks bundle run deploy_dispatcher -t dev \
-  --var base_catalog=<catalog> --var genie_space_id=<space-id>
+  --var base_catalog=rpw_prod --var genie_space_id=<space-id>
 
 # Production (also creates/refreshes the scale-to-zero serving endpoint).
 # genie_tables: comma-separated FQNs of the tables your Genie space queries —
 # the deployed endpoint's credential is scoped to declared resources only,
 # so without this the Genie route fails with table-level PermissionDenied.
-databricks bundle deploy -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id> \
-  --var genie_tables=<catalog>.<schema>.<table>[,...]
-databricks bundle run deploy_dispatcher -t prod --var base_catalog=<catalog> --var genie_space_id=<space-id> \
-  --var genie_tables=<catalog>.<schema>.<table>[,...]
+databricks bundle deploy -t prod --var base_catalog=rpw_prod --var genie_space_id=<space-id> \
+  --var genie_tables=rpw_prod.<schema>.<table>[,...]
+databricks bundle run deploy_dispatcher -t prod --var base_catalog=rpw_prod --var genie_space_id=<space-id> \
+  --var genie_tables=rpw_prod.<schema>.<table>[,...]
 ```
 
 **Targets** (same env-isolation pattern as `databricks_gsheets_reader`):

@@ -7,7 +7,7 @@
 export AWS_PROFILE ?= aws-sandbox-field-eng_databricks-sandbox-admin
 export AWS_REGION ?= us-east-1
 export HIVE_TO_DELTA_TEST_GLUE_DATABASE ?= hive_to_delta_test
-export HIVE_TO_DELTA_TEST_CATALOG ?= fe_randy_pitcher_workspace_catalog
+export HIVE_TO_DELTA_TEST_CATALOG ?= rpw_prod
 export HIVE_TO_DELTA_TEST_SCHEMA ?= hive_to_delta_tests
 
 # Default target
@@ -49,7 +49,7 @@ help:
 	@echo "  AWS_PROFILE                      - AWS CLI profile (default: aws-sandbox-field-eng_databricks-sandbox-admin)"
 	@echo "  AWS_REGION                       - AWS region (default: us-east-1)"
 	@echo "  HIVE_TO_DELTA_TEST_GLUE_DATABASE - Glue database name (default: hive_to_delta_test)"
-	@echo "  HIVE_TO_DELTA_TEST_CATALOG       - Unity Catalog name (default: fe_randy_pitcher_workspace_catalog)"
+	@echo "  HIVE_TO_DELTA_TEST_CATALOG       - Unity Catalog name (default: rpw_prod)"
 	@echo "  HIVE_TO_DELTA_TEST_SCHEMA        - Unity Catalog schema (default: hive_to_delta_tests)"
 	@echo "  HIVE_TO_DELTA_TEST_WAREHOUSE_ID  - SQL Warehouse ID (auto-detected if not set)"
 	@echo ""

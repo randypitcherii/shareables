@@ -8,7 +8,7 @@ env:
   - name: DBT_ARTIFACT_VOLUME_FULL_NAME
     valueFrom: dbt-docs-volume
   - name: DBT_ARTIFACT_CATALOG
-    value: fe_randy_pitcher_workspace_catalog
+    value: rpw_prod
   - name: DBT_ARTIFACT_SCHEMA
     value: dbt_artifacts
   - name: DBT_ARTIFACT_VOLUME

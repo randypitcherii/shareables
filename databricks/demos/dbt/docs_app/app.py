@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from databricks.sdk import WorkspaceClient
 
 
-DEFAULT_ARTIFACT_CATALOG = "fe_randy_pitcher_workspace_catalog"
+DEFAULT_ARTIFACT_CATALOG = "rpw_prod"
 DEFAULT_ARTIFACT_SCHEMA = "dbt_artifacts"
 DEFAULT_ARTIFACT_VOLUME = "dbt_demo_artifacts"
 DEPLOYMENT_ENVIRONMENT = os.environ.get("DBT_DEPLOYMENT_ENVIRONMENT", "production")

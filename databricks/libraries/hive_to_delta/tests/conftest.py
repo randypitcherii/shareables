@@ -85,9 +85,9 @@ def target_catalog() -> str:
     """Return the Unity Catalog name for test tables.
 
     Reads from HIVE_TO_DELTA_TEST_CATALOG env var,
-    defaults to "fe_randy_pitcher_workspace_catalog".
+    defaults to "rpw_prod".
     """
-    return os.environ.get("HIVE_TO_DELTA_TEST_CATALOG", "fe_randy_pitcher_workspace_catalog")
+    return os.environ.get("HIVE_TO_DELTA_TEST_CATALOG", "rpw_prod")
 
 
 @pytest.fixture(scope="session")

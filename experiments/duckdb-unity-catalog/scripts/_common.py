@@ -2,7 +2,7 @@
 
 import os
 
-CATALOG = "fe_randy_pitcher_workspace_catalog"
+CATALOG = "rpw_prod"
 SCHEMA = "duckdb_uc_experiment"
 FULL_SCHEMA = f"{CATALOG}.{SCHEMA}"
 WORKSPACE = "fe-vm-fe-randy-pitcher-workspace.cloud.databricks.com"

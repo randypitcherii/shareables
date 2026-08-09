@@ -75,7 +75,7 @@ Markers are defined in `pyproject.toml`.
 |----------|---------|---------|
 | `HIVE_TO_DELTA_TEST_WAREHOUSE_ID` | auto-discovered | SQL Warehouse for cross-bucket tests |
 | `HIVE_TO_DELTA_TEST_GLUE_DATABASE` | `hive_to_delta_test` | Source Hive database |
-| `HIVE_TO_DELTA_TEST_CATALOG` | `fe_randy_pitcher_workspace_catalog` | Target Unity Catalog |
+| `HIVE_TO_DELTA_TEST_CATALOG` | `rpw_prod` | Target Unity Catalog |
 | `HIVE_TO_DELTA_TEST_SCHEMA` | `hive_to_delta_tests` | Target schema |
 | `DATABRICKS_CONFIG_PROFILE` | none | Databricks CLI profile |
 | `AWS_PROFILE` | none | AWS credentials profile |
