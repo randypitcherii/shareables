@@ -42,6 +42,20 @@ variables:
       SP has a different name: --var="production_service_principal=<application-id>".
     lookup:
       service_principal: dbt_prod_sp
+  ci_catalog:
+    description: >-
+      Unity Catalog catalog that holds the disposable per-PR CI schemas. Owned by
+      the CI service principal; nothing durable lives here.
+    default: rpw_ci
+  ci_service_principal:
+    description: >-
+      Application ID of the service principal CI runs as (looked up by display
+      name). Deliberately NOT the production SP: it owns the CI catalog, but on
+      the production catalog it holds only read grants (USE CATALOG, USE SCHEMA,
+      SELECT, READ VOLUME -- enough for Slim CI deferral and the state-manifest
+      download), so a CI run of unreviewed PR code cannot write to production.
+    lookup:
+      service_principal: dbt_ci_sp
 
 targets:
   dev:
@@ -51,9 +65,11 @@ targets:
       production_catalog: analytics_dev
       production_schema: dbt_${workspace.current_user.short_name}
       production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
-      # dev runs as the developer; short-circuit the SP lookup so dev deploys
-      # don't require the production service principal to exist.
+      ci_catalog: analytics_dev
+      # dev runs as the developer; short-circuit the SP lookups so dev deploys
+      # don't require the service principals to exist.
       production_service_principal: unused-in-dev
+      ci_service_principal: unused-in-dev
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     presets:
@@ -84,14 +100,17 @@ targets:
       # and SP-driven CD deploys never strip each other's access
       - user_name: randy.pitcher@databricks.com
         level: CAN_MANAGE
+      # The CI SP gets CAN_VIEW only: enough to read the deployed bundle files
+      # its job task executes (permissions apply to the workspace folder too),
+      # never enough to edit jobs or trigger anything.
+      - service_principal_name: ${var.ci_service_principal}
+        level: CAN_VIEW
     resources:
       jobs:
+        # CD/daily/hourly run as the production SP: run_as is the ONLY auth
+        # config they need -- each task resolves a runtime token from ambient
+        # credentials.
         dbt_production_daily:
-          run_as:
-            service_principal_name: ${var.production_service_principal}
-        # CI/CD/hourly run as the same SP: run_as is the ONLY auth config they
-        # need -- each task resolves a runtime token from ambient credentials.
-        dbt_ci:
           run_as:
             service_principal_name: ${var.production_service_principal}
         dbt_cd:
@@ -100,6 +119,12 @@ targets:
         dbt_hourly:
           run_as:
             service_principal_name: ${var.production_service_principal}
+        # CI runs as its OWN SP, never production's: it owns the CI catalog it
+        # builds into, and production is read-only to it -- unreviewed PR code
+        # cannot write to production even if it tries.
+        dbt_ci:
+          run_as:
+            service_principal_name: ${var.ci_service_principal}
     workspace:
       # Deploy under the production SP's own user folder: not coupled to any human's
       # home directory, and (unlike /Workspace/Shared) not writable by all users.

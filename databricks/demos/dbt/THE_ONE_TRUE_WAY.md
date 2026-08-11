@@ -119,8 +119,10 @@ token. Production deployments must not run as the deploying human either: the DA
 target sets `run_as` to a dedicated service principal and deploys to a shared workspace
 path, so production survives people changing teams.
 
-- **In this repo:** `run_as` + a root path under the production SP's own workspace folder
-  in `databricks.yml` (prod target).
+- **In this repo:** two SPs, assigned per-job in `databricks.yml` (prod target) —
+  `dbt_ci_sp` runs CI only (owns the CI catalog; **read-only** on the production catalog,
+  so CI can defer to prod state but never write to it) and `dbt_prod_sp` runs everything
+  else — plus a root path under the production SP's own workspace folder.
 
 ### 8. Raw/source data is read-only and shared across environments
 Every environment reads the SAME upstream sources; only the outputs are namespaced. Dev

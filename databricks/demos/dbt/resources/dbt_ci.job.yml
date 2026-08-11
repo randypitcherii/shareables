@@ -11,7 +11,11 @@
 #
 # Auth: the job's run_as service principal (set in the prod target of
 # databricks.yml) IS the auth -- the task wrapper resolves a runtime token from
-# its ambient credentials. No OAuth client secret exists anywhere.
+# its ambient credentials. No OAuth client secret exists anywhere. CI runs as
+# its OWN SP (dbt_ci_sp), never production's: it owns the CI catalog the
+# disposable schemas land in, and it holds only read grants on the production
+# catalog (enough for Slim CI deferral + the state download), so unreviewed PR
+# code cannot write to production even if it tries.
 #
 # The task downloads the repo tarball at `git_ref` (the PR head SHA), so PR
 # code executes here under the run_as SP -- never inside the GitHub runner's
@@ -49,7 +53,9 @@ resources:
               - "--git-ref={{job.parameters.git_ref}}"
               - "--schema={{job.parameters.ci_schema}}"
               - "--warehouse-id=${var.warehouse_id}"
-              - "--catalog=${var.production_catalog}"
+              # builds land in the CI catalog; the production catalog is only
+              # ever READ (deferred relations + the state manifest below)
+              - "--catalog=${var.ci_catalog}"
               - "--artifacts-volume=/Volumes/${var.production_catalog}/${var.production_artifact_schema}/${var.production_artifact_volume}"
               - "--usage-history-days=7"
           environment_key: dbt_via_uv
