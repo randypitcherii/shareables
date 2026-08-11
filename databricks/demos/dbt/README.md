@@ -213,7 +213,9 @@ by display name:
   a CI run of unreviewed PR code cannot write to production by accident.
 
 The deploying identity needs CAN_USE on both SPs — including `dbt_prod_sp` itself, since the
-CD job redeploys this bundle as the production SP and must set the CI job's `run_as`.
+CD job redeploys this bundle as the production SP and must set the CI job's `run_as`. Both
+SPs also need CAN_USE on the `dbt_wh` SQL warehouse (dbt's first connection fails with
+PERMISSION_DENIED on the SQL endpoint otherwise).
 
 Production runs also apply **grants as code**: every `dbt build` grants `SELECT` on the marts
 to `account users` (see `+grants` in `dbt_project.yml`) — consumers get access as part of the
