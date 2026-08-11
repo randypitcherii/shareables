@@ -199,12 +199,21 @@ This demo also includes a Databricks Asset Bundle (`databricks.yml`) for product
   captures the production state artifacts, and regenerates dbt docs.
 - A Databricks app that serves the generated dbt docs from the volume.
 
-Production runs as a **dedicated service principal** (`run_as` in the prod target), never the
-deploying human, and deploys to a shared workspace path (`/Workspace/Shared/.bundle/...`) so
-production isn't coupled to anyone's home directory. The bundle looks up the SP by display
-name (`dbt_prod_sp` by default); the deploying identity needs CAN_USE on it, and the SP needs
-SELECT on `system.billing`, ownership-level access to the production catalog/schemas, and
-WRITE on the artifacts volume.
+Every job runs as a **dedicated service principal** (`run_as` per job in the prod target),
+never the deploying human, and the bundle deploys under the production SP's own workspace
+folder so production isn't coupled to anyone's home directory. There are two SPs, looked up
+by display name:
+
+- **`dbt_prod_sp`** runs CD/Daily/Hourly and owns everything durable: it needs SELECT on
+  `system.billing`, ownership-level access to the production catalog/schemas, and WRITE on
+  the artifacts volume.
+- **`dbt_ci_sp`** runs CI and nothing else: it owns the CI catalog the disposable per-PR
+  schemas land in, and on the production catalog it holds **read-only** grants (USE CATALOG,
+  USE SCHEMA, SELECT, READ VOLUME — enough for Slim CI deferral and the state download), so
+  a CI run of unreviewed PR code cannot write to production by accident.
+
+The deploying identity needs CAN_USE on both SPs — including `dbt_prod_sp` itself, since the
+CD job redeploys this bundle as the production SP and must set the CI job's `run_as`.
 
 Production runs also apply **grants as code**: every `dbt build` grants `SELECT` on the marts
 to `account users` (see `+grants` in `dbt_project.yml`) — consumers get access as part of the
@@ -226,13 +235,15 @@ databricks bundle run dbt_production_daily -t prod
 databricks bundle run dbt_docs -t prod
 ```
 
-The bundle looks up a SQL warehouse named `dbt_wh` and a service principal named `dbt_prod_sp`
-by default. Override either when deploying if your workspace uses different names:
+The bundle looks up a SQL warehouse named `dbt_wh` and service principals named `dbt_prod_sp`
+and `dbt_ci_sp` by default. Override any of them when deploying if your workspace uses
+different names:
 
 ```bash
 databricks bundle deploy -t prod \
   --var="warehouse_id=<warehouse-id>" \
-  --var="production_service_principal=<sp-application-id>"
+  --var="production_service_principal=<sp-application-id>" \
+  --var="ci_service_principal=<sp-application-id>"
 ```
 
 The docs app derives its `/Volumes/<catalog>/<schema>/<volume>` path from the same
@@ -244,16 +255,17 @@ single injected value.
 
 # CI/CD
 
-The whole chain — which git event fires which trigger, which Databricks job executes, and
-what each run touches ([source](docs/diagrams/06-git-lifecycle-cicd.d2)):
+The whole lifecycle in one view — what each git state is, which service principal it runs
+as, and which catalog it lands in:
 
-![Git events → GitHub Actions triggers → Databricks serverless jobs → environments](docs/diagrams/06-git-lifecycle-cicd.png)
+![Git lifecycle → service principals → catalogs](docs/diagrams/06-git-lifecycle-environments.svg)
 
 CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
 builds and tests every PR that touches this project, into its own disposable schema:
 
 ```bash
 DBT_DEPLOYMENT_ENVIRONMENT=ci_testing
+DBT_DEFAULT_CATALOG=rpw_ci   # the CI catalog -- production is read-only to CI
 DBT_DEFAULT_SCHEMA=dbt_rpw_dbt_databricks_reference_pr${PR_NUMBER}_build${RUN_NUMBER}
 ```
 
@@ -274,8 +286,9 @@ running dbt on the runner:
 * **one committed `profiles.yml`** — dev/ci/prod all resolve from the same file with
   env-var placeholders; no platform-generated profile to drift from it.
 
-**Auth: `run_as` is the whole setup.** The CI and prod jobs run as the `dbt_prod_sp`
-service principal, and the task wrapper resolves a short-lived token from its ambient
+**Auth: `run_as` is the whole setup.** Each job runs as a dedicated service principal —
+CI as `dbt_ci_sp` (owner of the CI catalog, read-only on production), everything else as
+`dbt_prod_sp` — and the task wrapper resolves a short-lived token from its ambient
 runtime credentials. No OAuth client secret is provisioned, stored, or rotated anywhere —
 and the GitHub side holds zero Databricks secrets either (the trigger runs on a
 self-hosted runner inside a Databricks App —

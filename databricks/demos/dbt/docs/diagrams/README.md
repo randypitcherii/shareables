@@ -13,13 +13,10 @@ Each was designed pain-first — start from "what's hard to grasp in prose," the
 | `03-dev-sandboxes.html` | Per-developer sandboxes (confidence vs hesitation) | "everyone builds the same models but never collides" is abstract |
 | `04-ephemeral-ci-schema.html` | Disposable per-PR CI schemas | "a re-run builds separately from the last attempt" is a temporal story |
 | `05-cost-lineage.html` | Cost-analytics lineage | the README's ASCII tree is flat — no materializations, no incremental fact, no join |
-| `06-git-lifecycle-cicd.png` | Git events → triggers → jobs → environments (embedded in the main README) | the CI/CD chain spans 3 workflows, 4 jobs, and 3 blast radii — assembling it from prose means holding all of it in your head |
+| `06-git-lifecycle-environments.svg` | Git lifecycle → service principals → catalogs (embedded in the main README) | who runs what, and where it lands — two SPs, three catalogs, and the release gate assembled from prose means holding all of it in your head |
 
-`06` is a committed PNG (renders directly on GitHub) generated from `06-git-lifecycle-cicd.d2`.
-Regenerate after editing the source:
-
-```bash
-d2 --pad=24 06-git-lifecycle-cicd.d2 /tmp/06.svg && rsvg-convert --zoom 2 --format png --output 06-git-lifecycle-cicd.png /tmp/06.svg
-```
+`06` is a hand-authored SVG (renders directly on GitHub, no build step): each row is one
+environment, colored end-to-end — the branch, the principal it runs as, and the catalog it
+lands in. Edit the SVG directly; there is no generator source.
 
 Style: "Mono Bold" — white canvas, black monospace, thin borders, neon accent + glow on the one node each diagram is really about.
