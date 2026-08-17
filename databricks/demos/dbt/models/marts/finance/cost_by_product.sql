@@ -7,6 +7,6 @@ select
     count(distinct workspace_id) as n_workspaces,
     sum(usage_quantity)          as usage_quantity,
     sum(list_cost)               as list_cost,
-    1/0 as whoops
+    upper() as whoops
 from {{ ref('int_usage_priced') }}
 group by billing_origin_product, usage_date, cloud, currency_code
