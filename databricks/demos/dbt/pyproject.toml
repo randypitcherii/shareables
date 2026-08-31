@@ -2,6 +2,10 @@
 name = "rpw-dbt-databricks-reference"
 version = "0.1.0"
 requires-python = ">=3.11"
+# THE pin for the dbt version everywhere: dev venvs, CI, and prod all run
+# `uv sync` against this file (uv.lock is intentionally gitignored -- it would
+# hard-code this machine's package proxy), so the EXACT pin below is the single
+# source of truth. Upgrading dbt = bump it, `make venv`, `make build`, open a PR.
 dependencies = [
-    "dbt-databricks>=1.11.0",
+    "dbt-databricks==1.12.4",
 ]

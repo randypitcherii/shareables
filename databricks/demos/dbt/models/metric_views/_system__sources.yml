@@ -1,0 +1,191 @@
+version: 2
+
+# Every system.* table the metric views touch, declared as a dbt source so the
+# views carry real lineage and so tests can watch the system catalog for drift.
+# system.billing is NOT declared here -- it already lives in
+# models/staging/system_billing/_system_billing__sources.yml.
+#
+# The column-level contract for these tables lives in
+# seeds/system_table_schema_contract.csv (see tests/assert_system_source_*.sql);
+# declaring hundreds of columns here would just duplicate it.
+sources:
+  - name: system_access
+    database: system
+    schema: access
+    tables:
+      - name: assistant_events
+        description: >-
+          Tracks user messages sent to the Genie Code.
+      - name: audit
+        description: >-
+          Includes records for all audit events from workspaces in your region.
+      - name: clean_room_events
+        description: >-
+          Captures events related to clean rooms.
+      - name: column_lineage
+        description: >-
+          Includes a record for each read or write event on a Unity Catalog column.
+      - name: inbound_network
+        description: >-
+          Records an event for every time inbound access to a workspace is denied by an ingress policy.
+      - name: outbound_network
+        description: >-
+          Records an event every time outbound internet access is denied from your account.
+      - name: table_lineage
+        description: >-
+          Includes a record for each read or write event on a Unity Catalog table or path.
+      - name: workspaces_latest
+        description: >-
+          Slow-changing dimension table of metadata for all workspaces in the account.
+        columns:
+          # 22 of the metric-view joins hit this table as a plain equi-join and assert
+          # `at_most_one_match`. That is only true while workspace_id is a real key --
+          # if Databricks ever ships duplicate rows here, every one of those joins can
+          # silently fan out, so this failing is a drop-everything signal.
+          - name: workspace_id
+            data_tests:
+              - not_null
+              - dbt_expectations.expect_column_values_to_be_unique
+  - name: system_ai_gateway
+    database: system
+    schema: ai_gateway
+    tables:
+      - name: external_model_spend
+        description: >-
+          Records estimated USD spend for requests routed to external models.
+      - name: usage
+        description: >-
+          Captures request/response details including token usage, latency, and performance metrics.
+  - name: system_compute
+    database: system
+    schema: compute
+    tables:
+      - name: clusters
+        description: >-
+          Slow-changing dimension table containing full history of compute configurations.
+      - name: instance_events
+        description: >-
+          Captures state transitions of classic compute instances.
+      - name: instance_pools
+        description: >-
+          Slow-changing dimension table with full history of instance pool configurations.
+      - name: node_timeline
+        description: >-
+          Captures utilization metrics of all-purpose and jobs compute resources.
+      - name: node_types
+        description: >-
+          Captures currently available node types with basic hardware information.
+        # The cluster/pool flake joins key on (account_id, node_type) and assume it is
+        # unique. A duplicate here would fan out worker/driver hardware attribution.
+        data_tests:
+          - dbt_expectations.expect_compound_columns_to_be_unique:
+              arguments:
+                column_list: [account_id, node_type]
+      - name: warehouse_events
+        description: >-
+          Captures events related to SQL warehouses (starting.
+      - name: warehouses
+        description: >-
+          Contains full history of configurations over time for any SQL warehouse.
+  - name: system_data_classification
+    database: system
+    schema: data_classification
+    tables:
+      - name: results
+        description: >-
+          Stores column-level detections of sensitive data classes across enabled catalogs. Referenced only by a disabled metric view pending a SELECT grant.
+  - name: system_data_quality_monitoring
+    database: system
+    schema: data_quality_monitoring
+    tables:
+      - name: table_results
+        description: >-
+          Stores results of data quality monitoring checks and incident information. Referenced only by a disabled metric view pending a SELECT grant.
+  - name: system_lakeflow
+    database: system
+    schema: lakeflow
+    tables:
+      - name: job_run_timeline
+        description: >-
+          Tracks the start and end times of job runs.
+      - name: job_task_run_timeline
+        description: >-
+          Tracks start/end times and compute resources used for job task runs.
+      - name: job_tasks
+        description: >-
+          Tracks all job tasks that run in the account.
+      - name: jobs
+        description: >-
+          Tracks all jobs created in the account.
+      - name: pipeline_update_timeline
+        description: >-
+          Tracks start/end times and compute resources used for pipeline updates.
+      - name: pipelines
+        description: >-
+          Tracks all pipelines created in the account.
+      - name: zerobus_ingest
+        description: >-
+          Stores all data related to records ingested using Zerobus Ingest.
+      - name: zerobus_stream
+        description: >-
+          Stores all data related to stream events incurred by Zerobus Ingest usage.
+  - name: system_mlflow
+    database: system
+    schema: mlflow
+    tables:
+      - name: experiments_latest
+        description: >-
+          Each row represents an experiment created in the Databricks-managed MLflow system.
+      - name: run_metrics_history
+        description: >-
+          Holds timeseries metrics logged to MLflow for model training and evaluation.
+      - name: runs_latest
+        description: >-
+          Each row represents a run created in the Databricks-managed MLflow system.
+  - name: system_query
+    database: system
+    schema: query
+    tables:
+      - name: history
+        description: >-
+          Captures records for all queries run on SQL warehouses and serverless compute.
+  - name: system_replication
+    database: system
+    schema: replication
+    tables:
+      - name: states
+        description: >-
+          Tracks replication status for Databricks managed disaster recovery.
+  - name: system_serving
+    database: system
+    schema: serving
+    tables:
+      - name: endpoint_usage
+        description: >-
+          Captures token counts for each request to a model serving endpoint.
+      - name: served_entities
+        description: >-
+          Slow-changing dimension table storing metadata for each served foundation model.
+  - name: system_sharing
+    database: system
+    schema: sharing
+    tables:
+      - name: materialization_history
+        description: >-
+          Captures data materialization events from view, materialized view, and streaming table sharing.
+  - name: system_storage
+    database: system
+    schema: storage
+    tables:
+      - name: predictive_optimization_operations_history
+        description: >-
+          Tracks operation history of the predictive optimization feature.
+
+  # The system catalog's own metadata -- what the schema-contract tests compare
+  # the seed against to detect structure drift in the tables above.
+  - name: system_information_schema
+    database: system
+    schema: information_schema
+    tables:
+      - name: columns
+        description: One row per column per table visible in the system catalog.
