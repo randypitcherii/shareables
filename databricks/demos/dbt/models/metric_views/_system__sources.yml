@@ -15,7 +15,7 @@ sources:
     tables:
       - name: assistant_events
         description: >-
-          Tracks user messages sent to the Genie Code.
+          Tracks user messages sent to Databricks Assistant and Genie.
       - name: audit
         description: >-
           Includes records for all audit events from workspaces in your region.
@@ -83,7 +83,7 @@ sources:
                 column_list: [account_id, node_type]
       - name: warehouse_events
         description: >-
-          Captures events related to SQL warehouses (starting.
+          Captures events related to SQL warehouses (starting, stopping, running, scaling).
       - name: warehouses
         description: >-
           Contains full history of configurations over time for any SQL warehouse.
@@ -93,14 +93,14 @@ sources:
     tables:
       - name: results
         description: >-
-          Stores column-level detections of sensitive data classes across enabled catalogs. Referenced only by a disabled metric view pending a SELECT grant.
+          Stores column-level detections of sensitive data classes across enabled catalogs.
   - name: system_data_quality_monitoring
     database: system
     schema: data_quality_monitoring
     tables:
       - name: table_results
         description: >-
-          Stores results of data quality monitoring checks and incident information. Referenced only by a disabled metric view pending a SELECT grant.
+          Stores results of data quality monitoring checks and incident information.
   - name: system_lakeflow
     database: system
     schema: lakeflow

@@ -2,8 +2,9 @@
 # Ported from HobbsAnalytics/databricks-metric-views-system-tables
 # (metric_views/standalone_facts.yaml). system.* references are rewritten to dbt
 # source() calls for lineage; the metric-view YAML is otherwise unchanged.
-# DISABLED: upstream marks this view blocked pending a SELECT grant on its
-# source system table. Flip enabled once the grant exists in this account.
+# DISABLED: SELECT on this source table is denied even with catalog-wide SELECT
+# on `system` -- this schema needs its own explicit grant (verified 2026-08-31).
+# Flip enabled once an account admin grants SELECT on the source table.
 
 version: 1.1
 source: {{ source('system_data_quality_monitoring', 'table_results') }}

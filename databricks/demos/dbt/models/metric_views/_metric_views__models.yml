@@ -67,8 +67,7 @@ models:
       MLflow logged metric datapoints with run and experiment context.
   - name: dq_monitoring_metrics
     description: >
-      Data quality monitoring results at table grain (standalone fact). (Currently disabled: pending
-      SELECT grant on its source system table.)
+      Data quality monitoring results at table grain (standalone fact). (Disabled: source schema needs an explicit SELECT grant.)
   - name: replication_states_metrics
     description: >
       Replication heartbeat states (account-level standalone fact, Private Preview).
@@ -77,8 +76,7 @@ models:
       Clean room events (metastore/account scoped standalone fact).
   - name: data_classification_metrics
     description: >
-      Data classification detections (current-state snapshot standalone fact). (Currently disabled:
-      pending SELECT grant on its source system table.)
+      Data classification detections (current-state snapshot standalone fact). (Disabled: source schema needs an explicit SELECT grant.)
   - name: table_lineage_metrics
     description: >
       Unity Catalog table lineage events with workspace and originating-query context.

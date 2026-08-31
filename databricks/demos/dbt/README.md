@@ -113,8 +113,9 @@ GROUP BY ALL ORDER BY list_cost_usd DESC;
 The views read `system.*` sources directly on purpose (no staging hop): upstream
 validated the joins against the raw system tables, and each view is self-contained —
 point-in-time SCD windows are computed in inline join sources. Two of the 26 ported
-views (`dq_monitoring_metrics`, `data_classification_metrics`) ship `enabled=false`
-pending SELECT grants on their source tables.
+views (`dq_monitoring_metrics`, `data_classification_metrics`) ship `enabled=false`:
+their source schemas deny SELECT even with catalog-wide SELECT on `system` and need
+their own explicit grant.
 
 **The system catalog can change under us — the tests are built to catch it.** These
 models sit on 38 `system.*` tables Databricks evolves on its own schedule, so the suite
