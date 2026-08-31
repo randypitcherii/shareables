@@ -1,0 +1,1052 @@
+{
+  "battery_01_starrocks_native": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "starrocks-native-primary-key",
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          149,
+          154,
+          199,
+          147,
+          578,
+          175,
+          548
+        ],
+        "cost_usd_per_query_p50": 1.9e-05,
+        "first_run_ms": 149,
+        "max_ms": 578,
+        "min_ms": 147,
+        "p50_ms": 175,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          255,
+          140,
+          215,
+          138,
+          144,
+          139,
+          140
+        ],
+        "cost_usd_per_query_p50": 1.5e-05,
+        "first_run_ms": 255,
+        "max_ms": 255,
+        "min_ms": 138,
+        "p50_ms": 140,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          313,
+          202,
+          156,
+          315,
+          146,
+          189,
+          512
+        ],
+        "cost_usd_per_query_p50": 2.2e-05,
+        "first_run_ms": 313,
+        "max_ms": 512,
+        "min_ms": 146,
+        "p50_ms": 202,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "cost_usd": 2.9e-05,
+        "elapsed_ms": 273,
+        "status": "ok"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.000143,
+        "elapsed_ms": 1340,
+        "status": "ok"
+      },
+      "bulk_update": {
+        "cost_usd": 7.3e-05,
+        "elapsed_ms": 683,
+        "status": "ok"
+      },
+      "create": {
+        "cost_usd": 3e-05,
+        "elapsed_ms": 285,
+        "status": "ok"
+      },
+      "delete_1": {
+        "cost_usd": 1.8e-05,
+        "elapsed_ms": 167,
+        "status": "ok"
+      },
+      "final_checksum": {
+        "cost_usd": 2.7e-05,
+        "elapsed_ms": 257,
+        "rows": [
+          50000,
+          2500000000,
+          2500000000,
+          2500
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 1.7e-05,
+        "elapsed_ms": 159,
+        "status": "ok"
+      },
+      "update_1": {
+        "cost_usd": 3.3e-05,
+        "elapsed_ms": 311,
+        "status": "ok"
+      }
+    },
+    "recorded_at": "2026-08-02T18:44:38Z",
+    "table": "sr_eval.events_native"
+  },
+  "battery_02_starrocks_uc_managed_iceberg": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          130,
+          135,
+          135,
+          132,
+          135,
+          133,
+          132
+        ],
+        "cost_usd_per_query_p50": 1.4e-05,
+        "first_run_ms": 130,
+        "max_ms": 135,
+        "min_ms": 130,
+        "p50_ms": 133,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          135,
+          134,
+          133,
+          132,
+          132,
+          133,
+          133
+        ],
+        "cost_usd_per_query_p50": 1.4e-05,
+        "first_run_ms": 135,
+        "max_ms": 135,
+        "min_ms": 132,
+        "p50_ms": 133,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          131,
+          149,
+          140,
+          137,
+          130,
+          129,
+          131
+        ],
+        "cost_usd_per_query_p50": 1.4e-05,
+        "first_run_ms": 131,
+        "max_ms": 149,
+        "min_ms": 129,
+        "p50_ms": 131,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "bulk_insert_100k": {
+        "error": "(5609, 'S3: Fail to create multipart upload for object <uc-managed-storage-bucket>/__unitystorage/catalogs/<catalog-id>/tables/<table-id>/019fc3ee-ddc5-76a4-98fb-9e0f1c1c340d_0_0_0.parquet: User: arn:aws:sts::<account>:assumed-role/<uc-vended-role>/m=<sess>,s=<sess> is not authorized to perform: s3:PutObject on resource: \"arn:aws:s3:::<uc-managed-storage-bucket>/<table-root>\" because no service control policy allows the s3:PutObject action')",
+        "status": "error"
+      },
+      "bulk_update": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      },
+      "create": {
+        "cost_usd": 0.000373,
+        "elapsed_ms": 3500,
+        "status": "ok"
+      },
+      "delete_1": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "final_checksum": {
+        "cost_usd": 1.4e-05,
+        "elapsed_ms": 136,
+        "rows": [
+          0,
+          null,
+          null,
+          0
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "error": "(5609, 'S3: Fail to create multipart upload for object <uc-managed-storage-bucket>/__unitystorage/catalogs/<catalog-id>/tables/<table-id>/019fc3ee-e10b-72eb-b093-7b80105d9488_0_0_0.parquet: User: arn:aws:sts::<account>:assumed-role/<uc-vended-role>/m=<sess>,s=<sess> is not authorized to perform: s3:PutObject on resource: \"arn:aws:s3:::<uc-managed-storage-bucket>/<table-root>\" because no service control policy allows the s3:PutObject action')",
+        "status": "error"
+      },
+      "update_1": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      }
+    },
+    "recorded_at": "2026-08-02T19:24:03Z",
+    "table": "uc_ice.starrocks_uc_eval.events_sr_iceberg",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "battery_02_starrocks_uc_managed_iceberg__rerun_no_ip_acl": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          769,
+          652,
+          542,
+          641,
+          538,
+          664,
+          515
+        ],
+        "cost_usd_per_query_p50": 6.8e-05,
+        "first_run_ms": 769,
+        "max_ms": 769,
+        "min_ms": 515,
+        "p50_ms": 641,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          715,
+          974,
+          561,
+          775,
+          664,
+          620,
+          677
+        ],
+        "cost_usd_per_query_p50": 7.2e-05,
+        "first_run_ms": 715,
+        "max_ms": 974,
+        "min_ms": 561,
+        "p50_ms": 677,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          1054,
+          625,
+          519,
+          530,
+          577,
+          580,
+          1055
+        ],
+        "cost_usd_per_query_p50": 6.2e-05,
+        "first_run_ms": 1054,
+        "max_ms": 1055,
+        "min_ms": 519,
+        "p50_ms": 580,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.001026,
+        "elapsed_ms": 9615,
+        "status": "ok"
+      },
+      "bulk_update": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      },
+      "create": {
+        "cost_usd": 0.000255,
+        "elapsed_ms": 2389,
+        "status": "ok"
+      },
+      "delete_1": {
+        "error": "(1064, \"Getting analyzing error. Detail message: Table of iceberg catalog doesn't support [DELETE].\")",
+        "status": "error"
+      },
+      "final_checksum": {
+        "cost_usd": 8.6e-05,
+        "elapsed_ms": 806,
+        "rows": [
+          100001,
+          5100050001,
+          4999954242,
+          5001
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 0.000461,
+        "elapsed_ms": 4317,
+        "status": "ok"
+      },
+      "update_1": {
+        "error": "(1064, 'table events_sr_iceberg does not support update')",
+        "status": "error"
+      }
+    },
+    "recorded_at": "2026-08-03T18:53:13Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "table": "uc_ice.interop_rerun.events_sr_iceberg",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "battery_03_starrocks_uc_managed_delta": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-delta",
+    "grounds": {
+      "delta_catalog_metastore_types": "hive metastore and AWS Glue only (docs)",
+      "delta_write_support": "none \u2014 Delta Lake integration is read-only (docs)",
+      "probe_rest_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe2]. msg: Getting analyzing error. Detail message: hive metastore type [rest] is not supported.}')",
+        "status": "error"
+      },
+      "probe_unity_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe1]. msg: Getting analyzing error. Detail message: hive metastore type [unity] is not supported.}')",
+        "status": "error"
+      },
+      "write_via_iceberg_rest_uniform": "see interop_07 write probe"
+    },
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {},
+    "recorded_at": "2026-08-02T19:27:58Z",
+    "verdict": "unsupported"
+  },
+  "battery_03_starrocks_uc_managed_delta__rerun_no_ip_acl": {
+    "engine": "starrocks-4.0.13-b55eab7",
+    "format": "uc-managed-delta",
+    "grounds": {
+      "delta_catalog_metastore_types": "hive metastore and AWS Glue only (docs)",
+      "delta_write_support": "none \u2014 Delta Lake integration is read-only (docs)",
+      "probe_rest_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe2]. msg: Getting analyzing error. Detail message: hive metastore type [rest] is not supported.}')",
+        "status": "error"
+      },
+      "probe_unity_metastore_type": {
+        "error": "(1064, 'connector create failed {Failed to init connector [type: deltalake, name: uc_delta_probe1]. msg: Getting analyzing error. Detail message: hive metastore type [unity] is not supported.}')",
+        "status": "error"
+      },
+      "write_via_iceberg_rest_uniform": "see interop_07 write probe"
+    },
+    "identity": {
+      "user": "'root'@'%'",
+      "version": "4.0.13-b55eab7"
+    },
+    "ops": {},
+    "recorded_at": "2026-08-03T18:54:11Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "verdict": "unsupported"
+  },
+  "battery_04_dbsql_uc_managed_delta": {
+    "dbu_per_hour": 6.0,
+    "engine": "dbsql-serverless",
+    "format": "uc-managed-delta",
+    "identity": {
+      "user": "<operator>",
+      "version": "{\"dbr_version\":null,\"dbsql_version\":\"2026.20\",\"u_build_hash\":\"824f21cdf90269454ad48f89119799c599089264\",\"r_build_hash\":\"282069bd39677f9b92b22ab7108811f645d7034f\"}"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          876,
+          548,
+          549,
+          497,
+          511,
+          518,
+          570
+        ],
+        "cost_usd_per_query_p50": 0.000639,
+        "first_run_ms": 876,
+        "max_ms": 876,
+        "min_ms": 497,
+        "p50_ms": 548,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          913,
+          547,
+          516,
+          540,
+          569,
+          563,
+          531
+        ],
+        "cost_usd_per_query_p50": 0.000638,
+        "first_run_ms": 913,
+        "max_ms": 913,
+        "min_ms": 516,
+        "p50_ms": 547,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          1059,
+          601,
+          709,
+          661,
+          581,
+          550,
+          541
+        ],
+        "cost_usd_per_query_p50": 0.000701,
+        "first_run_ms": 1059,
+        "max_ms": 1059,
+        "min_ms": 541,
+        "p50_ms": 601,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "cost_usd": 0.001908,
+        "elapsed_ms": 1636,
+        "rows": [
+          "50000"
+        ],
+        "status": "ok"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.005036,
+        "elapsed_ms": 4317,
+        "rows": [
+          "100000",
+          "100000"
+        ],
+        "status": "ok"
+      },
+      "bulk_update": {
+        "cost_usd": 0.002954,
+        "elapsed_ms": 2532,
+        "rows": [
+          "50000"
+        ],
+        "status": "ok"
+      },
+      "create": {
+        "cost_usd": 0.003319,
+        "elapsed_ms": 2845,
+        "status": "ok"
+      },
+      "delete_1": {
+        "cost_usd": 0.002096,
+        "elapsed_ms": 1796,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      },
+      "final_checksum": {
+        "cost_usd": 0.00101,
+        "elapsed_ms": 866,
+        "rows": [
+          "50000",
+          "2500000000",
+          "2500000000",
+          "2500"
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 0.002164,
+        "elapsed_ms": 1855,
+        "rows": [
+          "1",
+          "1"
+        ],
+        "status": "ok"
+      },
+      "update_1": {
+        "cost_usd": 0.00582,
+        "elapsed_ms": 4989,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      }
+    },
+    "recorded_at": "2026-08-02T19:25:25Z",
+    "table": "<uc_catalog>.starrocks_uc_eval.events_dbsql_delta",
+    "warehouse_size": "X-Small"
+  },
+  "battery_05_dbsql_uc_managed_iceberg": {
+    "dbu_per_hour": 6.0,
+    "engine": "dbsql-serverless",
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "user": "<operator>",
+      "version": "{\"dbr_version\":null,\"dbsql_version\":\"2026.20\",\"u_build_hash\":\"824f21cdf90269454ad48f89119799c599089264\",\"r_build_hash\":\"282069bd39677f9b92b22ab7108811f645d7034f\"}"
+    },
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          929,
+          645,
+          534,
+          534,
+          530,
+          501,
+          564
+        ],
+        "cost_usd_per_query_p50": 0.000623,
+        "first_run_ms": 929,
+        "max_ms": 929,
+        "min_ms": 501,
+        "p50_ms": 534,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          809,
+          553,
+          498,
+          568,
+          501,
+          510,
+          506
+        ],
+        "cost_usd_per_query_p50": 0.000595,
+        "first_run_ms": 809,
+        "max_ms": 809,
+        "min_ms": 498,
+        "p50_ms": 510,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          848,
+          530,
+          514,
+          556,
+          491,
+          529,
+          570
+        ],
+        "cost_usd_per_query_p50": 0.000618,
+        "first_run_ms": 848,
+        "max_ms": 848,
+        "min_ms": 491,
+        "p50_ms": 530,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_delete": {
+        "cost_usd": 0.003201,
+        "elapsed_ms": 2744,
+        "rows": [
+          "50000"
+        ],
+        "status": "ok"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.004,
+        "elapsed_ms": 3429,
+        "rows": [
+          "100000",
+          "100000"
+        ],
+        "status": "ok"
+      },
+      "bulk_update": {
+        "cost_usd": 0.003135,
+        "elapsed_ms": 2687,
+        "rows": [
+          "50000"
+        ],
+        "status": "ok"
+      },
+      "create": {
+        "cost_usd": 0.003978,
+        "elapsed_ms": 3410,
+        "status": "ok"
+      },
+      "delete_1": {
+        "cost_usd": 0.002622,
+        "elapsed_ms": 2247,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      },
+      "final_checksum": {
+        "cost_usd": 0.000962,
+        "elapsed_ms": 824,
+        "rows": [
+          "50000",
+          "2500000000",
+          "2500000000",
+          "2500"
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 0.002348,
+        "elapsed_ms": 2013,
+        "rows": [
+          "1",
+          "1"
+        ],
+        "status": "ok"
+      },
+      "update_1": {
+        "cost_usd": 0.003273,
+        "elapsed_ms": 2805,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      }
+    },
+    "recorded_at": "2026-08-02T19:26:48Z",
+    "table": "<uc_catalog>.starrocks_uc_eval.events_dbsql_iceberg",
+    "warehouse_size": "X-Small"
+  },
+  "env_reachability_from_starrocks_node__rerun_no_ip_acl": {
+    "conclusion": "No S3 403. Both the read path (GetObject/HEAD/List) and the write path (PutObject, CreateMultipartUpload) succeed from the engine node using UC-vended credentials. This is the exact surface that returned 403 / SCP-denied PutObject on the earlier IP-access-list-enforcing workspace.",
+    "identity": {
+      "dbsql": "<operator>",
+      "probe_host": "starrocks EC2 node (same host that runs FE+BE)"
+    },
+    "probes": {
+      "irc_get_config": {
+        "http_status": 200
+      },
+      "irc_load_table_vended_credentials": {
+        "credentials_returned": true,
+        "http_status": 200
+      },
+      "s3_abort_multipart_upload": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_create_multipart_upload": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_head_object_current_metadata": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_list_objects_table_prefix": {
+        "exit_code": 0,
+        "result": "ok"
+      },
+      "s3_put_object_under_table_root": {
+        "exit_code": 0,
+        "result": "ok"
+      }
+    },
+    "question": "Can the StarRocks node itself reach UC and use vended credentials against S3?",
+    "recorded_at": "2026-08-03T18:56:01Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "workspace_ip_access_list": "not enabled; access-list collection empty"
+  },
+  "interop_read_dbsql_delta_to_starrocks": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "error": "(1064, 'Forbidden (Service: S3, Status Code: 403, Request ID: CVAGCZWS7JM8N71X, Extended Request ID: p3W696ipN+VPR5EiDUxUbaKy7r4TRvh+f/HGp/STrmGKsA00W3NinH9zi8EktC3K9ppsiuOZP14=)')",
+    "format": "uc-managed-delta-uniform",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "recorded_at": "2026-08-02T19:29:23Z",
+    "status": "error",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "interop_read_dbsql_delta_to_starrocks__rerun_no_ip_acl": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "format": "uc-managed-delta-uniform",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "read_timing": {
+      "all_ms": [
+        718,
+        567,
+        112
+      ],
+      "first_run_ms": 718,
+      "max_ms": 718,
+      "min_ms": 112,
+      "p50_ms": 567,
+      "runs": 3
+    },
+    "recorded_at": "2026-08-03T18:53:50Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "status": "ok",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "interop_read_dbsql_iceberg_to_starrocks": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "error": "(1064, 'Forbidden (Service: S3, Status Code: 403, Request ID: CVAG83E3S4S3W80M, Extended Request ID: UUZ2mALEk3cJScTHdLdRLm2/uT3dGVybpbyMKEsmo1MtAhcTA1PvMyuWcqJ/+TRfgd8fXbkAukg=)')",
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "recorded_at": "2026-08-02T19:29:22Z",
+    "status": "error",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "interop_read_dbsql_iceberg_to_starrocks__rerun_no_ip_acl": {
+    "accessor": "starrocks",
+    "creator": "dbsql-serverless",
+    "dbsql_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "read",
+    "read_timing": {
+      "all_ms": [
+        1265,
+        593,
+        1270
+      ],
+      "first_run_ms": 1265,
+      "max_ms": 1270,
+      "min_ms": 593,
+      "p50_ms": 1265,
+      "runs": 3
+    },
+    "recorded_at": "2026-08-03T18:53:49Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100000,
+      5000050000,
+      4999950000,
+      5000
+    ],
+    "status": "ok",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "interop_rw_dbsql_on_starrocks_created_iceberg": {
+    "accessor": "dbsql-serverless",
+    "creator": "starrocks (CREATE TABLE via UC Iceberg REST)",
+    "dbu_per_hour": 6.0,
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>"
+    },
+    "operation": "read+write",
+    "ops": {
+      "agg_distinct": {
+        "all_ms": [
+          919,
+          498,
+          487,
+          480,
+          472,
+          492,
+          516
+        ],
+        "cost_usd_per_query_p50": 0.000574,
+        "first_run_ms": 919,
+        "max_ms": 919,
+        "min_ms": 472,
+        "p50_ms": 492,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_filter": {
+        "all_ms": [
+          890,
+          494,
+          518,
+          509,
+          500,
+          482,
+          490
+        ],
+        "cost_usd_per_query_p50": 0.000583,
+        "first_run_ms": 890,
+        "max_ms": 890,
+        "min_ms": 482,
+        "p50_ms": 500,
+        "runs": 7,
+        "status": "ok"
+      },
+      "agg_group_by": {
+        "all_ms": [
+          843,
+          565,
+          551,
+          510,
+          478,
+          451,
+          534
+        ],
+        "cost_usd_per_query_p50": 0.000623,
+        "first_run_ms": 843,
+        "max_ms": 843,
+        "min_ms": 451,
+        "p50_ms": 534,
+        "runs": 7,
+        "status": "ok"
+      },
+      "bulk_insert_100k": {
+        "cost_usd": 0.010232,
+        "elapsed_ms": 8770,
+        "rows": [
+          "100000",
+          "100000"
+        ],
+        "status": "ok"
+      },
+      "checksum": {
+        "cost_usd": 0.001339,
+        "elapsed_ms": 1148,
+        "rows": [
+          "100000",
+          "5000050000",
+          "4999950000",
+          "5000"
+        ],
+        "status": "ok"
+      },
+      "delete_1": {
+        "cost_usd": 0.002889,
+        "elapsed_ms": 2476,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      },
+      "insert_1": {
+        "cost_usd": 0.002468,
+        "elapsed_ms": 2116,
+        "rows": [
+          "1",
+          "1"
+        ],
+        "status": "ok"
+      },
+      "update_1": {
+        "cost_usd": 0.004107,
+        "elapsed_ms": 3521,
+        "rows": [
+          "1"
+        ],
+        "status": "ok"
+      }
+    },
+    "recorded_at": "2026-08-02T20:25:52Z",
+    "uc_metadata": {
+      "data_source_format": "DataSourceFormat.DELTA",
+      "owner": "<operator>",
+      "table_type": "TableType.MANAGED"
+    },
+    "warehouse_size": "X-Small"
+  },
+  "interop_write_starrocks_to_uc_iceberg_verified__rerun_no_ip_acl": {
+    "accessor": "dbsql-serverless",
+    "creator": "starrocks (CREATE + INSERT via UC Iceberg REST)",
+    "dbsql_checksum": [
+      100001,
+      5100050001,
+      4999954242,
+      5001
+    ],
+    "dbsql_read_elapsed_ms": 1006,
+    "format": "uc-managed-iceberg",
+    "identity": {
+      "dbsql": "<operator>",
+      "starrocks": {
+        "user": "'root'@'%'",
+        "version": "4.0.13-b55eab7"
+      }
+    },
+    "operation": "write-then-verify",
+    "recorded_at": "2026-08-03T18:54:55Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "starrocks_checksum": [
+      100001,
+      5100050001,
+      4999954242,
+      5001
+    ],
+    "status": "ok",
+    "uc_catalog_info": {
+      "catalog": "uc_ice",
+      "property_style": "v4",
+      "uri_host": "https://<workspace-host>"
+    }
+  },
+  "uc_describe_detail_formats": {
+    "identity": {
+      "dbsql": "<operator>"
+    },
+    "recorded_at": "2026-08-02T20:27:20Z",
+    "tables": {
+      "events_dbsql_delta": {
+        "describe_detail_format": "delta",
+        "location_tail": "tcher_workspace_catalog.starrocks_uc_eval.events_dbsql_delta"
+      },
+      "events_dbsql_iceberg": {
+        "describe_detail_format": "iceberg",
+        "location_tail": "her_workspace_catalog.starrocks_uc_eval.events_dbsql_iceberg"
+      },
+      "events_sr_iceberg": {
+        "describe_detail_format": "iceberg",
+        "location_tail": "itcher_workspace_catalog.starrocks_uc_eval.events_sr_iceberg"
+      }
+    }
+  },
+  "uc_describe_detail_formats__rerun_no_ip_acl": {
+    "identity": {
+      "dbsql": "<operator>"
+    },
+    "recorded_at": "2026-08-03T18:55:28Z",
+    "run_note": "rerun on a workspace with no IP access list; StarRocks node reaches UC and S3 directly (no catalog relay)",
+    "tables": {
+      "events_sr_iceberg": "iceberg",
+      "interop_delta": "delta",
+      "interop_ice": "iceberg"
+    }
+  },
+  "uc_table_format_registry": {
+    "identity": {
+      "dbsql": "<operator>"
+    },
+    "recorded_at": "2026-08-02T20:26:11Z",
+    "tables": {
+      "events_dbsql_delta": {
+        "data_source_format": "DELTA",
+        "table_type": "MANAGED"
+      },
+      "events_dbsql_iceberg": {
+        "data_source_format": "DELTA",
+        "table_type": "MANAGED"
+      },
+      "events_sr_iceberg": {
+        "data_source_format": "DELTA",
+        "table_type": "MANAGED"
+      },
+      "interop_delta": {
+        "data_source_format": "DELTA",
+        "table_type": "MANAGED"
+      },
+      "interop_ice": {
+        "data_source_format": "DELTA",
+        "table_type": "MANAGED"
+      }
+    }
+  }
+}

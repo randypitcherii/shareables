@@ -1,0 +1,16 @@
+#!/bin/bash
+# Bootstraps a single-node StarRocks (FE + BE in one container) exposing:
+#   9030 - FE MySQL protocol (queries + DDL/DML)
+#   8030 - FE HTTP
+#   8040 - BE HTTP
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+# allin1 starts one FE and one BE and registers the BE with the FE
+# automatically. Host networking is NOT required for the MySQL query path —
+# result rows stream back through the FE connection.
+docker run -d --name starrocks --restart always \
+  -p 9030:9030 -p 8030:8030 -p 8040:8040 \
+  starrocks/allin1-ubuntu:${starrocks_version}
