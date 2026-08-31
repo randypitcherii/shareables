@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+aws_profile = "your-aws-profile-name"
+aws_region  = "us-east-1"
+
+# Decide your own exposure. The broker is UNAUTHENTICATED — synthetic data only,
+# destroy when done. Some sandboxes reject a literal 0.0.0.0/0; the /1 halves
+# below are equivalent for a short-lived run.
+allowed_ingress_cidrs = [
+  "0.0.0.0/1",
+  "128.0.0.0/1",
+]
+
+# Required: the scale producer runs ON the VM over SSH.
+ssh_public_key   = "ssh-ed25519 AAAA... you@laptop"
+ssh_ingress_cidr = "203.0.113.10/32" # your laptop /32

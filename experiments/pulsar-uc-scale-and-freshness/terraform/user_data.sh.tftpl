@@ -1,0 +1,80 @@
+#!/bin/bash
+# Bootstraps a single-node Apache Pulsar standalone with the KoP (Kafka-on-Pulsar)
+# protocol handler, plus a local producer image so synthetic events can be
+# generated ON the VM (laptop WAN bandwidth stays out of the measurement).
+#   6650 - Pulsar binary protocol
+#   8080 - Pulsar admin API
+#   9092 - Kafka protocol (KoP)
+set -euxo pipefail
+
+# dnf can transiently fail to resolve the docker package right at first boot
+# (observed live: "No match for argument: docker" while repos warm up) — retry.
+for attempt in 1 2 3 4 5; do
+  dnf install -y docker && break
+  echo "dnf install docker failed (attempt $attempt); retrying in 15s"
+  sleep 15
+done
+systemctl enable --now docker
+usermod -aG docker ec2-user  # remote-produce runs docker over SSH as ec2-user
+
+mkdir -p /opt/pulsar/protocols /opt/pulsar/nar /opt/pulsar/producer
+# The image runs as uid 10000, so it cannot unpack the NAR into a root-owned
+# bind mount: the broker dies with "Cannot create .../pulsar-nar/...nar-unpacked"
+# and then "No protocol handler is found for protocol `kafka`".
+chown -R 10000:0 /opt/pulsar/nar
+chmod 777 /opt/pulsar/producer
+
+# KoP NAR is Apache-2.0 licensed; version must pair with the Pulsar release.
+curl -fL -o /opt/pulsar/protocols/pulsar-protocol-handler-kafka-${kop_version}.nar \
+  "https://github.com/streamnative/kop/releases/download/v${kop_version}/pulsar-protocol-handler-kafka-${kop_version}.nar"
+
+# Public IP via IMDSv2 — advertised to both Pulsar and Kafka clients so external
+# lookups redirect to a reachable address. Advertised via advertisedListeners,
+# NOT advertisedAddress: in standalone mode advertisedAddress also applies to the
+# embedded bookie, which then registers at <public-ip>:<ephemeral-port> that
+# nothing listens on — ledgers open but no entry is ever confirmed, and every
+# produce fails with "Not enough non-faulty bookies".
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+PUBLIC_IP=$(curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# entryFormat=pulsar lets one event stream (produced with the native Pulsar client)
+# be consumed over BOTH protocols.
+#
+# brokerEntryMetadataInterceptors is REQUIRED by KoP >= 2.8.0 and must be set
+# BEFORE the first produce: Kafka offsets derive from broker entry metadata
+# stamped at write time. Without it Kafka Metadata succeeds but ListOffsets
+# fails with UNKNOWN_SERVER_ERROR, and messages written while unset stay
+# permanently unreadable to Kafka clients.
+#
+# narExtractionDirectory is moved off its /tmp default: periodic /tmp cleanup
+# removes the extracted NAR and the handler dies with NoClassDefFoundError.
+#
+# defaultNumPartitions=${topic_partitions} so the auto-created eval topic is
+# partitioned — this experiment scales load beyond what one partition serves well.
+docker run -d --name pulsar --restart always \
+  -p 6650:6650 -p 8080:8080 -p 9092:9092 \
+  -v /opt/pulsar/protocols:/pulsar/protocols \
+  -v /opt/pulsar/nar:/pulsar/nar \
+  -e PULSAR_PREFIX_messagingProtocols=kafka \
+  -e PULSAR_PREFIX_protocolHandlerDirectory=./protocols \
+  -e PULSAR_PREFIX_narExtractionDirectory=/pulsar/nar \
+  -e PULSAR_PREFIX_entryFormat=pulsar \
+  -e PULSAR_PREFIX_brokerEntryMetadataInterceptors=org.apache.pulsar.common.intercept.AppendIndexMetadataInterceptor \
+  -e PULSAR_PREFIX_kafkaListeners=PLAINTEXT://0.0.0.0:9092 \
+  -e PULSAR_PREFIX_kafkaAdvertisedListeners=PLAINTEXT://$PUBLIC_IP:9092 \
+  -e PULSAR_PREFIX_kafkaTransactionCoordinatorEnabled=true \
+  -e PULSAR_PREFIX_brokerDeduplicationEnabled=true \
+  -e PULSAR_PREFIX_advertisedListeners=external:pulsar://$PUBLIC_IP:6650 \
+  -e PULSAR_PREFIX_internalListenerName=external \
+  -e PULSAR_PREFIX_allowAutoTopicCreationType=partitioned \
+  -e PULSAR_PREFIX_defaultNumPartitions=${topic_partitions} \
+  -e PULSAR_PREFIX_brokerDeleteInactiveTopicsEnabled=false \
+  apachepulsar/pulsar:${pulsar_version} \
+  sh -c "bin/apply-config-from-env.py conf/standalone.conf && bin/pulsar standalone --no-functions-worker --no-stream-storage"
+
+# Producer image, built once at boot so remote produce runs start instantly.
+cat > /opt/pulsar/producer/Dockerfile <<'EOF'
+FROM python:3.11-slim
+RUN pip install --no-cache-dir pulsar-client==3.5.0
+EOF
+docker build -t pulsar-producer /opt/pulsar/producer

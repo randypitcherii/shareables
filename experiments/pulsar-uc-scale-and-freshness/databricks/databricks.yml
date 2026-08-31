@@ -1,0 +1,52 @@
+# Databricks Asset Bundle for the two Databricks-compute ingestion paths.
+# Deploy with a named profile (no PATs):
+#   databricks bundle deploy --profile DEFAULT --target dev
+# Runs are launched by scripts/01_run_databricks_cells.py (SDK run_now with
+# python_params), because each invocation carries a different cells_json.
+bundle:
+  name: pulsar_uc_scale_and_freshness
+
+targets:
+  dev:
+    mode: development
+    default: true
+
+resources:
+  jobs:
+    path_a_kafka:
+      name: "pulsar-uc-scale path A: KoP kafka source -> managed Delta (VARIANT)"
+      # Each run resets target tables and streaming checkpoints; two overlapping
+      # runs would clobber each other's state and report nonsense.
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: ingest
+          spark_python_task:
+            python_file: src/spark_ingest.py
+            parameters: ["kafka", "placeholder", "placeholder", "placeholder", "placeholder", "placeholder", "[]"]
+          job_cluster_key: single_node
+      job_clusters:
+        - job_cluster_key: single_node
+          new_cluster: &single_node_cluster
+            spark_version: 16.4.x-scala2.12
+            node_type_id: m5d.xlarge
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: local[*]
+            custom_tags:
+              ResourceClass: SingleNode
+              project: pulsar-uc-scale-and-freshness
+
+    path_b_pulsar:
+      name: "pulsar-uc-scale path B: native pulsar connector -> managed Delta (VARIANT)"
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: ingest
+          spark_python_task:
+            python_file: src/spark_ingest.py
+            parameters: ["pulsar", "placeholder", "placeholder", "placeholder", "placeholder", "placeholder", "[]"]
+          job_cluster_key: single_node
+      job_clusters:
+        - job_cluster_key: single_node
+          new_cluster: *single_node_cluster
