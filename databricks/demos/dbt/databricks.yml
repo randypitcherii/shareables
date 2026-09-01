@@ -27,7 +27,10 @@ variables:
       (the GitHub Actions runner app's auto-created service principal). It gets
       CAN_MANAGE_RUN on those two jobs and nothing else -- dbt itself runs as
       each job's run_as identity, so the trigger principal needs zero UC grants.
-    default: ba28de80-7216-4294-9134-7e5ae7a85979
+      NOTE: this SP is auto-created per runner app -- replacing/redeploying the
+      runner app under a new identity means updating this default (the old
+      ba28de80... SP died with the original randy-pitcher-gha-runner app).
+    default: 310d810c-35d7-4611-ae1e-71c876fc0d97
   deployed_at:
     description: >-
       Human-readable last-deploy date (YYYY-MM-DD) stamped as a tag on every
