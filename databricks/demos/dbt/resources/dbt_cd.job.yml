@@ -12,7 +12,9 @@
 #      refreshed so the next CI/CD diff compares against what is now live.
 #      First deploy (no state yet) falls back to a full build. Finally,
 #      `dbt docs generate` refreshes the hosted docs so the site always shows
-#      what this deploy just shipped (not just the next scheduled docs run).
+#      what this deploy just shipped (not just the next scheduled docs run),
+#      and `bundle run dbt_docs` ships docs_app/ code changes -- bundle deploy
+#      alone updates the app resource but never deploys app code (#80).
 #
 # Like CI, the task downloads the repo tarball at `git_ref` -- prod deploys
 # exactly the merged commit, not whatever happens to be synced anywhere.

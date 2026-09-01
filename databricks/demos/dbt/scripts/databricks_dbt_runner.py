@@ -167,6 +167,9 @@ def install_databricks_cli(workdir: Path) -> Path:
     )
     cli_dir = workdir / "cli"
     cli_dir.mkdir(exist_ok=True)
+    binary = cli_dir / "databricks"
+    if binary.exists():  # cd mode uses the CLI more than once per run
+        return binary
     tarball = cli_dir / "cli.tar.gz"
     log(f"downloading {url}")
     urllib.request.urlretrieve(url, tarball)
@@ -175,12 +178,11 @@ def install_databricks_cli(workdir: Path) -> Path:
     return cli_dir / "databricks"
 
 
-def bundle_deploy_prod(project: Path, workdir: Path) -> None:
-    """Redeploy this bundle's prod target as the job's run_as identity. The
-    CLI gets a minimal, explicitly token-authed env: the sandbox's ambient
-    auth vars would otherwise make it complain about conflicting auth types."""
-    from datetime import date
-
+def prod_bundle_cli(workdir: Path) -> tuple[Path, dict[str, str]]:
+    """The standalone CLI plus a minimal, explicitly token-authed env for prod
+    bundle commands run as the job's run_as identity. The sandbox's ambient
+    auth vars would otherwise make the CLI complain about conflicting auth
+    types."""
     from databricks.sdk import WorkspaceClient
 
     client = WorkspaceClient()
@@ -194,11 +196,30 @@ def bundle_deploy_prod(project: Path, workdir: Path) -> None:
         "DATABRICKS_AUTH_TYPE": "pat",
     }
     Path(cli_env["HOME"]).mkdir(exist_ok=True)
+    return cli, cli_env
+
+
+def bundle_deploy_prod(project: Path, workdir: Path) -> None:
+    """Redeploy this bundle's prod target as the job's run_as identity."""
+    from datetime import date
+
+    cli, cli_env = prod_bundle_cli(workdir)
     run(
         [str(cli), "bundle", "deploy", "-t", "prod", f"--var=deployed_at={date.today().isoformat()}"],
         project,
         cli_env,
     )
+
+
+def bundle_run_docs_app(project: Path, workdir: Path) -> None:
+    """Ship docs_app/ code changes. `bundle deploy` only updates the app
+    RESOURCE (config, permissions, secrets) and syncs source files -- it never
+    creates an app code DEPLOYMENT, so app.py changes would otherwise sit
+    undeployed until someone runs one by hand (#80). `bundle run` on the app
+    resource deploys the just-synced source and (re)starts the app; the brief
+    docs-site restart per merge is acceptable here."""
+    cli, cli_env = prod_bundle_cli(workdir)
+    run([str(cli), "bundle", "run", "dbt_docs", "-t", "prod"], project, cli_env)
 
 
 def run(cmd: list[str], cwd: Path, env: dict[str, str]) -> None:
@@ -298,6 +319,8 @@ def main() -> None:
                     project,
                     env,
                 )
+            # ship docs_app/ code too -- bundle deploy alone never does (#80)
+            bundle_run_docs_app(project, workdir)
         elif args.mode == "prod-source-freshness":
             dbt(["source", "freshness", "--target", "prod"], project, env)
         elif args.mode == "prod-build":
