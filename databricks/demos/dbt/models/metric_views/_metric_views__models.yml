@@ -1,0 +1,85 @@
+version: 2
+
+# Generated alongside the ported metric views; descriptions mirror each view's
+# UC `comment:` so dbt docs and Unity Catalog tell the same story.
+models:
+  - name: audit_metrics
+    description: >
+      Databricks audit events with workspace context. Account-level events have workspace_id 0.
+  - name: assistant_events_metrics
+    description: >
+      Genie/assistant message events with workspace context.
+  - name: inbound_network_metrics
+    description: >
+      Denied inbound network access events with workspace context.
+  - name: outbound_network_metrics
+    description: >
+      Denied outbound network access events with workspace context.
+  - name: ai_gateway_usage_metrics
+    description: >
+      AI Gateway inference requests (tokens, latency) with workspace context.
+  - name: ai_gateway_external_model_spend_metrics
+    description: >
+      AI Gateway external model estimated spend with workspace context.
+  - name: billing_usage_metrics
+    description: >
+      Databricks billable usage (cost/DBU) at usage-record grain, enriched with point-in-time
+      workspace, price, compute, job, pipeline and serving-endpoint context.
+  - name: column_lineage_metrics
+    description: >
+      Unity Catalog column lineage events with workspace and originating-query context.
+  - name: endpoint_usage_metrics
+    description: >
+      Model serving request token usage with point-in-time served-entity/endpoint context.
+  - name: instance_events_metrics
+    description: >
+      Compute instance lifecycle events with point-in-time pool/cluster and node-type context.
+  - name: job_run_timeline_metrics
+    description: >
+      Databricks job run executions with point-in-time job definition and workspace context.
+  - name: job_task_run_timeline_metrics
+    description: >
+      Databricks job task run executions with point-in-time job and task definition context.
+  - name: materialization_history_metrics
+    description: >
+      Delta Sharing materialization events with workspace context.
+  - name: predictive_optimization_metrics
+    description: >
+      Predictive optimization operations with workspace context.
+  - name: zerobus_ingest_metrics
+    description: >
+      Zerobus ingestion commit records with workspace context (Beta).
+  - name: zerobus_stream_metrics
+    description: >
+      Zerobus stream events with workspace context (Beta).
+  - name: node_timeline_metrics
+    description: >
+      Compute node utilization (CPU/memory/network) with point-in-time cluster and node-type context.
+  - name: pipeline_update_timeline_metrics
+    description: >
+      Databricks pipeline (DLT) update executions with point-in-time pipeline definition context.
+  - name: query_history_metrics
+    description: >
+      SQL / serverless query executions with performance metrics and point-in-time warehouse/cluster
+      context.
+  - name: run_metrics_history_metrics
+    description: >
+      MLflow logged metric datapoints with run and experiment context.
+  - name: dq_monitoring_metrics
+    description: >
+      Data quality monitoring results at table grain (standalone fact). (Disabled: source schema needs an explicit SELECT grant.)
+  - name: replication_states_metrics
+    description: >
+      Replication heartbeat states (account-level standalone fact, Private Preview).
+  - name: clean_room_events_metrics
+    description: >
+      Clean room events (metastore/account scoped standalone fact).
+  - name: data_classification_metrics
+    description: >
+      Data classification detections (current-state snapshot standalone fact). (Disabled: source schema needs an explicit SELECT grant.)
+  - name: table_lineage_metrics
+    description: >
+      Unity Catalog table lineage events with workspace and originating-query context.
+  - name: warehouse_events_metrics
+    description: >
+      SQL warehouse state events (scaling/start/stop) with point-in-time warehouse context.

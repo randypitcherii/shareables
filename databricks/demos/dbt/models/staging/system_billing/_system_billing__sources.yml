@@ -29,6 +29,13 @@ sources:
         description: >
           Effective-dated published list prices per SKU. Join to usage on
           sku_name + cloud where usage_end_time falls in [price_start_time, price_end_time).
+        # Core pricing assumption: one price row per SKU per effective window. Both
+        # int_usage_priced and the billing_usage metric view join point-in-time on
+        # this key and assert at-most-one match -- a duplicate here double-counts cost.
+        data_tests:
+          - dbt_expectations.expect_compound_columns_to_be_unique:
+              arguments:
+                column_list: [sku_name, cloud, currency_code, usage_unit, price_start_time]
         columns:
           - name: pricing
             description: "Struct of list / promotional / effective_list prices."

@@ -205,6 +205,28 @@ against captured production state). The job surface (`dbt CI`, `dbt CD`, `dbt Da
   the first hourly model activates it with zero job edits; `resources/dbt_cd.job.yml` +
   `.github/workflows/dbt-cd.yml` for merge-triggered deploys.
 
+### 16. The dbt version is uv-owned, exactly pinned, and wrapped in a Makefile
+A dbt project is an application, not a library: it must be uv-based, with the required
+dbt version pinned EXACTLY in `pyproject.toml`, and every dbt command executed inside the
+uv-managed venv (`uv run dbt ...`) — never a global or manually-activated install. Every
+environment resolves dbt the same way (`uv sync` from the same `pyproject.toml`), so dev,
+CI, and prod cannot drift apart, and upgrading dbt is a one-line PR that CI proves safe
+before prod ever sees it. A `Makefile` makes the golden path the easy path, with targets
+for the core uv operations and core dbt commands:
+
+| Target | Does |
+|---|---|
+| `make venv` | create the venv if missing and sync it to `pyproject.toml` |
+| `make deps` | `uv run dbt deps` (dbt packages from `packages.yml`) |
+| `make build` / `make run` / `make test` | the matching dbt command via `uv run`, after `deps` → `venv` |
+| `make deploy` | the DABs deploy of your isolated dev bundle |
+
+- **In this repo:** `pyproject.toml` pins `dbt-databricks==<exact>` (`uv.lock` is
+  deliberately gitignored — it would hard-code a machine-specific package proxy — so the
+  pyproject pin IS the version definition); the `Makefile` implements the table above;
+  CI and prod jobs run `uv sync` at startup (`scripts/databricks_dbt_runner.py`), so
+  they pick up a version bump from the merged PR with zero job edits.
+
 ---
 
 ## Provenance & status

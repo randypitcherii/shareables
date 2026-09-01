@@ -70,3 +70,32 @@ models:
       +tblproperties:
         'format-version': 3
       +schema: managed_iceberg_examples
+
+    # Unity Catalog metric views over the system catalog, ported from
+    # HobbsAnalytics/databricks-metric-views-system-tables. Each model body IS the
+    # metric-view YAML (dimensions + measures); dbt ships it via
+    # `CREATE VIEW ... WITH METRICS LANGUAGE YAML`. They read system.* sources
+    # directly ON PURPOSE -- upstream validated every join against the raw system
+    # tables and each view is deliberately self-contained (inline SCD sources), so
+    # routing them through staging views would change what was validated.
+    metric_views:
+      +tags: [metric_views, daily]
+      +schema: metric_views
+      +materialized: metric_view
+      # Same grants-as-code posture as marts: metric views are a consumer surface
+      # (Genie, AI/BI dashboards), so production grants read access on every run.
+      +grants:
+        select: "{{ ['account users'] if var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) == 'production' else [] }}"
+
+seeds:
+  rpw_dbt_databricks_reference:
+    # The schema contract for every system.* column the metric views depend on.
+    # tests/assert_system_source_*_match_contract.sql compare it against
+    # system.information_schema to catch structure drift in the system catalog.
+    +tags: [metric_views, daily]
+    system_table_schema_contract:
+      +column_types:
+        table_schema: string
+        table_name: string
+        column_name: string
+        data_type: string

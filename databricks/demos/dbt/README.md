@@ -92,6 +92,48 @@ marts     cost_daily             cost_by_workspace   cost_by_sku      (tables: a
   usage may be unpriced). In production, a source-freshness task runs *before* the build,
   so a stalled `system.billing` pipeline fails the run instead of staying green.
 
+## Metric views: a governed semantic layer over the whole system catalog
+
+`models/metric_views/` ships 24 **Unity Catalog metric views** covering the system
+catalog's fact tables — billing usage, job/pipeline runs, query history, compute
+timelines, audit/lineage events, serving and AI-gateway usage — ported from
+[HobbsAnalytics/databricks-metric-views-system-tables](https://github.com/HobbsAnalytics/databricks-metric-views-system-tables),
+where every join was SQL-validated N:1. Each model body IS the metric-view YAML
+(dimensions + measures); dbt-databricks' `metric_view` materialization deploys it via
+`CREATE VIEW ... WITH METRICS LANGUAGE YAML`, and `{{ source() }}` calls give every view
+real lineage back to its `system.*` tables. Measures are queried with `MEASURE()`:
+
+```sql
+SELECT `Billing Origin Product`, MEASURE(`List Cost (USD)`) AS list_cost_usd
+FROM <catalog>.<schema>.billing_usage_metrics
+WHERE `Usage Date` >= current_date() - INTERVAL 7 DAYS
+GROUP BY ALL ORDER BY list_cost_usd DESC;
+```
+
+The views read `system.*` sources directly on purpose (no staging hop): upstream
+validated the joins against the raw system tables, and each view is self-contained —
+point-in-time SCD windows are computed in inline join sources. Two of the 26 ported
+views (`dq_monitoring_metrics`, `data_classification_metrics`) ship `enabled=false`:
+their source schemas deny SELECT even with catalog-wide SELECT on `system` and need
+their own explicit grant.
+
+**The system catalog can change under us — the tests are built to catch it.** These
+models sit on 38 `system.*` tables Databricks evolves on its own schedule, so the suite
+watches two failure classes:
+
+- **Structure drift.** `seeds/system_table_schema_contract.csv` pins every system-table
+  column the views were validated against. `assert_system_source_columns_match_contract`
+  **fails** when a contracted column disappears or changes base type;
+  `assert_system_source_full_types_match_contract` **warns** when a struct/map quietly
+  gains fields (additive, usually benign — review it, then refresh the contract row).
+  A view referencing a dropped column also fails loudly at `CREATE` time on every run.
+- **Stale core assumptions.** The joins assert at-most-one match, so
+  `dbt_expectations` tests pin the keys that make that true (`workspaces_latest`
+  uniqueness — 22 joins ride on it — `node_types` and `list_prices` compound keys), and
+  `assert_billing_usage_metrics_no_join_fanout` recomputes the raw fact count and compares
+  it to `MEASURE(`Usage Records`)` over the same window: if ANY join starts fanning out,
+  the numbers stop matching.
+
 ---
 
 # Environments & schema routing — the "no `dbt init`" pattern
@@ -144,10 +186,13 @@ committed (see `.gitignore`): on Databricks-managed machines `uv` rewrites regis
 to the internal PyPI proxy, which would be wrong for everyone else — so each clone resolves
 against its own registry configuration.
 
+The `Makefile` wraps the golden path (THE_ONE_TRUE_WAY #16) — every dbt command runs
+via `uv run` inside the venv that `uv sync` builds from `pyproject.toml`, which carries
+the project's EXACT dbt version pin:
+
 ```bash
 cd databricks/demos/dbt
-uv sync                 # creates .venv with dbt-databricks
-uv run dbt deps         # installs dbt packages (dbt_utils, dbt_expectations)
+make deps               # = uv sync (venv from pyproject.toml) + uv run dbt deps (dbt packages)
 ```
 
 ### 2. Configure the connection + authenticate (dev = SSO, one time)
@@ -156,7 +201,7 @@ Set the two required connection vars (no in-repo fallback), then log in:
 
 ```bash
 cp template.env .env           # then edit DBT_HOST + DBT_HTTP_PATH
-set -a; source .env; set +a    # dbt 1.12+/Fusion auto-load .env; this project is on core 1.11, so source it yourself
+                               # (dbt core 1.12+ auto-loads .env from this directory)
 
 databricks auth login --profile DEFAULT     # opens a browser for SSO
 ```
@@ -165,15 +210,17 @@ databricks auth login --profile DEFAULT     # opens a browser for SSO
 
 ### 3. Build
 
-The committed `profiles.yml` lives in this directory, so point dbt at it with `--profiles-dir .`:
+The committed `profiles.yml` lives in this directory and dbt picks it up from the
+working directory automatically:
 
 ```bash
-# quick demo: only the last 14 days of usage
-uv run dbt build --target dev --profiles-dir . --vars '{usage_history_days: 14}'
+make build              # = uv run dbt build (dev target, full 90-day history)
 
-# full build (default 90-day history)
-uv run dbt build --target dev --profiles-dir .
+# quick demo: only the last 14 days of usage
+uv run dbt build --vars '{usage_history_days: 14}'
 ```
+
+(`make run` and `make test` wrap `dbt run` / `dbt test` the same way.)
 
 That creates your `dbt_<username>` schema and builds + tests the whole DAG. Then explore:
 
