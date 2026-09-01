@@ -11,6 +11,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 from databricks.sdk import WorkspaceClient
 
@@ -100,6 +101,17 @@ def _load_json(path: Path):
         return json.load(file)
 
 
+# All displayed timestamps render in Indianapolis local time; %Z shows EST/EDT
+# so daylight saving is never ambiguous.
+DISPLAY_TIMEZONE = ZoneInfo("America/Indiana/Indianapolis")
+
+
+def _format_display_time(parsed: datetime) -> str:
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(DISPLAY_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def _format_iso_timestamp(value: str | None) -> str:
     if not value:
         return "Unknown"
@@ -110,14 +122,14 @@ def _format_iso_timestamp(value: str | None) -> str:
     except ValueError:
         return value
 
-    return parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return _format_display_time(parsed)
 
 
 def _format_epoch_millis(value: int | None) -> str:
     if not value:
         return "Unknown"
 
-    return datetime.fromtimestamp(value / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return _format_display_time(datetime.fromtimestamp(value / 1000, tz=UTC))
 
 
 def _enum_value(value) -> str | None:
