@@ -10,7 +10,9 @@
 #   2. Slim production build: `dbt build -s state:modified+ --fail-fast`
 #      against the captured production state, then the state manifest is
 #      refreshed so the next CI/CD diff compares against what is now live.
-#      First deploy (no state yet) falls back to a full build.
+#      First deploy (no state yet) falls back to a full build. Finally,
+#      `dbt docs generate` refreshes the hosted docs so the site always shows
+#      what this deploy just shipped (not just the next scheduled docs run).
 #
 # Like CI, the task downloads the repo tarball at `git_ref` -- prod deploys
 # exactly the merged commit, not whatever happens to be synced anywhere.
@@ -21,7 +23,8 @@ resources:
       description: >-
         On merge to production: redeploys the bundle at the merged SHA, then
         slim-builds only changed models (state:modified+) and refreshes
-        captured production state. Triggered by GitHub Actions; never scheduled.
+        captured production state and the hosted dbt docs. Triggered by
+        GitHub Actions; never scheduled.
       # deploys must serialize -- two concurrent bundle deploys corrupt nothing
       # but the loser's terraform lock makes the run fail confusingly
       max_concurrent_runs: 1

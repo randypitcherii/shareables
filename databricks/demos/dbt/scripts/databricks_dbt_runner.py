@@ -282,6 +282,22 @@ def main() -> None:
             if try_download_prod_manifest(args.artifacts_volume, project):
                 build += ["-s", "state:modified+", "--state", "prod_state"]
             dbt(build, project, env)
+            if args.artifacts_volume:
+                # refresh the hosted docs too: without this, a merge is live in
+                # the catalog but invisible on the docs site until the next
+                # scheduled prod-docs run (same path prod-docs writes)
+                dbt(
+                    [
+                        "docs",
+                        "generate",
+                        "--target",
+                        "prod",
+                        "--target-path",
+                        f"{args.artifacts_volume}/docs/latest",
+                    ],
+                    project,
+                    env,
+                )
         elif args.mode == "prod-source-freshness":
             dbt(["source", "freshness", "--target", "prod"], project, env)
         elif args.mode == "prod-build":
