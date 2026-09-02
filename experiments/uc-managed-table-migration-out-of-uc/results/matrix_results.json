@@ -10,35 +10,35 @@
     "1": {
       "evidence": {
         "create": {
-          "error": "PERMISSION_DENIED: Failed to get credentials: the AWS IAM role in the Unity Catalog credential is not configured correctly. Please contact your metastore admin or the credential owner to update the configuration in AWS.",
-          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "error": null,
+          "error_code": null,
           "scalar": null,
-          "succeeded": false
+          "succeeded": true
         },
-        "destination_rows": null,
+        "destination_rows": 3,
         "source_rows": 3
       },
-      "finding": "The probe reached the storage credential boundary, but this run's external-location credential was unhealthy; portability was not isolated.",
+      "finding": "A path-based Delta CTAS created an uncataloged copy with all three rows.",
       "question": "Can a managed Delta table be copied to an uncataloged Delta path?",
-      "recorded_at": "2026-09-02T00:58:48+00:00",
-      "status": "inconclusive"
+      "recorded_at": "2026-09-02T23:55:07+00:00",
+      "status": "pass"
     },
     "2": {
       "evidence": {
         "create": {
-          "error": "PERMISSION_DENIED: Access denied. Cause: 403 Forbidden error from cloud storage provider. credentialName = None, exceptionTraceId=12643d8b-60c2-4dcd-be79-b27c04c6cdd8",
-          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "error": null,
+          "error_code": null,
           "scalar": null,
-          "succeeded": false
+          "succeeded": true
         },
-        "destination_rows": null,
-        "external_location_verified": false,
+        "destination_rows": 3,
+        "external_location_verified": true,
         "source_rows": 3
       },
-      "finding": "The probe reached the storage credential boundary, but this run's external-location credential was unhealthy; portability was not isolated.",
+      "finding": "CTAS created a UC external Delta table at customer-owned storage with all rows.",
       "question": "Can a managed Delta table be copied into a UC external Delta table?",
-      "recorded_at": "2026-09-02T00:58:52+00:00",
-      "status": "inconclusive"
+      "recorded_at": "2026-09-02T23:55:17+00:00",
+      "status": "pass"
     },
     "3": {
       "evidence": {
@@ -53,25 +53,90 @@
       },
       "finding": "The no-copy unregister/re-register sequence was not supported end to end.",
       "question": "Can managed Delta be unregistered and re-registered as external without copying data?",
-      "recorded_at": "2026-09-02T00:58:57+00:00",
+      "recorded_at": "2026-09-02T23:55:22+00:00",
       "status": "fail"
     },
     "4": {
       "evidence": {
-        "destination_catalog_configured": false,
+        "create": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "data_copy_required": true,
+        "destination_catalog": "AWS Glue",
+        "destination_engine": "Amazon Athena",
+        "destination_format": "iceberg",
+        "destination_rows": 3,
+        "destination_write_verified": true,
         "source_format": "iceberg",
-        "source_probe": {
+        "source_metadata_preserved": false,
+        "source_rows": 3,
+        "staging_copy": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "update": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "verify": {
           "error": null,
           "error_code": null,
           "scalar": "3",
           "succeeded": true
-        },
-        "source_rows": 3
+        }
       },
-      "finding": "The run has no independent destination catalog configured; no portability verdict is asserted.",
+      "finding": "A Parquet staging copy moved all rows from managed Iceberg into AWS Glue Iceberg; Athena then updated and reread the destination. The migration copied data and did not preserve the source table metadata.",
       "question": "Can managed Iceberg be migrated to a non-Databricks Iceberg catalog?",
-      "recorded_at": "2026-09-02T00:59:03+00:00",
-      "status": "inconclusive"
+      "recorded_at": "2026-09-02T23:56:00+00:00",
+      "status": "pass"
+    },
+    "5": {
+      "evidence": {
+        "data_copy_required": true,
+        "default_protocol_registration": {
+          "error": "Delta protocol version is too new for Athena DDL engine",
+          "error_code": "ATHENA_FAILED",
+          "scalar": null,
+          "succeeded": false
+        },
+        "destination_catalog": "AWS Glue",
+        "destination_engine": "Amazon Athena",
+        "destination_rows": 3,
+        "portable_copy": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "portable_min_reader_version": "1",
+        "portable_min_writer_version": "2",
+        "portable_registration": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "portable_table_features": "[\"appendOnly\",\"invariants\"]",
+        "source_metadata_preserved": false,
+        "source_rows": 3,
+        "verify": {
+          "error": null,
+          "error_code": null,
+          "scalar": "3",
+          "succeeded": true
+        }
+      },
+      "finding": "AWS Glue/Athena rejected the default Databricks Delta protocol, but registered and read a copied Delta table written with reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.",
+      "question": "Can managed Delta be copied and registered in AWS Glue for Athena reads?",
+      "recorded_at": "2026-09-02T23:56:24+00:00",
+      "status": "pass"
     }
   }
 }

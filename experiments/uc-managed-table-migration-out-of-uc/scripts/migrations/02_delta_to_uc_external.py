@@ -3,13 +3,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _common import EXTERNAL_ROOT, FQ_SCHEMA, count, detail, sql, summary, write_result
+from _common import (
+    EXTERNAL_ROOT,
+    FQ_SCHEMA,
+    clear_external_path,
+    count,
+    detail,
+    sql,
+    summary,
+    write_result,
+)
 
 
 def main() -> None:
     target = f"{FQ_SCHEMA}.external_delta"
     path = f"{EXTERNAL_ROOT}/external_delta"
     sql(f"DROP TABLE IF EXISTS {target}")
+    clear_external_path(path)
     create = sql(
         f"CREATE TABLE {target} USING DELTA LOCATION '{path}' AS SELECT * FROM {FQ_SCHEMA}.managed_delta"
     )

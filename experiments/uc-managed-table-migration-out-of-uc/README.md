@@ -4,27 +4,30 @@ This experiment tests practical exit paths from UC managed Delta and managed Ice
 
 ## Findings matrix
 
-First run: **2026-09-02**. One real AWS workspace, a serverless SQL warehouse, an isolated UC schema, and synthetic three-row source tables. The configured external location was visible to UC but its AWS role was unhealthy.
+Verified run: **2026-09-02**. One real AWS workspace, a serverless SQL warehouse, an isolated UC schema, a dedicated S3 prefix, AWS Glue, Amazon Athena, and synthetic three-row source tables.
 
 | # | Capability / question | Result | Evidence |
 |---|---|---|---|
-| 1 | Copy managed Delta to an uncataloged Delta path | ❓ | The request reached storage but credential vending failed because the external location's AWS role was misconfigured. See `scripts/migrations/01_delta_to_uncataloged_path.py` and result row 1. |
-| 2 | Copy managed Delta to a UC external Delta table | ❓ | Cloud storage returned 403 for the configured external location. The migration capability was not isolated. See script/result row 2. |
+| 1 | Copy managed Delta to an uncataloged Delta path | ✅ | A path-based Delta CTAS copied all three rows. See `scripts/migrations/01_delta_to_uncataloged_path.py` and result row 1. |
+| 2 | Copy managed Delta to a UC external Delta table | ✅ | CTAS copied all rows to a table whose location was verified under customer-owned storage. See script/result row 2. |
 | 3 | Unregister and re-register managed Delta without a data copy | ❌ | `UNREGISTER TABLE` returned `PARSE_SYNTAX_ERROR` on DBSQL 2026.20; the claimed no-copy sequence could not start. See script/result row 3. |
-| 4 | Migrate managed Iceberg to a non-Databricks Iceberg catalog | ❓ | The managed Iceberg source was created and read with three rows, but no independent destination catalog was configured. See script/result row 4. |
+| 4 | Migrate managed Iceberg to a non-Databricks Iceberg catalog | ✅ | A Parquet staging copy moved all rows to AWS Glue Iceberg; Athena updated and reread the destination. See script/result row 4. |
+| 5 | Copy managed Delta and register it in AWS Glue for Athena | ✅ | Athena rejected the default Delta protocol, then registered and read a compatibility-targeted copy with all three rows. See script/result row 5. |
 
 Status vocabulary: ✅ works as tested · ❌ does not work as tested · ◑ partial · ❓ not isolated.
 
-## The first run disproves one path and exposes two setup gaps
+## Leaving works, but it is a migration—not an unregister operation
 
-- **The no-copy Delta path is not available through `UNREGISTER TABLE` on the tested SQL surface.** This is a live parser result, not an inference about storage.
-- **Managed Iceberg creation and reads work.** That proves only the starting point; it does not prove migration to another catalog.
-- **Rows 1–2 need a healthy dedicated external location.** A visible UC object is not proof that its cloud role can vend working credentials.
-- **Row 4 needs an independent catalog.** The harness records `inconclusive` rather than treating source-table readability as portability.
+- **Delta can leave UC through a data copy.** Both uncataloged Delta and UC external Delta destinations preserved all three test rows.
+- **Default Delta output was not automatically portable to Athena.** Athena reported `Delta protocol version is too new for Athena DDL engine`.
+- **A compatibility-targeted Delta copy worked in AWS Glue/Athena.** It used reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.
+- **Managed Iceberg moved into AWS Glue Iceberg through a Parquet staging copy.** Athena verified all rows and wrote an update in the destination.
+- **Neither independent-catalog path preserved source table metadata.** Both copied data, and the destination catalog created new metadata.
+- **The tested no-copy path does not exist.** `UNREGISTER TABLE` was unavailable on the tested DBSQL surface.
 
 ## Run it
 
-Copy `.env.example` to `.env`, set a writable dedicated external-location subdirectory, then run:
+Copy `.env.example` to `.env`. Set a writable dedicated external-location subdirectory, an authenticated AWS SSO profile, a temporary Glue database, and an Athena result prefix. Then run:
 
 ```bash
 make sync
@@ -34,7 +37,7 @@ make check
 make cleanup
 ```
 
-`make matrix` creates isolated source tables with three synthetic rows. It never uses customer data. `make cleanup` removes the UC schema; path-based output files remain because deleting object-storage data requires the storage owner's explicit action.
+`make matrix` creates isolated source tables with three synthetic rows. It never uses customer data. `make cleanup` removes the UC schema and temporary Glue database; path-based output files remain because deleting object-storage data requires the storage owner's explicit action.
 
 ## Migration guidance to evaluate after the capability matrix
 

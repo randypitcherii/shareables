@@ -10,6 +10,12 @@ def test_invalid_status_is_refused(tmp_path, monkeypatch):
         _common.write_result("1", question="q", status="maybe", finding="f", evidence={})
 
 
+def test_external_cleanup_refuses_path_outside_root(monkeypatch):
+    monkeypatch.setattr(_common, "EXTERNAL_ROOT", "s3://experiment/root")
+    with pytest.raises(ValueError):
+        _common.clear_external_path("s3://another-bucket/path")
+
+
 def test_results_are_scrubbed(tmp_path, monkeypatch):
     target = tmp_path / "results.json"
     monkeypatch.setattr(_common, "RESULTS", target)

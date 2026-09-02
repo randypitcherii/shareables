@@ -3,12 +3,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _common import EXTERNAL_ROOT, FQ_SCHEMA, count, sql, summary, write_result
+from _common import EXTERNAL_ROOT, FQ_SCHEMA, clear_external_path, count, sql, summary, write_result
 
 
 def main() -> None:
-    destination = f"delta.`{EXTERNAL_ROOT}/uncataloged_delta`"
+    path = f"{EXTERNAL_ROOT}/uncataloged_delta"
+    destination = f"delta.`{path}`"
     sql(f"DROP TABLE IF EXISTS {destination}")
+    clear_external_path(path)
     create = sql(f"CREATE TABLE {destination} AS SELECT * FROM {FQ_SCHEMA}.managed_delta")
     destination_count = count(destination) if create.succeeded else None
     if create.succeeded and destination_count == 3:

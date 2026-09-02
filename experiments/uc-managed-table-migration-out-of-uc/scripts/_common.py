@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +22,10 @@ CATALOG = os.getenv("EXPERIMENT_CATALOG", "my_catalog")
 SCHEMA = os.getenv("EXPERIMENT_SCHEMA", "uc_managed_exit_experiment")
 WAREHOUSE_ID = os.getenv("EXPERIMENT_WAREHOUSE_ID", "")
 EXTERNAL_ROOT = os.getenv("EXPERIMENT_EXTERNAL_ROOT", "").rstrip("/")
+AWS_PROFILE = os.getenv("AWS_PROFILE", "")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+GLUE_DATABASE = os.getenv("EXPERIMENT_GLUE_DATABASE", "uc_managed_exit_experiment")
+ATHENA_OUTPUT = os.getenv("EXPERIMENT_ATHENA_OUTPUT", "")
 FQ_SCHEMA = f"`{CATALOG}`.`{SCHEMA}`"
 VALID_STATUSES = {"pass", "fail", "partial", "inconclusive"}
 
@@ -65,6 +71,69 @@ def sql(statement: str) -> SqlResult:
         return SqlResult(True, rows)
     except Exception as exc:  # noqa: BLE001 -- SDK errors are experiment evidence
         return SqlResult(False, [], _scrub(str(exc)), type(exc).__name__)
+
+
+def aws(*args: str) -> subprocess.CompletedProcess[str]:
+    command = ["aws", *args, "--profile", AWS_PROFILE, "--region", AWS_REGION]
+    return subprocess.run(command, capture_output=True, check=False, text=True)
+
+
+def clear_external_path(path: str) -> None:
+    if not path.startswith(f"{EXTERNAL_ROOT}/"):
+        raise ValueError("refusing to delete outside EXPERIMENT_EXTERNAL_ROOT")
+    removed = aws("s3", "rm", path, "--recursive")
+    if removed.returncode:
+        raise SystemExit(f"Failed to clear experiment path: {_scrub(removed.stderr)}")
+
+
+def athena(statement: str) -> SqlResult:
+    started = aws(
+        "athena",
+        "start-query-execution",
+        "--query-string",
+        statement,
+        "--query-execution-context",
+        f"Database={GLUE_DATABASE}",
+        "--result-configuration",
+        f"OutputLocation={ATHENA_OUTPUT}",
+        "--output",
+        "json",
+    )
+    if started.returncode:
+        return SqlResult(False, [], _scrub(started.stderr), "ATHENA_START_FAILED")
+    query_id = json.loads(started.stdout)["QueryExecutionId"]
+    for _ in range(90):
+        polled = aws(
+            "athena", "get-query-execution", "--query-execution-id", query_id, "--output", "json"
+        )
+        if polled.returncode:
+            return SqlResult(False, [], _scrub(polled.stderr), "ATHENA_POLL_FAILED")
+        status = json.loads(polled.stdout)["QueryExecution"]["Status"]
+        state = status["State"]
+        if state == "SUCCEEDED":
+            fetched = aws(
+                "athena", "get-query-results", "--query-execution-id", query_id, "--output", "json"
+            )
+            if fetched.returncode:
+                return SqlResult(False, [], _scrub(fetched.stderr), "ATHENA_RESULTS_FAILED")
+            raw_rows = json.loads(fetched.stdout)["ResultSet"].get("Rows", [])
+            rows = [
+                [column.get("VarCharValue") for column in row.get("Data", [])]
+                for row in raw_rows[1:]
+            ]
+            return SqlResult(True, rows)
+        if state in {"FAILED", "CANCELLED"}:
+            reason = status.get("StateChangeReason", state)
+            return SqlResult(False, [], _scrub(reason), f"ATHENA_{state}")
+        time.sleep(2)
+    return SqlResult(False, [], "Athena query timed out", "ATHENA_TIMEOUT")
+
+
+def must_athena(statement: str) -> SqlResult:
+    result = athena(statement)
+    if not result.succeeded:
+        raise SystemExit(f"Athena failed: {result.error_code}: {result.error}")
+    return result
 
 
 def must_sql(statement: str) -> SqlResult:
