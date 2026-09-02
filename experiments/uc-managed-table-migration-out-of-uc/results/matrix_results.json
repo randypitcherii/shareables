@@ -1,0 +1,77 @@
+{
+  "environment": {
+    "cloud": "AWS",
+    "compute": "serverless SQL warehouse",
+    "external_storage": "customer-owned object storage (path redacted)",
+    "source_tables": "UC managed Delta and managed Iceberg",
+    "workspace": "one real Databricks workspace (host redacted)"
+  },
+  "rows": {
+    "1": {
+      "evidence": {
+        "create": {
+          "error": "PERMISSION_DENIED: Failed to get credentials: the AWS IAM role in the Unity Catalog credential is not configured correctly. Please contact your metastore admin or the credential owner to update the configuration in AWS.",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "destination_rows": null,
+        "source_rows": 3
+      },
+      "finding": "The probe reached the storage credential boundary, but this run's external-location credential was unhealthy; portability was not isolated.",
+      "question": "Can a managed Delta table be copied to an uncataloged Delta path?",
+      "recorded_at": "2026-09-02T00:58:48+00:00",
+      "status": "inconclusive"
+    },
+    "2": {
+      "evidence": {
+        "create": {
+          "error": "PERMISSION_DENIED: Access denied. Cause: 403 Forbidden error from cloud storage provider. credentialName = None, exceptionTraceId=12643d8b-60c2-4dcd-be79-b27c04c6cdd8",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "destination_rows": null,
+        "external_location_verified": false,
+        "source_rows": 3
+      },
+      "finding": "The probe reached the storage credential boundary, but this run's external-location credential was unhealthy; portability was not isolated.",
+      "question": "Can a managed Delta table be copied into a UC external Delta table?",
+      "recorded_at": "2026-09-02T00:58:52+00:00",
+      "status": "inconclusive"
+    },
+    "3": {
+      "evidence": {
+        "recovered_rows": null,
+        "reregister": null,
+        "unregister": {
+          "error": "\n[PARSE_SYNTAX_ERROR] Syntax error at or near 'UNREGISTER'. SQLSTATE: 42601 (line 1, pos 0)\n\n== SQL ==\nUNREGISTER TABLE `my_catalog`.`uc_managed_exit_experiment`.managed_delta_unregister_probe\n^^^\n",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        }
+      },
+      "finding": "The no-copy unregister/re-register sequence was not supported end to end.",
+      "question": "Can managed Delta be unregistered and re-registered as external without copying data?",
+      "recorded_at": "2026-09-02T00:58:57+00:00",
+      "status": "fail"
+    },
+    "4": {
+      "evidence": {
+        "destination_catalog_configured": false,
+        "source_format": "iceberg",
+        "source_probe": {
+          "error": null,
+          "error_code": null,
+          "scalar": "3",
+          "succeeded": true
+        },
+        "source_rows": 3
+      },
+      "finding": "The run has no independent destination catalog configured; no portability verdict is asserted.",
+      "question": "Can managed Iceberg be migrated to a non-Databricks Iceberg catalog?",
+      "recorded_at": "2026-09-02T00:59:03+00:00",
+      "status": "inconclusive"
+    }
+  }
+}
