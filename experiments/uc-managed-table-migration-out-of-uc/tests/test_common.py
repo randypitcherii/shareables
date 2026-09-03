@@ -20,7 +20,11 @@ def test_results_are_scrubbed(tmp_path, monkeypatch):
         question="q",
         status="pass",
         finding="owner@example.com wrote s3://real-private-bucket/path/table in acme_secret_catalog",
-        evidence={"url": "https://private.cloud.databricks.com/path", "id": "RequestId=abc-123 x"},
+        evidence={
+            "url": "https://private.cloud.databricks.com/path",
+            "id": "RequestId=abc-123 x",
+            "path": "tables/94604deb-b36a-4db5-a0b1-b82feb105a93",
+        },
     )
     blob = target.read_text()
     for secret in (

@@ -83,13 +83,13 @@
         },
         "data_copied_for_exit": false,
         "register_after_dropping_managed_table": {
-          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/d9fa1067-194a-439a-9231-9ba5931ace05' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
           "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
         },
         "register_over_live_managed_path": {
-          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/d9fa1067-194a-439a-9231-9ba5931ace05' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
           "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
@@ -115,13 +115,13 @@
         },
         "data_copied_for_exit": false,
         "register_after_dropping_managed_table": {
-          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/36975c18-6496-4214-addc-1c809bc0990d' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
           "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
         },
         "register_over_live_managed_path": {
-          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/36975c18-6496-4214-addc-1c809bc0990d' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
           "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false

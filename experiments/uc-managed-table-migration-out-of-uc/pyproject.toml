@@ -21,3 +21,8 @@ markers = ["infrastructure: tests requiring live Databricks infrastructure"]
 
 [tool.ruff]
 line-length = 100
+
+[[tool.uv.index]]
+# Public repo: pin the lockfile to public PyPI regardless of local uv config.
+url = "https://pypi.org/simple/"
+default = true

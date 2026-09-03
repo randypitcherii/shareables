@@ -120,6 +120,7 @@ def _scrub(value: str) -> str:
     value = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "author@example.com", value)
     value = re.sub(r"https://[^\s,\"}]+", "https://workspace.example.com", value)
     value = re.sub(r"RequestId=[0-9a-f-]+ ", "", value)
+    value = re.sub(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "<uuid>", value)
     return value[:2000] + ("...[truncated]" if len(value) > 2000 else "")
 
 
