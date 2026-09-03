@@ -1,0 +1,185 @@
+{
+  "environment": {
+    "clients": "Python deltalake, duckdb delta extension, pyiceberg (SQLite-backed catalog)",
+    "cloud": "AWS",
+    "compute": "serverless SQL warehouse for UC statements",
+    "managed_storage": "isolated UC catalog whose storage root is a customer-owned S3 prefix under a UC external location (path redacted)",
+    "source_tables": [
+      "UC managed Delta (UniForm enabled)",
+      "UC managed Iceberg"
+    ],
+    "workspace": "one real Databricks workspace (host redacted)"
+  },
+  "rows": {
+    "1a": {
+      "evidence": {
+        "clients": [
+          {
+            "client": "deltalake",
+            "detail": null,
+            "error": "The table's minimum reader version is 2 but deltalake only supports version 1 or 3 with these reader features: {'variantType', 'timestampNtz', 'variantType-preview'}",
+            "error_type": "DeltaProtocolError",
+            "rows": null,
+            "succeeded": false
+          },
+          {
+            "client": "duckdb-delta",
+            "detail": null,
+            "error": null,
+            "error_type": null,
+            "rows": 3,
+            "succeeded": true
+          }
+        ],
+        "data_copied": false,
+        "path_inside_uc_managed_prefix": true,
+        "source": "managed_delta"
+      },
+      "finding": "duckdb-delta read all rows straight from the managed path with no catalog. The other client refused the table's Delta protocol features, so the storage exit works but engine support for the default protocol varies.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 zero-catalog Delta on S3: can a Python client read the existing files with no data copy and no catalog?",
+      "recorded_at": "2026-09-03T01:40:56+00:00",
+      "status": "partial"
+    },
+    "1b": {
+      "evidence": {
+        "clients": [
+          {
+            "client": "deltalake",
+            "detail": null,
+            "error": "The table has set these reader features: {'typeWidening', 'v2Checkpoint', 'vacuumProtocolCheck', 'columnMapping'} but these are not yet supported by the deltalake reader.",
+            "error_type": "DeltaProtocolError",
+            "rows": null,
+            "succeeded": false
+          },
+          {
+            "client": "duckdb-delta",
+            "detail": null,
+            "error": null,
+            "error_type": null,
+            "rows": 3,
+            "succeeded": true
+          }
+        ],
+        "data_copied": false,
+        "path_inside_uc_managed_prefix": true,
+        "source": "managed_iceberg"
+      },
+      "finding": "duckdb-delta read all rows straight from the managed path with no catalog. The other client refused the table's Delta protocol features, so the storage exit works but engine support for the default protocol varies.",
+      "question": "UC managed Iceberg \u2192 zero-catalog Delta on S3: can a Python client read the existing files with no data copy and no catalog?",
+      "recorded_at": "2026-09-03T01:41:00+00:00",
+      "status": "partial"
+    },
+    "2a": {
+      "evidence": {
+        "control_copy_outside_unitystorage_prefix": {
+          "data_copied": true,
+          "result": {
+            "error": null,
+            "error_code": null,
+            "scalar": null,
+            "succeeded": true
+          },
+          "rows": 3
+        },
+        "data_copied_for_exit": false,
+        "register_after_dropping_managed_table": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "register_over_live_managed_path": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "source": "managed_delta"
+      },
+      "finding": "UC refused every no-copy registration with LOCATION_OVERLAP: paths under the reserved `__unitystorage` prefix cannot become external tables, even after the managed table is dropped. The identical files copied outside that prefix registered and read 3 rows, so the block is the prefix rule, not the Delta log.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 UC external Delta table: can the existing files be re-registered in UC without a data copy?",
+      "recorded_at": "2026-09-03T01:41:55+00:00",
+      "status": "fail"
+    },
+    "2b": {
+      "evidence": {
+        "control_copy_outside_unitystorage_prefix": {
+          "data_copied": true,
+          "result": {
+            "error": null,
+            "error_code": null,
+            "scalar": null,
+            "succeeded": true
+          },
+          "rows": 3
+        },
+        "data_copied_for_exit": false,
+        "register_after_dropping_managed_table": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "register_over_live_managed_path": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/<uuid>/tables/<uuid>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "source": "managed_iceberg"
+      },
+      "finding": "UC refused every no-copy registration with LOCATION_OVERLAP: paths under the reserved `__unitystorage` prefix cannot become external tables, even after the managed table is dropped. The identical files copied outside that prefix registered and read 3 rows, so the block is the prefix rule, not the Delta log.",
+      "question": "UC managed Iceberg \u2192 UC external Delta table: can the existing files be re-registered in UC without a data copy?",
+      "recorded_at": "2026-09-03T01:42:11+00:00",
+      "status": "fail"
+    },
+    "3a": {
+      "evidence": {
+        "client": {
+          "client": "pyiceberg-sql-catalog",
+          "detail": {
+            "new_metadata_written_under_source_path": true,
+            "rows_at_registration": 3,
+            "snapshot_after_append": 3576640593170240282,
+            "snapshot_at_registration": 4094286305934811463
+          },
+          "error": null,
+          "error_type": null,
+          "rows": 4,
+          "succeeded": true
+        },
+        "data_copied": false,
+        "iceberg_metadata_dir": "metadata",
+        "source": "managed_delta"
+      },
+      "finding": "A fresh pyiceberg catalog adopted the existing metadata.json, read all rows, and committed a new snapshot in place. No data was copied; the new catalog now manages the table.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 Iceberg in a new managing catalog: can existing metadata be adopted with no data copy?",
+      "recorded_at": "2026-09-03T01:41:23+00:00",
+      "status": "pass"
+    },
+    "3b": {
+      "evidence": {
+        "client": {
+          "client": "pyiceberg-sql-catalog",
+          "detail": {
+            "new_metadata_written_under_source_path": true,
+            "rows_at_registration": 3,
+            "snapshot_after_append": 8420304902620089532,
+            "snapshot_at_registration": 131158991024968001
+          },
+          "error": null,
+          "error_type": null,
+          "rows": 4,
+          "succeeded": true
+        },
+        "data_copied": false,
+        "iceberg_metadata_dir": "_iceberg/metadata",
+        "source": "managed_iceberg"
+      },
+      "finding": "A fresh pyiceberg catalog adopted the existing metadata.json, read all rows, and committed a new snapshot in place. No data was copied; the new catalog now manages the table.",
+      "question": "UC managed Iceberg \u2192 Iceberg in a new managing catalog: can existing metadata be adopted with no data copy?",
+      "recorded_at": "2026-09-03T01:41:36+00:00",
+      "status": "pass"
+    }
+  }
+}
