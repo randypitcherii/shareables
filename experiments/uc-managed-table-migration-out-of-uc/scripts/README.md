@@ -10,6 +10,7 @@ Every matrix row has one numbered script. The shared `_common.py` module runs SQ
 - A dedicated prefix under a writable UC external location
 - An authenticated AWS SSO profile with access to S3, Glue, and Athena
 - A temporary Glue database name and Athena result prefix
+- An isolated UC catalog name and managed storage root under the external location
 
 ## Lifecycle
 
@@ -22,6 +23,8 @@ Every matrix row has one numbered script. The shared `_common.py` module runs SQ
 | `migrations/03_delta_unregister_reregister.py` | Tests the no-copy `UNREGISTER TABLE` claim. |
 | `migrations/04_managed_iceberg_export.py` | Copies managed Iceberg through Parquet staging into AWS Glue Iceberg, then verifies an Athena update. |
 | `migrations/05_delta_to_glue_athena.py` | Records Athena's rejection of the default Delta protocol and verifies a compatibility-targeted Delta copy. |
-| `cleanup.py` | Drops the isolated UC schema and temporary Glue database. It does not delete uncataloged object-storage files. |
+| `migrations/06_customer_storage_delta_no_copy.py` | Creates a customer-rooted UC catalog and compares default vs portability-targeted managed Delta registration without copying data. |
+| `migrations/07_customer_storage_iceberg_no_copy.py` | Registers managed Iceberg metadata/files in Glue without a copy, writes through Athena, and proves the catalog pointers diverge. |
+| `cleanup.py` | Drops the isolated UC schema/catalog and temporary Glue database. It does not delete uncataloged object-storage files. |
 
 Storage authorization failures are `inconclusive`, not capability failures. A parse or platform refusal is a `fail`. This prevents a broken cloud credential from producing a believable portability verdict.

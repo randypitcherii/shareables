@@ -26,6 +26,8 @@ AWS_PROFILE = os.getenv("AWS_PROFILE", "")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 GLUE_DATABASE = os.getenv("EXPERIMENT_GLUE_DATABASE", "uc_managed_exit_experiment")
 ATHENA_OUTPUT = os.getenv("EXPERIMENT_ATHENA_OUTPUT", "")
+MANAGED_CATALOG = os.getenv("EXPERIMENT_MANAGED_CATALOG", "uc_managed_exit_customer_storage")
+MANAGED_STORAGE_ROOT = os.getenv("EXPERIMENT_MANAGED_STORAGE_ROOT", "").rstrip("/")
 FQ_SCHEMA = f"`{CATALOG}`.`{SCHEMA}`"
 VALID_STATUSES = {"pass", "fail", "partial", "inconclusive"}
 
@@ -177,6 +179,7 @@ def _scrub(value: str) -> str:
         else value
     )
     value = value.replace(CATALOG, "my_catalog").replace(SCHEMA, "uc_managed_exit_experiment")
+    value = value.replace(MANAGED_CATALOG, "uc_managed_exit_customer_storage")
     value = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "author@example.com", value)
     value = re.sub(r"https://[^\s,\"}]+", "https://workspace.example.com", value)
     return value[:2000] + ("...[truncated]" if len(value) > 2000 else "")
@@ -215,6 +218,7 @@ def write_result(
         "compute": "serverless SQL warehouse",
         "source_tables": "UC managed Delta and managed Iceberg",
         "external_storage": "customer-owned object storage (path redacted)",
+        "managed_storage_scenario": "isolated UC catalog rooted in the same customer-owned storage",
     }
     payload["rows"][row] = {
         "question": question,

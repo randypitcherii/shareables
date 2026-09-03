@@ -1,6 +1,14 @@
 import json
 
-from _common import CATALOG, EXTERNAL_ROOT, GLUE_DATABASE, aws, client, must_sql
+from _common import (
+    CATALOG,
+    EXTERNAL_ROOT,
+    GLUE_DATABASE,
+    MANAGED_STORAGE_ROOT,
+    aws,
+    client,
+    must_sql,
+)
 
 
 def main() -> None:
@@ -16,6 +24,10 @@ def main() -> None:
         raise SystemExit("EXPERIMENT_EXTERNAL_ROOT is not under a visible UC external location")
     if matching[0].read_only:
         raise SystemExit("The matching UC external location is read-only")
+    if not MANAGED_STORAGE_ROOT.startswith((matching[0].url or "").rstrip("/")):
+        raise SystemExit(
+            "EXPERIMENT_MANAGED_STORAGE_ROOT is outside the verified external location"
+        )
     caller = aws("sts", "get-caller-identity", "--output", "json")
     if caller.returncode:
         raise SystemExit(f"AWS authentication failed: {caller.stderr}")

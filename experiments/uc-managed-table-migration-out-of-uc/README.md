@@ -4,7 +4,7 @@ This experiment tests practical exit paths from UC managed Delta and managed Ice
 
 ## Findings matrix
 
-Verified run: **2026-09-02**. One real AWS workspace, a serverless SQL warehouse, an isolated UC schema, a dedicated S3 prefix, AWS Glue, Amazon Athena, and synthetic three-row source tables.
+Verified run: **2026-09-03**. One real AWS workspace, a serverless SQL warehouse, isolated UC schemas, a UC catalog rooted in a dedicated customer-controlled S3 prefix, AWS Glue, Amazon Athena, and synthetic three-row source tables.
 
 | # | Capability / question | Result | Evidence |
 |---|---|---|---|
@@ -13,6 +13,8 @@ Verified run: **2026-09-02**. One real AWS workspace, a serverless SQL warehouse
 | 3 | Unregister and re-register managed Delta without a data copy | ❌ | `UNREGISTER TABLE` returned `PARSE_SYNTAX_ERROR` on DBSQL 2026.20; the claimed no-copy sequence could not start. See script/result row 3. |
 | 4 | Migrate managed Iceberg to a non-Databricks Iceberg catalog | ✅ | A Parquet staging copy moved all rows to AWS Glue Iceberg; Athena updated and reread the destination. See script/result row 4. |
 | 5 | Copy managed Delta and register it in AWS Glue for Athena | ✅ | Athena rejected the default Delta protocol, then registered and read a compatibility-targeted copy with all three rows. See script/result row 5. |
+| 6 | Register customer-rooted managed Delta in Glue/Athena without a copy | ✅ | Athena read all rows directly when portability properties were set before the first write; it rejected the default protocol. See script/result row 6. |
+| 7 | Register and cut over customer-rooted managed Iceberg to Glue without a copy | ✅ | Athena read the existing metadata/files, wrote a new snapshot, and retained all rows without copying data. See script/result row 7. |
 
 Status vocabulary: ✅ works as tested · ❌ does not work as tested · ◑ partial · ❓ not isolated.
 
@@ -22,8 +24,11 @@ Status vocabulary: ✅ works as tested · ❌ does not work as tested · ◑ par
 - **Default Delta output was not automatically portable to Athena.** Athena reported `Delta protocol version is too new for Athena DDL engine`.
 - **A compatibility-targeted Delta copy worked in AWS Glue/Athena.** It used reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.
 - **Managed Iceberg moved into AWS Glue Iceberg through a Parquet staging copy.** Athena verified all rows and wrote an update in the destination.
-- **Neither independent-catalog path preserved source table metadata.** Both copied data, and the destination catalog created new metadata.
-- **The tested no-copy path does not exist.** `UNREGISTER TABLE` was unavailable on the tested DBSQL surface.
+- **Customer-rooted managed storage removes the physical-copy requirement.** Glue/Athena reused both compatible Delta files and Iceberg metadata/files in place.
+- **Storage ownership alone does not make default Delta portable.** Default managed Delta used reader version 3, writer version 7, deletion vectors, and row tracking; Athena rejected it.
+- **Delta needs portability properties before the first write for this destination.** Reader version 1, writer version 2, classic checkpoints, and disabled deletion vectors/row tracking enabled zero-copy Athena reads.
+- **Iceberg zero-copy cutover creates a hard metadata boundary.** After Athena wrote a new snapshot, Glue saw it and Databricks did not. Concurrent writes would split the catalog histories.
+- **The tested `UNREGISTER TABLE` path does not exist.** Zero-copy migration used direct destination registration against customer-controlled storage instead.
 
 ## Run it
 
@@ -43,7 +48,7 @@ make cleanup
 
 1. **Profile interactions.** Inventory loading, transformation (including maintenance), and consumption separately.
 2. **Parallel validation.** Reproduce loading and transformations in the destination, read-only against the source, until automated checks pass.
-3. **Hard cutover.** Move writes and transformations, leave read-only pointers where supported, and continue validation.
+3. **Hard cutover.** Freeze source writes before advancing the destination catalog pointer. Move writes and transformations, leave only read-only source pointers, and continue validation.
 4. **Migrate consumers in cohorts.** Prioritize strategic and expensive workloads, then scale old consumption infrastructure down as adoption moves through the long tail.
 
 This guidance is a process hypothesis, not a measured matrix result.

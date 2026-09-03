@@ -3,6 +3,7 @@
     "cloud": "AWS",
     "compute": "serverless SQL warehouse",
     "external_storage": "customer-owned object storage (path redacted)",
+    "managed_storage_scenario": "isolated UC catalog rooted in the same customer-owned storage",
     "source_tables": "UC managed Delta and managed Iceberg",
     "workspace": "one real Databricks workspace (host redacted)"
   },
@@ -20,7 +21,7 @@
       },
       "finding": "A path-based Delta CTAS created an uncataloged copy with all three rows.",
       "question": "Can a managed Delta table be copied to an uncataloged Delta path?",
-      "recorded_at": "2026-09-02T23:55:07+00:00",
+      "recorded_at": "2026-09-03T00:13:23+00:00",
       "status": "pass"
     },
     "2": {
@@ -37,7 +38,7 @@
       },
       "finding": "CTAS created a UC external Delta table at customer-owned storage with all rows.",
       "question": "Can a managed Delta table be copied into a UC external Delta table?",
-      "recorded_at": "2026-09-02T23:55:17+00:00",
+      "recorded_at": "2026-09-03T00:13:33+00:00",
       "status": "pass"
     },
     "3": {
@@ -53,7 +54,7 @@
       },
       "finding": "The no-copy unregister/re-register sequence was not supported end to end.",
       "question": "Can managed Delta be unregistered and re-registered as external without copying data?",
-      "recorded_at": "2026-09-02T23:55:22+00:00",
+      "recorded_at": "2026-09-03T00:13:40+00:00",
       "status": "fail"
     },
     "4": {
@@ -94,7 +95,7 @@
       },
       "finding": "A Parquet staging copy moved all rows from managed Iceberg into AWS Glue Iceberg; Athena then updated and reread the destination. The migration copied data and did not preserve the source table metadata.",
       "question": "Can managed Iceberg be migrated to a non-Databricks Iceberg catalog?",
-      "recorded_at": "2026-09-02T23:56:00+00:00",
+      "recorded_at": "2026-09-03T00:14:16+00:00",
       "status": "pass"
     },
     "5": {
@@ -135,7 +136,77 @@
       },
       "finding": "AWS Glue/Athena rejected the default Databricks Delta protocol, but registered and read a copied Delta table written with reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.",
       "question": "Can managed Delta be copied and registered in AWS Glue for Athena reads?",
-      "recorded_at": "2026-09-02T23:56:24+00:00",
+      "recorded_at": "2026-09-03T00:14:40+00:00",
+      "status": "pass"
+    },
+    "6": {
+      "evidence": {
+        "customer_managed_storage": true,
+        "data_copy_required": false,
+        "default_min_reader_version": "3",
+        "default_min_writer_version": "7",
+        "default_registration": {
+          "error": "Delta protocol version is too new for Athena DDL engine",
+          "error_code": "ATHENA_FAILED",
+          "scalar": null,
+          "succeeded": false
+        },
+        "default_table_features": "[\"appendOnly\",\"deletionVectors\",\"domainMetadata\",\"invariants\",\"rowTracking\"]",
+        "destination_catalog": "AWS Glue",
+        "destination_engine": "Amazon Athena",
+        "destination_rows": 3,
+        "destination_write_tested": false,
+        "portable_min_reader_version": "1",
+        "portable_min_writer_version": "2",
+        "portable_registration": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        },
+        "portable_table_features": "[\"appendOnly\",\"invariants\"]",
+        "source_metadata_preserved": true
+      },
+      "finding": "Yes when portability properties are set before writes: Athena read all rows directly from the UC-managed path. The default managed Delta protocol was still too new, so customer-owned storage alone is not sufficient.",
+      "question": "Can customer-rooted managed Delta be registered in Glue/Athena without copying data?",
+      "recorded_at": "2026-09-03T00:15:16+00:00",
+      "status": "pass"
+    },
+    "7": {
+      "evidence": {
+        "catalog_pointers_diverged_after_destination_write": true,
+        "customer_managed_storage": true,
+        "data_copy_required": false,
+        "destination_catalog": "AWS Glue",
+        "destination_engine": "Amazon Athena",
+        "destination_read": {
+          "error": null,
+          "error_code": null,
+          "scalar": "3",
+          "succeeded": true
+        },
+        "destination_rows": 3,
+        "destination_write_verified": true,
+        "initial_read": {
+          "error": null,
+          "error_code": null,
+          "scalar": "3",
+          "succeeded": true
+        },
+        "source_format": "iceberg",
+        "source_metadata_preserved_at_registration": true,
+        "source_rows": 3,
+        "source_saw_destination_write": false,
+        "update": {
+          "error": null,
+          "error_code": null,
+          "scalar": null,
+          "succeeded": true
+        }
+      },
+      "finding": "Glue/Athena read the UC-managed Iceberg metadata and files in place, then advanced the destination catalog with a write. Databricks retained its old snapshot, proving that zero-copy cutover works but concurrent writes create divergent catalog pointers.",
+      "question": "Can customer-rooted managed Iceberg be registered and cut over to Glue without copying data?",
+      "recorded_at": "2026-09-03T00:15:46+00:00",
       "status": "pass"
     }
   }
