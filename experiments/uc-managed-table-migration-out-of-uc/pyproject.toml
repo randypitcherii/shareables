@@ -3,7 +3,13 @@ name = "uc-managed-table-migration-out-of-uc"
 version = "0.1.0"
 description = "Live evaluation of exit paths from Unity Catalog managed tables"
 requires-python = ">=3.11"
-dependencies = ["databricks-sdk>=0.60.0"]
+dependencies = [
+    "boto3>=1.43.56",
+    "databricks-sdk>=0.60.0",
+    "deltalake>=1.0",
+    "duckdb>=1.5.5",
+    "pyiceberg[pyarrow,s3fs,sql-sqlite]>=0.9",
+]
 
 [dependency-groups]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

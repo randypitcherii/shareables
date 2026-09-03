@@ -1,38 +1,31 @@
-# Can you migrate out of Unity Catalog managed tables?
+# Can you leave Unity Catalog managed tables without copying data?
 
-This experiment tests practical exit paths from UC managed Delta and managed Iceberg tables. It separates live behavior from product claims: every verdict below must come from a numbered script and a scrubbed entry in `results/matrix_results.json`.
+Start with a UC **managed Delta** table (UniForm on) and a UC **managed Iceberg** table in a catalog whose storage root is your own S3 bucket. Try three exits, each with **zero data copy**, using plain Python clients as the destination instead of a specific engine. Every verdict below comes from a numbered script and a scrubbed entry in `results/matrix_results.json`.
 
 ## Findings matrix
 
-Verified run: **2026-09-03**. One real AWS workspace, a serverless SQL warehouse, isolated UC schemas, a UC catalog rooted in a dedicated customer-controlled S3 prefix, AWS Glue, Amazon Athena, and synthetic three-row source tables.
+Verified run: **2026-09-03**. One real AWS workspace, a serverless SQL warehouse, a temporary UC catalog rooted in a customer-owned S3 prefix, synthetic three-row sources. Destinations are `duckdb` (delta extension), `deltalake` (delta-rs), and `pyiceberg` with a fresh SQLite-backed catalog.
 
-| # | Capability / question | Result | Evidence |
+| Exit path | From managed Delta (UniForm) | From managed Iceberg | Evidence |
 |---|---|---|---|
-| 1 | Copy managed Delta to an uncataloged Delta path | ✅ | A path-based Delta CTAS copied all three rows. See `scripts/migrations/01_delta_to_uncataloged_path.py` and result row 1. |
-| 2 | Copy managed Delta to a UC external Delta table | ✅ | CTAS copied all rows to a table whose location was verified under customer-owned storage. See script/result row 2. |
-| 3 | Unregister and re-register managed Delta without a data copy | ❌ | `UNREGISTER TABLE` returned `PARSE_SYNTAX_ERROR` on DBSQL 2026.20; the claimed no-copy sequence could not start. See script/result row 3. |
-| 4 | Migrate managed Iceberg to a non-Databricks Iceberg catalog | ✅ | A Parquet staging copy moved all rows to AWS Glue Iceberg; Athena updated and reread the destination. See script/result row 4. |
-| 5 | Copy managed Delta and register it in AWS Glue for Athena | ✅ | Athena rejected the default Delta protocol, then registered and read a compatibility-targeted copy with all three rows. See script/result row 5. |
-| 6 | Register customer-rooted managed Delta in Glue/Athena without a copy | ✅ | Athena read all rows directly when portability properties were set before the first write; it rejected the default protocol. See script/result row 6. |
-| 7 | Register and cut over customer-rooted managed Iceberg to Glue without a copy | ✅ | Athena read the existing metadata/files, wrote a new snapshot, and retained all rows without copying data. See script/result row 7. |
+| 1. Zero-catalog Delta on S3 (read the `_delta_log` in place) | ◑ | ◑ | duckdb read 3/3 rows straight off the managed path. delta-rs refused both tables' protocol features. `exit_01_zero_catalog_delta.py`, rows 1a/1b. |
+| 2. Re-register as a UC **external** Delta table (same files) | ❌ | ❌ | `LOCATION_OVERLAP`: UC refuses `CREATE TABLE … LOCATION` on any path under `__unitystorage`, live or after `DROP TABLE`. Control: the same files copied outside that prefix registered and read 3/3. `exit_02_uc_external_reregister.py`, rows 2a/2b. |
+| 3. Iceberg in a **new managing catalog** (adopt existing metadata.json) | ✅ | ✅ | A fresh pyiceberg catalog registered the newest metadata.json, read 3/3, then committed snapshot 4 in place. `exit_03_iceberg_new_catalog.py`, rows 3a/3b. |
 
 Status vocabulary: ✅ works as tested · ❌ does not work as tested · ◑ partial · ❓ not isolated.
 
-## Leaving works, but it is a migration—not an unregister operation
+## What this means
 
-- **Delta can leave UC through a data copy.** Both uncataloged Delta and UC external Delta destinations preserved all three test rows.
-- **Default Delta output was not automatically portable to Athena.** Athena reported `Delta protocol version is too new for Athena DDL engine`.
-- **A compatibility-targeted Delta copy worked in AWS Glue/Athena.** It used reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.
-- **Managed Iceberg moved into AWS Glue Iceberg through a Parquet staging copy.** Athena verified all rows and wrote an update in the destination.
-- **Customer-rooted managed storage removes the physical-copy requirement.** Glue/Athena reused both compatible Delta files and Iceberg metadata/files in place.
-- **Storage ownership alone does not make default Delta portable.** Default managed Delta used reader version 3, writer version 7, deletion vectors, and row tracking; Athena rejected it.
-- **Delta needs portability properties before the first write for this destination.** Reader version 1, writer version 2, classic checkpoints, and disabled deletion vectors/row tracking enabled zero-copy Athena reads.
-- **Iceberg zero-copy cutover creates a hard metadata boundary.** After Athena wrote a new snapshot, Glue saw it and Databricks did not. Concurrent writes would split the catalog histories.
-- **The tested `UNREGISTER TABLE` path does not exist.** Zero-copy migration used direct destination registration against customer-controlled storage instead.
+- **The hypothesis held for the two catalog-free exits.** Both source formats carry a Delta log *and* Iceberg metadata, so the two starting points behaved identically in every row. Format is not the lock-in question; the catalog prefix is.
+- **Iceberg is the clean no-copy exit.** Hand the newest `metadata.json` to any Iceberg catalog and it owns the table from there, including new commits into the same S3 prefix. UniForm writes it under `metadata/`, managed Iceberg under `_iceberg/metadata/`.
+- **Delta-on-S3 works, but engine protocol support is uneven.** Default managed Delta uses reader 2/writer 7 with column mapping and IcebergCompatV2; managed Iceberg's Delta log adds v2 checkpoints and type widening. duckdb reads both; delta-rs 1.6 reads neither. That is a client capability gap, not a storage or catalog block.
+- **You cannot re-adopt the same bytes as a UC external table.** The `__unitystorage/` prefix is reserved even after the managed table (or the whole catalog) is dropped. Staying in UC as *external* requires a copy; leaving UC entirely does not.
+- **No-copy cutover is a hard cutover.** Once the new catalog commits, UC still points at the old snapshot. Freeze UC writes first (or drop the UC table) — the two catalogs will not reconcile.
+- **Sequence the UC drop deliberately.** Dropping a managed table eventually deletes its files. In this run the files were still present after `DROP TABLE`, but a real migration should have the new catalog owning the table and consumers moved before the UC side is dropped.
 
 ## Run it
 
-Copy `.env.example` to `.env`. Set a writable dedicated external-location subdirectory, an authenticated AWS SSO profile, a temporary Glue database, and an Athena result prefix. Then run:
+Copy `.env.example` to `.env`. You need a serverless SQL warehouse, a writable UC external location in your own S3 bucket, and an AWS SSO profile that can read that bucket directly (the Python clients bypass UC). Then run:
 
 ```bash
 make sync
@@ -42,7 +35,7 @@ make check
 make cleanup
 ```
 
-`make matrix` creates isolated source tables with three synthetic rows. It never uses customer data. `make cleanup` removes the UC schema and temporary Glue database; path-based output files remain because deleting object-storage data requires the storage owner's explicit action.
+`make matrix` creates a temporary UC catalog rooted in your bucket, writes two three-row synthetic tables, and runs all six cells. Exit 2 drops the source tables, so it runs last. `make check` runs the client helpers against local Delta and Iceberg tables with no cloud access. `make cleanup` drops the catalog; object-storage files remain because deleting them is the storage owner's call.
 
 ## Migration guidance to evaluate after the capability matrix
 

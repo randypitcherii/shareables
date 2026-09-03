@@ -1,212 +1,184 @@
 {
   "environment": {
+    "clients": "Python deltalake, duckdb delta extension, pyiceberg (SQLite-backed catalog)",
     "cloud": "AWS",
-    "compute": "serverless SQL warehouse",
-    "external_storage": "customer-owned object storage (path redacted)",
-    "managed_storage_scenario": "isolated UC catalog rooted in the same customer-owned storage",
-    "source_tables": "UC managed Delta and managed Iceberg",
+    "compute": "serverless SQL warehouse for UC statements",
+    "managed_storage": "isolated UC catalog whose storage root is a customer-owned S3 prefix under a UC external location (path redacted)",
+    "source_tables": [
+      "UC managed Delta (UniForm enabled)",
+      "UC managed Iceberg"
+    ],
     "workspace": "one real Databricks workspace (host redacted)"
   },
   "rows": {
-    "1": {
+    "1a": {
       "evidence": {
-        "create": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "destination_rows": 3,
-        "source_rows": 3
+        "clients": [
+          {
+            "client": "deltalake",
+            "detail": null,
+            "error": "The table's minimum reader version is 2 but deltalake only supports version 1 or 3 with these reader features: {'variantType', 'timestampNtz', 'variantType-preview'}",
+            "error_type": "DeltaProtocolError",
+            "rows": null,
+            "succeeded": false
+          },
+          {
+            "client": "duckdb-delta",
+            "detail": null,
+            "error": null,
+            "error_type": null,
+            "rows": 3,
+            "succeeded": true
+          }
+        ],
+        "data_copied": false,
+        "path_inside_uc_managed_prefix": true,
+        "source": "managed_delta"
       },
-      "finding": "A path-based Delta CTAS created an uncataloged copy with all three rows.",
-      "question": "Can a managed Delta table be copied to an uncataloged Delta path?",
-      "recorded_at": "2026-09-03T00:13:23+00:00",
-      "status": "pass"
+      "finding": "duckdb-delta read all rows straight from the managed path with no catalog. The other client refused the table's Delta protocol features, so the storage exit works but engine support for the default protocol varies.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 zero-catalog Delta on S3: can a Python client read the existing files with no data copy and no catalog?",
+      "recorded_at": "2026-09-03T01:40:56+00:00",
+      "status": "partial"
     },
-    "2": {
+    "1b": {
       "evidence": {
-        "create": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "destination_rows": 3,
-        "external_location_verified": true,
-        "source_rows": 3
+        "clients": [
+          {
+            "client": "deltalake",
+            "detail": null,
+            "error": "The table has set these reader features: {'typeWidening', 'v2Checkpoint', 'vacuumProtocolCheck', 'columnMapping'} but these are not yet supported by the deltalake reader.",
+            "error_type": "DeltaProtocolError",
+            "rows": null,
+            "succeeded": false
+          },
+          {
+            "client": "duckdb-delta",
+            "detail": null,
+            "error": null,
+            "error_type": null,
+            "rows": 3,
+            "succeeded": true
+          }
+        ],
+        "data_copied": false,
+        "path_inside_uc_managed_prefix": true,
+        "source": "managed_iceberg"
       },
-      "finding": "CTAS created a UC external Delta table at customer-owned storage with all rows.",
-      "question": "Can a managed Delta table be copied into a UC external Delta table?",
-      "recorded_at": "2026-09-03T00:13:33+00:00",
-      "status": "pass"
+      "finding": "duckdb-delta read all rows straight from the managed path with no catalog. The other client refused the table's Delta protocol features, so the storage exit works but engine support for the default protocol varies.",
+      "question": "UC managed Iceberg \u2192 zero-catalog Delta on S3: can a Python client read the existing files with no data copy and no catalog?",
+      "recorded_at": "2026-09-03T01:41:00+00:00",
+      "status": "partial"
     },
-    "3": {
+    "2a": {
       "evidence": {
-        "recovered_rows": null,
-        "reregister": null,
-        "unregister": {
-          "error": "\n[PARSE_SYNTAX_ERROR] Syntax error at or near 'UNREGISTER'. SQLSTATE: 42601 (line 1, pos 0)\n\n== SQL ==\nUNREGISTER TABLE `my_catalog`.`uc_managed_exit_experiment`.managed_delta_unregister_probe\n^^^\n",
+        "control_copy_outside_unitystorage_prefix": {
+          "data_copied": true,
+          "result": {
+            "error": null,
+            "error_code": null,
+            "scalar": null,
+            "succeeded": true
+          },
+          "rows": 3
+        },
+        "data_copied_for_exit": false,
+        "register_after_dropping_managed_table": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/d9fa1067-194a-439a-9231-9ba5931ace05' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
           "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
-        }
+        },
+        "register_over_live_managed_path": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/d9fa1067-194a-439a-9231-9ba5931ace05' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
+          "scalar": null,
+          "succeeded": false
+        },
+        "source": "managed_delta"
       },
-      "finding": "The no-copy unregister/re-register sequence was not supported end to end.",
-      "question": "Can managed Delta be unregistered and re-registered as external without copying data?",
-      "recorded_at": "2026-09-03T00:13:40+00:00",
+      "finding": "UC refused every no-copy registration with LOCATION_OVERLAP: paths under the reserved `__unitystorage` prefix cannot become external tables, even after the managed table is dropped. The identical files copied outside that prefix registered and read 3 rows, so the block is the prefix rule, not the Delta log.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 UC external Delta table: can the existing files be re-registered in UC without a data copy?",
+      "recorded_at": "2026-09-03T01:41:55+00:00",
       "status": "fail"
     },
-    "4": {
+    "2b": {
       "evidence": {
-        "create": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
+        "control_copy_outside_unitystorage_prefix": {
+          "data_copied": true,
+          "result": {
+            "error": null,
+            "error_code": null,
+            "scalar": null,
+            "succeeded": true
+          },
+          "rows": 3
         },
-        "data_copy_required": true,
-        "destination_catalog": "AWS Glue",
-        "destination_engine": "Amazon Athena",
-        "destination_format": "iceberg",
-        "destination_rows": 3,
-        "destination_write_verified": true,
-        "source_format": "iceberg",
-        "source_metadata_preserved": false,
-        "source_rows": 3,
-        "staging_copy": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "update": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "verify": {
-          "error": null,
-          "error_code": null,
-          "scalar": "3",
-          "succeeded": true
-        }
-      },
-      "finding": "A Parquet staging copy moved all rows from managed Iceberg into AWS Glue Iceberg; Athena then updated and reread the destination. The migration copied data and did not preserve the source table metadata.",
-      "question": "Can managed Iceberg be migrated to a non-Databricks Iceberg catalog?",
-      "recorded_at": "2026-09-03T00:14:16+00:00",
-      "status": "pass"
-    },
-    "5": {
-      "evidence": {
-        "data_copy_required": true,
-        "default_protocol_registration": {
-          "error": "Delta protocol version is too new for Athena DDL engine",
-          "error_code": "ATHENA_FAILED",
+        "data_copied_for_exit": false,
+        "register_after_dropping_managed_table": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/36975c18-6496-4214-addc-1c809bc0990d' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
         },
-        "destination_catalog": "AWS Glue",
-        "destination_engine": "Amazon Athena",
-        "destination_rows": 3,
-        "portable_copy": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "portable_min_reader_version": "1",
-        "portable_min_writer_version": "2",
-        "portable_registration": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        },
-        "portable_table_features": "[\"appendOnly\",\"invariants\"]",
-        "source_metadata_preserved": false,
-        "source_rows": 3,
-        "verify": {
-          "error": null,
-          "error_code": null,
-          "scalar": "3",
-          "succeeded": true
-        }
-      },
-      "finding": "AWS Glue/Athena rejected the default Databricks Delta protocol, but registered and read a copied Delta table written with reader version 1, writer version 2, classic checkpoints, and deletion vectors disabled.",
-      "question": "Can managed Delta be copied and registered in AWS Glue for Athena reads?",
-      "recorded_at": "2026-09-03T00:14:40+00:00",
-      "status": "pass"
-    },
-    "6": {
-      "evidence": {
-        "customer_managed_storage": true,
-        "data_copy_required": false,
-        "default_min_reader_version": "3",
-        "default_min_writer_version": "7",
-        "default_registration": {
-          "error": "Delta protocol version is too new for Athena DDL engine",
-          "error_code": "ATHENA_FAILED",
+        "register_over_live_managed_path": {
+          "error": "[ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/uc-managed-exit/managed-catalog-root/__unitystorage/catalogs/25f09465-5b50-4299-87a1-49fbdb7d3ecd/tables/36975c18-6496-4214-addc-1c809bc0990d' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+          "error_code": "ServiceErrorCode.BAD_REQUEST",
           "scalar": null,
           "succeeded": false
         },
-        "default_table_features": "[\"appendOnly\",\"deletionVectors\",\"domainMetadata\",\"invariants\",\"rowTracking\"]",
-        "destination_catalog": "AWS Glue",
-        "destination_engine": "Amazon Athena",
-        "destination_rows": 3,
-        "destination_write_tested": false,
-        "portable_min_reader_version": "1",
-        "portable_min_writer_version": "2",
-        "portable_registration": {
+        "source": "managed_iceberg"
+      },
+      "finding": "UC refused every no-copy registration with LOCATION_OVERLAP: paths under the reserved `__unitystorage` prefix cannot become external tables, even after the managed table is dropped. The identical files copied outside that prefix registered and read 3 rows, so the block is the prefix rule, not the Delta log.",
+      "question": "UC managed Iceberg \u2192 UC external Delta table: can the existing files be re-registered in UC without a data copy?",
+      "recorded_at": "2026-09-03T01:42:11+00:00",
+      "status": "fail"
+    },
+    "3a": {
+      "evidence": {
+        "client": {
+          "client": "pyiceberg-sql-catalog",
+          "detail": {
+            "new_metadata_written_under_source_path": true,
+            "rows_at_registration": 3,
+            "snapshot_after_append": 3576640593170240282,
+            "snapshot_at_registration": 4094286305934811463
+          },
           "error": null,
-          "error_code": null,
-          "scalar": null,
+          "error_type": null,
+          "rows": 4,
           "succeeded": true
         },
-        "portable_table_features": "[\"appendOnly\",\"invariants\"]",
-        "source_metadata_preserved": true
+        "data_copied": false,
+        "iceberg_metadata_dir": "metadata",
+        "source": "managed_delta"
       },
-      "finding": "Yes when portability properties are set before writes: Athena read all rows directly from the UC-managed path. The default managed Delta protocol was still too new, so customer-owned storage alone is not sufficient.",
-      "question": "Can customer-rooted managed Delta be registered in Glue/Athena without copying data?",
-      "recorded_at": "2026-09-03T00:15:16+00:00",
+      "finding": "A fresh pyiceberg catalog adopted the existing metadata.json, read all rows, and committed a new snapshot in place. No data was copied; the new catalog now manages the table.",
+      "question": "UC managed Delta (UniForm enabled) \u2192 Iceberg in a new managing catalog: can existing metadata be adopted with no data copy?",
+      "recorded_at": "2026-09-03T01:41:23+00:00",
       "status": "pass"
     },
-    "7": {
+    "3b": {
       "evidence": {
-        "catalog_pointers_diverged_after_destination_write": true,
-        "customer_managed_storage": true,
-        "data_copy_required": false,
-        "destination_catalog": "AWS Glue",
-        "destination_engine": "Amazon Athena",
-        "destination_read": {
+        "client": {
+          "client": "pyiceberg-sql-catalog",
+          "detail": {
+            "new_metadata_written_under_source_path": true,
+            "rows_at_registration": 3,
+            "snapshot_after_append": 8420304902620089532,
+            "snapshot_at_registration": 131158991024968001
+          },
           "error": null,
-          "error_code": null,
-          "scalar": "3",
+          "error_type": null,
+          "rows": 4,
           "succeeded": true
         },
-        "destination_rows": 3,
-        "destination_write_verified": true,
-        "initial_read": {
-          "error": null,
-          "error_code": null,
-          "scalar": "3",
-          "succeeded": true
-        },
-        "source_format": "iceberg",
-        "source_metadata_preserved_at_registration": true,
-        "source_rows": 3,
-        "source_saw_destination_write": false,
-        "update": {
-          "error": null,
-          "error_code": null,
-          "scalar": null,
-          "succeeded": true
-        }
+        "data_copied": false,
+        "iceberg_metadata_dir": "_iceberg/metadata",
+        "source": "managed_iceberg"
       },
-      "finding": "Glue/Athena read the UC-managed Iceberg metadata and files in place, then advanced the destination catalog with a write. Databricks retained its old snapshot, proving that zero-copy cutover works but concurrent writes create divergent catalog pointers.",
-      "question": "Can customer-rooted managed Iceberg be registered and cut over to Glue without copying data?",
-      "recorded_at": "2026-09-03T00:15:46+00:00",
+      "finding": "A fresh pyiceberg catalog adopted the existing metadata.json, read all rows, and committed a new snapshot in place. No data was copied; the new catalog now manages the table.",
+      "question": "UC managed Iceberg \u2192 Iceberg in a new managing catalog: can existing metadata be adopted with no data copy?",
+      "recorded_at": "2026-09-03T01:41:36+00:00",
       "status": "pass"
     }
   }
