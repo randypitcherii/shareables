@@ -1,5 +1,14 @@
 # dbt for Databricks — Why should you care?
 
+This reference dbt project builds Databricks cost and usage analytics with version-controlled jobs.
+
+## Delivery architecture
+
+![Scheduled dbt builds use a versioned Databricks workflow and durable artifacts](docs/diagrams/scheduled-builds-migration.png)
+
+Source: [`docs/diagrams/scheduled-builds-migration.html`](docs/diagrams/scheduled-builds-migration.html).
+Regenerate it with the `diagram` skill. The render command is in the file header.
+
 ## The Problem
 Tired of this data engineering chaos?
 - SQL spaghetti scattered across unversioned notebooks?
@@ -308,6 +317,10 @@ The whole lifecycle in one view — what each git state is, which service princi
 as, and which catalog it lands in:
 
 ![Git lifecycle → service principals → catalogs](docs/diagrams/06-git-lifecycle-environments.svg)
+
+The [orchestration migration guide](docs/ORCHESTRATION_MIGRATION_GUIDE.md) shows the full
+move from external job settings to scheduled builds, Slim CI, state-based CD, and one
+uv-owned dbt adapter version.
 
 CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
 builds and tests every PR that touches this project, into its own disposable schema:

@@ -33,6 +33,10 @@ Browser-openable visuals for the concepts below live in [`docs/diagrams/`](docs/
 (open the `.html` files locally). Flagship: **One model, three environments** — the deployment
 lifecycle. These are drafts, refined alongside this document.
 
+The [orchestration migration guide](docs/ORCHESTRATION_MIGRATION_GUIDE.md) connects four
+before-and-after diagrams. It covers scheduled builds, Slim CI, state-based CD, and dbt
+adapter-version ownership.
+
 ## The principles
 
 ### 1. Configuration is environment-driven, with public dev fallbacks
