@@ -17,7 +17,7 @@ Each was designed pain-first — start from "what's hard to grasp in prose," the
 | `scheduled-builds-migration.html` | Scheduled builds before and after migration | schedule, state, and docs ownership are difficult to compare across two control planes |
 | `slim-ci-migration.html` | Slim CI before and after migration | state deferral, schema isolation, and cleanup form one CI contract |
 | `state-based-cd-migration.html` | State-based CD before and after migration | deployment and state handoff must form one reviewable release path |
-| `dbt-version-ownership-migration.html` | dbt version ownership before and after migration | a compatibility floor and an executable pin solve different problems |
+| `dbt-version-ownership-migration.html` | dbt adapter-version ownership before and after migration | a compatibility floor and an executable pin solve different problems |
 
 `06` is a hand-authored SVG (renders directly on GitHub, no build step): each row is one
 environment, colored end-to-end — the branch, the principal it runs as, and the catalog it

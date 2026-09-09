@@ -6,7 +6,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>One pyproject pin controls dbt everywhere</title>
+<title>One pyproject pin controls the dbt adapter everywhere</title>
 <style>
 :root{
   --ink:#000000;--paper:#FFFFFF;--brand:#0B5CFF;--brand-tint:#E9F0FF;
@@ -42,7 +42,7 @@ body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);co
 .node b{display:block;font-size:14px;line-height:1.2}.node span{display:block;font-size:11.5px;font-weight:400;line-height:1.35;margin-top:4px}
 .node.brand{background:var(--brand-tint);border:1.5px solid var(--brand)}.node.gate{background:var(--gate-tint);border-left:7px solid var(--gate)}.node.muted{background:var(--muted)}
 .chev{display:flex;align-items:center;justify-content:center}.chev svg{width:18px;height:18px}
-.compare{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr);align-items:stretch}.compare>.group{min-height:342px}
+.compare{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr);align-items:stretch}
 .transition{display:flex;align-items:center;justify-content:center}.transition svg{width:36px;height:36px}
 .mini-flow{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr);align-items:stretch}
 .mini-flow .node{padding:10px 8px}.mini-flow .node b{font-size:12.5px}.mini-flow .node span{font-size:10.5px}
@@ -51,7 +51,7 @@ body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);co
 </head>
 <body>
 <div class="brand-bar"></div>
-<div class="hd"><h1>One pyproject pin controls dbt everywhere</h1><p>The reviewed pin selects the dbt version for laptops and Databricks Jobs.</p></div>
+<div class="hd"><h1>One pyproject pin controls the dbt adapter everywhere</h1><p>The reviewed pin selects the adapter version for laptops and Databricks Jobs.</p></div>
 <div class="canvas">
   <div class="section">
     <div class="compare-kickers">
@@ -75,7 +75,7 @@ body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);co
       </div>
       <div class="transition"><svg viewBox="0 0 36 36"><path d="M7,5 L28,18 L7,31" fill="none" stroke="#0B5CFF" stroke-width="3"/></svg></div>
       <div class="group brand">
-        <h3>pyproject.toml owns the exact version <span class="verb">uv resolves everywhere</span></h3>
+        <h3>pyproject.toml owns the exact adapter version <span class="verb">uv resolves everywhere</span></h3>
         <div class="subhead">One reviewed source</div>
         <div class="mini-flow">
           <div class="node gate"><b>Edit one pin</b><span>pyproject.toml exactly pins the dbt adapter</span></div>
@@ -99,7 +99,7 @@ body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);co
     <div class="kicker gate">The version ownership contract</div>
     <div class="cols3" style="flex:1 1 auto">
       <div class="card gate"><h4>Upgrade one reviewed line</h4><ul><li>The project dependency is the decision point</li><li>The pull request records each version change</li></ul><div class="state"><span class="dot gate"></span>One source of truth</div></div>
-      <div class="card brand"><h4>Use uv for every dbt command</h4><ul><li>No global dbt installation selects the runtime</li><li>Development, CI, CD, and schedules resolve the exact pin</li></ul><div class="state"><span class="dot brand"></span>No runtime drift</div></div>
+      <div class="card brand"><h4>Use uv for every dbt command</h4><ul><li>No global dbt installation selects the adapter</li><li>Development, CI, CD, and schedules resolve the exact adapter pin</li></ul><div class="state"><span class="dot brand"></span>No adapter drift</div></div>
       <div class="card"><h4>Keep compatibility separate</h4><ul><li>A compatibility floor describes accepted project syntax</li><li>It does not select the executable in production</li></ul><div class="state"><span class="dot"></span>Floor differs from pin</div></div>
     </div>
   </div>

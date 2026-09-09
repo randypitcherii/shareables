@@ -35,7 +35,7 @@ lifecycle. These are drafts, refined alongside this document.
 
 The [orchestration migration guide](docs/ORCHESTRATION_MIGRATION_GUIDE.md) connects four
 before-and-after diagrams. It covers scheduled builds, Slim CI, state-based CD, and dbt
-version ownership.
+adapter-version ownership.
 
 ## The principles
 

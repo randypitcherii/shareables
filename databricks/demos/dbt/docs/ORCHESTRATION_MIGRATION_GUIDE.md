@@ -39,12 +39,15 @@ The job reads the production manifest and runs:
 uv run dbt build -s state:modified+ --defer --state prod_state --fail-fast
 ```
 
-Build the full project when the production manifest is absent or unreadable. This fallback
+If the production manifest is absent or unreadable, build the full project. This fallback
 prevents a missing state file from producing a false success.
 
-Give each run a schema such as
-`<test_catalog>.dbt_ci__pr_<pr_number>_<run_id>`. Clean the schema after a successful run.
-Keep failed schemas temporarily for investigation, then remove them during a later cleanup.
+For each run:
+
+1. Create a schema such as
+   `<test_catalog>.dbt_ci__pr_<pr_number>_<run_id>`.
+2. If the run succeeds, clean the schema.
+3. If the run fails, keep the schema for investigation. Remove it during a later cleanup.
 
 The CI service principal must have read-only access to the production state and relations.
 It must have write access only to the CI catalog.
@@ -59,27 +62,30 @@ Regenerate it with the `diagram` skill. The render command is in the file header
 Trigger one Databricks CD job after a reviewed change enters the production branch. The job
 deploys the production DAB with its production `run_as` identity.
 
-Next, run `state:modified+` against the previous production manifest. Build the full project
-when no previous manifest exists.
+If a previous production manifest exists, run `state:modified+` against it. If no previous
+manifest exists, build the full project.
 
 Write the merged manifest to the stable production state path. The new manifest becomes the
 reference for the next CI or CD run.
 
-## 4. Give uv ownership of the dbt version
+## 4. Give `pyproject.toml` ownership of the adapter version
 
-![One exact pyproject pin selects dbt in every environment](diagrams/dbt-version-ownership-migration.png)
+![One exact pyproject pin selects the dbt adapter in every environment](diagrams/dbt-version-ownership-migration.png)
 
 Source: [`diagrams/dbt-version-ownership-migration.html`](diagrams/dbt-version-ownership-migration.html).
 Regenerate it with the `diagram` skill. The render command is in the file header.
 
-Pin the dbt adapter exactly in `pyproject.toml`. Run `uv sync` before each dbt command in
-development and in every Databricks job.
+1. Pin the dbt adapter exactly in `pyproject.toml`.
+2. Before each dbt command, run `uv sync` in development and in every Databricks job.
+3. Run dbt through `uv run dbt`.
 
-Run dbt through `uv run dbt`. Do not use a global dbt installation as an implicit version
-source.
+Do not use a global dbt installation as an implicit version source.
 
 This project pins `dbt-databricks==1.12.4`. A version upgrade changes one reviewed line, and
-the same pin controls development, CI, CD, and scheduled production jobs.
+the same adapter pin controls development, CI, CD, and scheduled production jobs. Because
+this project does not commit `uv.lock`, compatible transitive dependencies can still change
+between resolutions. The exact guarantee applies to the adapter pin, not every installed
+package.
 
 ## Result
 

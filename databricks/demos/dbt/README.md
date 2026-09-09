@@ -320,7 +320,7 @@ as, and which catalog it lands in:
 
 The [orchestration migration guide](docs/ORCHESTRATION_MIGRATION_GUIDE.md) shows the full
 move from external job settings to scheduled builds, Slim CI, state-based CD, and one
-uv-owned dbt version.
+uv-owned dbt adapter version.
 
 CI is **live**: [`.github/workflows/dbt-ci.yml`](../../../.github/workflows/dbt-ci.yml)
 builds and tests every PR that touches this project, into its own disposable schema:
