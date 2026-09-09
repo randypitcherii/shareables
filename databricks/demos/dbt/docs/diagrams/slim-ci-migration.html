@@ -1,0 +1,112 @@
+<!-- Slim CI before and after Databricks orchestration. Render:
+     $HOME/.agents/skills/diagram/render.sh databricks/demos/dbt/docs/diagrams/slim-ci-migration.html databricks/demos/dbt/docs/diagrams/slim-ci-migration.png
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slim CI becomes one observable Databricks job</title>
+<style>
+:root{
+  --ink:#000000;--paper:#FFFFFF;--brand:#0B5CFF;--brand-tint:#E9F0FF;
+  --gate:#FFD24D;--gate-tint:#FFF4D2;--muted:#F2F2F2;
+  --font:-apple-system,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --canvas-w:1420px;--canvas-h:720px;--gutter:30px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);color:var(--ink);font-family:var(--font);font-weight:700;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+.brand-bar{height:5px;background:var(--brand);flex:0 0 auto}
+.hd{padding:19px 34px 13px;display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--ink)}
+.hd h1{font-size:24px;letter-spacing:-.015em;white-space:nowrap}.hd p{font-size:13.5px;font-weight:400}
+.canvas{flex:1 1 auto;min-height:0;padding:16px 34px 18px;display:flex;flex-direction:column;gap:16px}
+.section{display:flex;flex-direction:column;gap:11px}.section.grow{flex:1 1 auto;min-height:0}
+.kicker{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;padding-top:7px;border-top:4px solid var(--ink)}
+.kicker.brand{border-top-color:var(--brand)}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
+.card{border:1px solid var(--ink);border-radius:4px;background:var(--paper);padding:14px 13px 12px;display:flex;flex-direction:column}
+.card.brand{background:var(--brand-tint);border:1.5px solid var(--brand)}
+.card h4{font-size:15px;line-height:1.2;margin-bottom:10px}.card ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.card li{font-size:12px;font-weight:400;line-height:1.32;padding-left:12px;position:relative}
+.card li::before{content:"";position:absolute;left:0;top:5.5px;width:5px;height:5px;background:var(--ink);border-radius:50%}
+.state{margin-top:auto;padding-top:8px;border-top:1px solid var(--ink);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;border:1px solid var(--ink);background:var(--paper)}.dot.brand{background:var(--brand);border-color:var(--brand)}
+.group{border:1.5px solid var(--ink);padding:13px 15px 14px;display:flex;flex-direction:column;min-width:0}.group.brand{border-color:var(--brand)}
+.group h3{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+.verb{font-size:10.5px;text-transform:none;letter-spacing:0;border:1px solid var(--ink);border-radius:99px;padding:2px 9px;margin-left:auto}
+.subhead{font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin:2px 0 8px;display:flex;align-items:center;gap:8px}
+.subhead::after{content:"";flex:1;height:1px;background:var(--ink)}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.node{border:1px solid var(--ink);border-radius:4px;background:var(--paper);padding:9px 13px 10px;text-align:center}
+.node b{display:block;font-size:14px;line-height:1.2}.node span{display:block;font-size:11.5px;font-weight:400;line-height:1.35;margin-top:4px}
+.node.brand{background:var(--brand-tint);border:1.5px solid var(--brand)}.node.gate{background:var(--gate-tint);border-left:7px solid var(--gate)}.node.muted{background:var(--muted)}
+.chev{display:flex;align-items:center;justify-content:center}.chev svg{width:18px;height:18px}
+.compare{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr);align-items:stretch}.compare>.group{min-height:342px}
+.transition{display:flex;align-items:center;justify-content:center}.transition svg{width:36px;height:36px}
+.mini-flow{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr);align-items:stretch}
+.mini-flow .node{padding:10px 8px}.mini-flow .node b{font-size:12.5px}.mini-flow .node span{font-size:10.5px}
+.compare-kickers{display:grid;grid-template-columns:minmax(0,1fr) 54px minmax(0,1fr)}.compare-kickers .after{grid-column:3}
+</style>
+</head>
+<body>
+<div class="brand-bar"></div>
+<div class="hd"><h1>Slim CI becomes one observable Databricks job</h1><p>GitHub remains the gate while one DAB-defined serverless job runs each pull request.</p></div>
+<div class="canvas">
+  <div class="section">
+    <div class="compare-kickers">
+      <div class="kicker">Before · hosted job orchestration</div>
+      <div class="kicker brand after">After · Databricks orchestration</div>
+    </div>
+    <div class="compare">
+      <div class="group">
+        <h3>GitHub and legacy dbt Cloud jobs <span class="verb">route · trigger · poll</span></h3>
+        <div class="subhead">Required-check path</div>
+        <div class="mini-flow">
+          <div class="node"><b>Change detection</b><span>Find each affected dbt project</span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+          <div class="node muted"><b>Job routing</b><span>Route affected projects to CI execution</span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+          <div class="node muted"><b>Hosted API</b><span>Trigger required and optional checks</span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+          <div class="node"><b>Poll by commit</b><span>Return hosted run results to GitHub</span></div>
+        </div>
+        <div class="subhead" style="margin-top:13px">Configuration outside version control</div>
+        <div class="grid2">
+          <div class="node muted"><b>Runtime configuration</b><span>Commands, version, and environment live per hosted job</span></div>
+          <div class="node muted"><b>State behavior</b><span>Deferral and artifact retention depend on hosted configuration</span></div>
+        </div>
+      </div>
+      <div class="transition"><svg viewBox="0 0 36 36"><path d="M7,5 L28,18 L7,31" fill="none" stroke="#0B5CFF" stroke-width="3"/></svg></div>
+      <div class="group brand">
+        <h3>GitHub gate and Databricks CI job <span class="verb">one parameterized path</span></h3>
+        <div class="subhead">Pull-request execution path</div>
+        <div class="mini-flow">
+          <div class="node gate"><b>Open pull request</b><span>GitHub passes the head commit and isolated schema</span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+          <div class="node brand"><b>Databricks CI job</b><span>A serverless run_as identity runs dbt</span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+          <div class="node brand"><b>Slim CI</b><span><code>state:modified+</code> uses <code>--defer</code></span></div>
+          <div class="chev"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#0B5CFF" stroke-width="2.5"/></svg></div>
+          <div class="node"><b>Pull-request check</b><span>The job result returns to GitHub</span></div>
+        </div>
+        <div class="subhead" style="margin-top:13px">State and isolation</div>
+        <div class="grid3">
+          <div class="node brand"><b>Read production state</b><span>Production volume / state/latest / manifest.json</span></div>
+          <div class="node"><b>Write test schema</b><span>&lt;test_catalog&gt;.dbt_ci__pr_&lt;pr_number&gt;_&lt;run_id&gt;</span></div>
+          <div class="node"><b>Clean after success</b><span>Drop this schema and sweep stale CI schemas</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section grow">
+    <div class="kicker">Slim CI invariants</div>
+    <div class="cols3" style="flex:1 1 auto">
+      <div class="card brand"><h4>Production is the reference</h4><ul><li>The production job captures the manifest in a stable volume path</li><li>CI has read-only access to the production volume</li></ul><div class="state"><span class="dot brand"></span>Trusted state</div></div>
+      <div class="card"><h4>No state means full build</h4><ul><li>A missing manifest does not produce a false success</li><li>The job builds the full project when state is unavailable</li></ul><div class="state"><span class="dot"></span>Safe fallback</div></div>
+      <div class="card"><h4>Failures stay available</h4><ul><li>Successful runs clean their disposable schemas</li><li>Failed schemas remain for investigation until a later sweep</li></ul><div class="state"><span class="dot"></span>Evidence retained</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
