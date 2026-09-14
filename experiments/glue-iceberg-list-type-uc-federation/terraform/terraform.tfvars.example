@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+aws_region  = "us-east-1"
+aws_profile = "your-aws-sso-profile"
+
+# Databricks account ID -> sts:ExternalId on the UC trust statement
+databricks_account_id = "00000000-0000-0000-0000-000000000000"
+
+# Optional overrides
+# name_prefix   = "glue-iceberg-list-eval"
+# glue_database = "glue_iceberg_list_eval"

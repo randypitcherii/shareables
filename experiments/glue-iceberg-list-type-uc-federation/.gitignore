@@ -1,0 +1,15 @@
+# Env files: only the template is committed
+*.env
+!template.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# uv.lock resolves through an internal PyPI mirror on the author's machine, so
+# every URL in it points at a host external consumers cannot reach. Regenerate
+# with `uv lock` on a machine resolving against public PyPI to commit it.
+uv.lock

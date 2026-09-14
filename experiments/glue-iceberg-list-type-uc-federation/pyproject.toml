@@ -1,0 +1,35 @@
+[project]
+name = "glue-iceberg-list-type-uc-federation"
+version = "0.1.0"
+description = "Experiment: bounds of Unity Catalog Glue federation for Iceberg tables with list/array columns, across writer paths and type shapes"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk>=0.38.0",
+    "boto3>=1.35.0",
+    "pyiceberg[glue,pyarrow]>=0.9.0",
+    "requests>=2.32.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+pythonpath = ["scripts", "scripts/matrix"]
+markers = [
+    "infrastructure: tests requiring live Glue + Databricks infrastructure",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["_common", "_matrix_common"]
