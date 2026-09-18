@@ -32,6 +32,12 @@ resource "aws_s3_bucket" "warehouse" {
   bucket        = local.bucket_name
   force_destroy = true
   tags          = var.tags
+
+  # The sandbox account auto-stamps an `Owner` tag on every bucket; without
+  # this, every plan shows a perpetual tag diff.
+  lifecycle {
+    ignore_changes = [tags, tags_all]
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "warehouse" {
@@ -62,9 +68,11 @@ resource "aws_glue_catalog_database" "eval" {
 # reads through). Databricks requires the role to be self-assuming; the trust
 # policy therefore names both the UC master role and this role's own ARN.
 #
-# The self-reference has to be by ARN string (not the resource attribute) or
-# Terraform reports a cycle. The role is created first, then the trust policy
-# is attached in a second step so the self-assume principal already exists.
+# IAM rejects a trust policy whose principal is a role that does not exist yet
+# ("Invalid principal in policy"), so the self-assume statement cannot name
+# this role's ARN directly at creation time. The AWS-documented workaround is
+# to trust the account root and narrow it with an aws:PrincipalArn condition
+# to this role's ARN — semantically identical, valid on first apply.
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "trust" {
@@ -79,7 +87,7 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringEquals"
       variable = "sts:ExternalId"
-      values   = [var.databricks_account_id]
+      values   = concat([var.databricks_account_id], var.uc_credential_external_ids)
     }
   }
 
@@ -89,7 +97,12 @@ data "aws_iam_policy_document" "trust" {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "AWS"
-      identifiers = [local.role_arn]
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.role_arn]
     }
   }
 }
@@ -175,5 +188,38 @@ resource "aws_athena_workgroup" "eval" {
     result_configuration {
       output_location = "s3://${aws_s3_bucket.warehouse.bucket}/athena-results/"
     }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Lake Formation: this sandbox account has LF enforcement on (the IAM-only
+# "IAMAllowedPrincipals" defaults are cleared), so Glue API calls from the
+# federation role are authorised by LF grants, not just the IAM glue:* policy.
+# UC's Hive client also probes the `default` database on connect, so it needs
+# DESCRIBE there or SHOW SCHEMAS fails with "Required Describe on default".
+# ---------------------------------------------------------------------------
+
+resource "aws_lakeformation_permissions" "default_db_describe" {
+  principal   = aws_iam_role.uc_federation.arn
+  permissions = ["DESCRIBE"]
+  database {
+    name = "default"
+  }
+}
+
+resource "aws_lakeformation_permissions" "eval_db" {
+  principal   = aws_iam_role.uc_federation.arn
+  permissions = ["DESCRIBE"]
+  database {
+    name = aws_glue_catalog_database.eval.name
+  }
+}
+
+resource "aws_lakeformation_permissions" "eval_tables" {
+  principal   = aws_iam_role.uc_federation.arn
+  permissions = ["SELECT", "DESCRIBE"]
+  table {
+    database_name = aws_glue_catalog_database.eval.name
+    wildcard      = true
   }
 }

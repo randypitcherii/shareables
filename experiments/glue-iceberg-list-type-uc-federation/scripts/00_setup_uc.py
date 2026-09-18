@@ -30,7 +30,7 @@ def main() -> None:
     cfg = load_config()
     w = workspace_client(cfg)
     from databricks.sdk.errors import NotFound
-    from databricks.sdk.service.catalog import AwsIamRole, AwsIamRoleRequest
+    from databricks.sdk.service.catalog import AwsIamRole, AwsIamRoleRequest, CredentialPurpose
 
     section("identity")
     ok(f"databricks: {dbsql_identity(cfg, w)}")
@@ -42,7 +42,7 @@ def main() -> None:
     except NotFound:
         w.credentials.create_credential(
             name=cfg.uc_service_credential,
-            purpose="SERVICE",
+            purpose=CredentialPurpose.SERVICE,
             aws_iam_role=AwsIamRole(role_arn=cfg.uc_federation_role_arn),
             comment="glue-iceberg-list-type-uc-federation experiment (ephemeral)",
         )

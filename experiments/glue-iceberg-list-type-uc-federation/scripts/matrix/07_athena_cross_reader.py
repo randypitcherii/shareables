@@ -40,7 +40,7 @@ def main() -> None:
     name = written["table"]
     count = athena(cfg, f'SELECT COUNT(*) FROM "{cfg.glue_database}"."{name}"')
     sample = athena(cfg, f'SELECT id, list_ids FROM "{cfg.glue_database}"."{name}" LIMIT 3')
-    describe = athena(cfg, f'DESCRIBE "{cfg.glue_database}"."{name}"')
+    describe = athena(cfg, f"DESCRIBE `{cfg.glue_database}`.`{name}`")
     for k, v in {"count": count, "sample": sample, "describe": describe}.items():
         note(f"{k}: {v}")
     record_result(

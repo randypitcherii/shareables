@@ -12,7 +12,7 @@ export
 DATABRICKS_CONFIG_PROFILE ?= DEFAULT
 AWS_PROFILE ?= your-aws-profile-name
 TF := terraform -chdir=terraform
-M  := uv run python scripts/matrix
+M  := PYTHONPATH=scripts:scripts/matrix uv run python scripts/matrix
 
 help: ## Show this help
 	@echo "glue-iceberg-list-type-uc-federation — bounds of UC Glue federation for Iceberg list/array columns"

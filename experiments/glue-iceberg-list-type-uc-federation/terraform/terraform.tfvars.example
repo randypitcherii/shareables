@@ -9,3 +9,7 @@ databricks_account_id = "00000000-0000-0000-0000-000000000000"
 # Optional overrides
 # name_prefix   = "glue-iceberg-list-eval"
 # glue_database = "glue_iceberg_list_eval"
+
+# Second pass: paste the external_id from each UC credential after the first
+# `make setup-uc` creates them (it will fail on the external location until then).
+# uc_credential_external_ids = ["<svc external_id>", "<stg external_id>"]

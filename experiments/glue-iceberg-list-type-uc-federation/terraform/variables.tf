@@ -30,6 +30,20 @@ variable "databricks_account_id" {
   type        = string
 }
 
+variable "uc_credential_external_ids" {
+  description = <<-EOT
+    Per-credential external IDs Unity Catalog stamps on each service/storage
+    credential (`databricks credentials get-credential <name>` and
+    `databricks storage-credentials get <name>` -> aws_iam_role.external_id).
+    Observed: UC did NOT use the account id as sts:ExternalId; it minted a
+    fresh UUID per credential, so the trust policy must accept these too.
+    Two-pass workflow: tf-apply -> setup-uc (creates credentials, fails on the
+    external location) -> paste the two ids here -> tf-apply -> setup-uc.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "databricks_uc_master_role_arn" {
   description = <<-EOT
     The Unity Catalog master IAM role Databricks assumes into your account.

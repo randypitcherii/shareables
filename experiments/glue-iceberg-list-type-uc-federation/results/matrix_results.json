@@ -1,1 +1,569 @@
-{}
+{
+  "01_baseline_primitives_rest": {
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_primitives",
+      "sd_types": {
+        "id": "bigint",
+        "name": "string"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Primitives-only Iceberg table written via Glue Iceberg REST endpoint is readable in UC?",
+    "recorded_at": "2026-09-18T15:17:17Z",
+    "shape": "primitives",
+    "status": "\u2705",
+    "table": "t_rest_primitives",
+    "uc": {
+      "describe": {
+        "elapsed_ms": 13039,
+        "ok": true,
+        "row_count": 2,
+        "sample": [
+          [
+            "id",
+            "bigint",
+            null
+          ],
+          [
+            "name",
+            "string",
+            null
+          ]
+        ]
+      },
+      "readable": true,
+      "select_count": {
+        "elapsed_ms": 2018,
+        "ok": true,
+        "row_count": 1,
+        "sample": [
+          [
+            "3"
+          ]
+        ]
+      }
+    },
+    "writer": "rest"
+  },
+  "02_list_primitive_rest": {
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "observed_error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+    "question": "Same writer, list<bigint> column -> INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE reproduced?",
+    "recorded_at": "2026-09-18T15:17:45Z",
+    "reproduced": true,
+    "sd_type_of_list_column": "list<bigint>",
+    "sd_uses_iceberg_list_token": true,
+    "shape": "list_primitive",
+    "status": "\u274c",
+    "table": "t_rest_list_primitive",
+    "uc": {
+      "describe": {
+        "elapsed_ms": 849,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "readable": false,
+      "select_count": {
+        "elapsed_ms": 558,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      }
+    },
+    "writer": "rest"
+  },
+  "03_list_primitive_glue_native": {
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_glue_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "array<bigint>"
+      },
+      "table_type": "ICEBERG"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Same table shape via native Iceberg GlueCatalog -> SD gets array<> and UC reads it?",
+    "recorded_at": "2026-09-18T15:18:02Z",
+    "sd_type_of_list_column": "array<bigint>",
+    "sd_uses_hive_array_token": true,
+    "shape": "list_primitive",
+    "status": "\u2705",
+    "table": "t_glue_list_primitive",
+    "uc": {
+      "describe": {
+        "elapsed_ms": 4531,
+        "ok": true,
+        "row_count": 2,
+        "sample": [
+          [
+            "id",
+            "bigint",
+            null
+          ],
+          [
+            "list_ids",
+            "array<bigint>",
+            null
+          ]
+        ]
+      },
+      "readable": true,
+      "select_count": {
+        "elapsed_ms": 1323,
+        "ok": true,
+        "row_count": 1,
+        "sample": [
+          [
+            "3"
+          ]
+        ]
+      }
+    },
+    "writer": "glue"
+  },
+  "04_type_shape_sweep": {
+    "cells": {
+      "glue/list_primitive": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "list_ids": "array<bigint>"
+        },
+        "shape": "list_primitive",
+        "table": "t_glue_list_primitive",
+        "writer": "glue"
+      },
+      "glue/list_struct": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "items": "array<struct<k:string,v:bigint>>"
+        },
+        "shape": "list_struct",
+        "table": "t_glue_list_struct",
+        "writer": "glue"
+      },
+      "glue/map_primitive": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "attrs": "map<string,string>"
+        },
+        "shape": "map_primitive",
+        "table": "t_glue_map_primitive",
+        "writer": "glue"
+      },
+      "glue/nested_struct_required": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "outer": "struct<inner:struct<must:bigint>>"
+        },
+        "shape": "nested_struct_required",
+        "table": "t_glue_nested_struct_required",
+        "writer": "glue"
+      },
+      "glue/primitives": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "name": "string"
+        },
+        "shape": "primitives",
+        "table": "t_glue_primitives",
+        "writer": "glue"
+      },
+      "glue/struct_with_list": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "payload": "struct<tags:array<string>,n:bigint>"
+        },
+        "shape": "struct_with_list",
+        "table": "t_glue_struct_with_list",
+        "writer": "glue"
+      },
+      "rest/list_primitive": {
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "readable": false,
+        "sd_complex_types": {
+          "list_ids": "list<bigint>"
+        },
+        "shape": "list_primitive",
+        "table": "t_rest_list_primitive",
+        "writer": "rest"
+      },
+      "rest/list_struct": {
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_struct SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "readable": false,
+        "sd_complex_types": {
+          "items": "list<struct<k:string,v:bigint>>"
+        },
+        "shape": "list_struct",
+        "table": "t_rest_list_struct",
+        "writer": "rest"
+      },
+      "rest/map_primitive": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "attrs": "map<string,string>"
+        },
+        "shape": "map_primitive",
+        "table": "t_rest_map_primitive",
+        "writer": "rest"
+      },
+      "rest/nested_struct_required": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "outer": "struct<inner:struct<must:bigint>>"
+        },
+        "shape": "nested_struct_required",
+        "table": "t_rest_nested_struct_required",
+        "writer": "rest"
+      },
+      "rest/primitives": {
+        "error": "",
+        "error_class": null,
+        "readable": true,
+        "sd_complex_types": {
+          "name": "string"
+        },
+        "shape": "primitives",
+        "table": "t_rest_primitives",
+        "writer": "rest"
+      },
+      "rest/struct_with_list": {
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_struct_with_list SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "readable": false,
+        "sd_complex_types": {
+          "payload": "struct<tags:list<string>,n:bigint>"
+        },
+        "shape": "struct_with_list",
+        "table": "t_rest_struct_with_list",
+        "writer": "rest"
+      }
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Which Iceberg type shapes fail through Glue federation, and does the writer path change it?",
+    "recorded_at": "2026-09-18T15:20:43Z",
+    "shapes": [
+      "primitives",
+      "list_primitive",
+      "list_struct",
+      "map_primitive",
+      "struct_with_list",
+      "nested_struct_required"
+    ],
+    "status": "\u25d1",
+    "writers": [
+      "rest",
+      "glue"
+    ]
+  },
+  "05_failure_surfaces": {
+    "failing_surfaces": {
+      "describe": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "describe_detail": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "describe_extended": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "information_schema_columns": "EXTERNAL_METASTORE_CLIENT_ERROR.OPERATION_FAILED",
+      "refresh_foreign_table": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "select_count": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "select_star_limit": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "show_create_table": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE"
+    },
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Does the failure differ across DESCRIBE / SELECT / REFRESH / information_schema?",
+    "recorded_at": "2026-09-18T15:21:39Z",
+    "single_error_class": false,
+    "status": "\u25d1",
+    "surfaces": {
+      "describe": {
+        "elapsed_ms": 846,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "describe_detail": {
+        "elapsed_ms": 979,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "describe_extended": {
+        "elapsed_ms": 448,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "information_schema_columns": {
+        "elapsed_ms": 900,
+        "error": "[EXTERNAL_METASTORE_CLIENT_ERROR.OPERATION_FAILED] Client operation failed:  org.apache.hadoop.hive.metastore.api.MetaException: Insufficient Lake Formation permission(s): Required Describe on information_schema (Service: AWSGlue; Status Code: 400; Error Code: AccessDeniedException; Request ID: 53c778dc-6eb1-4adc-b372-96b59af1b212; Proxy: null) SQLSTATE: 58000",
+        "error_class": "EXTERNAL_METASTORE_CLIENT_ERROR.OPERATION_FAILED",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "refresh_foreign_table": {
+        "elapsed_ms": 448,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "select_count": {
+        "elapsed_ms": 459,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "select_star_limit": {
+        "elapsed_ms": 494,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "show_create_table": {
+        "elapsed_ms": 487,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      }
+    },
+    "table": "t_rest_list_primitive"
+  },
+  "06_sd_patch_durability": {
+    "after_next_commit": {
+      "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+      "readable": false,
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      }
+    },
+    "after_patch": {
+      "error_class": null,
+      "readable": true,
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "array<bigint>"
+      }
+    },
+    "before_patch": {
+      "readable": false
+    },
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "patch": {
+      "list_ids": "list<bigint> -> array<bigint>"
+    },
+    "question": "Manual SD patch list<> -> array<>: UC reads? Survives the next REST-endpoint commit?",
+    "recorded_at": "2026-09-18T15:22:15Z",
+    "status": "\u25d1",
+    "table": "t_rest_list_primitive",
+    "workaround_survives_commit": false,
+    "workaround_works_once": true
+  },
+  "07_athena_cross_reader": {
+    "athena": {
+      "count": {
+        "ok": true,
+        "rows": [
+          [
+            "_col0"
+          ],
+          [
+            "19"
+          ]
+        ]
+      },
+      "describe": {
+        "ok": true,
+        "rows": [
+          [
+            "# Table schema:\t\t"
+          ],
+          [
+            "# col_name\tdata_type\tcomment"
+          ],
+          [
+            "id\tbigint\t"
+          ],
+          [
+            "list_ids\tarray<bigint>\t"
+          ],
+          [
+            "\t\t"
+          ],
+          [
+            "# Partition spec:\t\t"
+          ],
+          [
+            "# field_name\tfield_transform\tcolumn_name"
+          ]
+        ]
+      },
+      "sample": {
+        "ok": true,
+        "rows": [
+          [
+            "id",
+            "list_ids"
+          ],
+          [
+            "0",
+            "[0, 1]"
+          ],
+          [
+            "1",
+            "[1, 2]"
+          ],
+          [
+            "2",
+            "[2, 3]"
+          ]
+        ]
+      }
+    },
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Does Athena read the same list<> SD table fine (i.e. is this UC-specific)?",
+    "recorded_at": "2026-09-18T15:23:28Z",
+    "status": "\u2705",
+    "table": "t_rest_list_primitive"
+  },
+  "08_uc_side_overrides": {
+    "attempts": {
+      "create_external_iceberg_at_metadata": {
+        "elapsed_ms": 1302,
+        "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support REPLACE on external tables.",
+        "error_class": "MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "create_view_over_foreign": {
+        "elapsed_ms": 454,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "read_files_parquet": {
+        "elapsed_ms": 2983,
+        "ok": true,
+        "row_count": 1
+      },
+      "refresh_foreign_table": {
+        "elapsed_ms": 875,
+        "error": "[INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE] Failed to convert Hive table to Spark catalog table.\nDatabase: rpw_glue_iceberg_list_eval\nTable: t_rest_list_primitive SQLSTATE: XX000",
+        "error_class": "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      },
+      "select_bypass": {
+        "elapsed_ms": 283,
+        "error": "[TABLE_OR_VIEW_NOT_FOUND] The table or view `rpw_dev`.`glue_list_eval_scratch`.`t_rest_list_primitive_bypass` cannot be found. Verify the spelling and correctness of the schema and catalog.\nSearch path: [`system`.`session`, `system`.`builtin`, `system`.`ai`, `rpw_dev`.`default`].\nIf you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.\nTo tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS. SQLSTATE: 42P01; line 1 pos 21",
+        "error_class": "TABLE_OR_VIEW_NOT_FOUND",
+        "error_code": "BAD_REQUEST",
+        "ok": false
+      }
+    },
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "metadata_location_present": true,
+    "question": "Any UC-side schema override that sidesteps SD parsing?",
+    "recorded_at": "2026-09-18T15:24:43Z",
+    "status": "\u274c",
+    "storage_reachable_via_read_files": true,
+    "table": "t_rest_list_primitive"
+  }
+}

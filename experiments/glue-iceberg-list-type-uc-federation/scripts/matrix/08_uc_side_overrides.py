@@ -39,6 +39,7 @@ def main() -> None:
     bypass_cat = os.environ.get("UC_BYPASS_CATALOG")
     bypass_sch = os.environ.get("UC_BYPASS_SCHEMA")
     if bypass_cat and bypass_sch and metadata_location:
+        probe_sql(cfg, f"CREATE SCHEMA IF NOT EXISTS `{bypass_cat}`.`{bypass_sch}`", w)
         ext = f"`{bypass_cat}`.`{bypass_sch}`.`{name}_bypass`"
         attempts["create_external_iceberg_at_metadata"] = probe_sql(
             cfg,
