@@ -565,5 +565,194 @@
     "status": "\u274c",
     "storage_reachable_via_read_files": true,
     "table": "t_rest_list_primitive"
+  },
+  "09_shadow_register_table": {
+    "counts": {
+      "iceberg_metadata_truth": 37,
+      "shadow_after_reregister": 37,
+      "shadow_after_source_commit": 34,
+      "shadow_v1": 34
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Reader-side shadow Glue table (register_table over the same metadata.json) readable in UC? Survives source commits? Goes stale? Fresh after re-register?",
+    "recorded_at": "2026-09-18T16:28:36Z",
+    "shadow_fresh_after_reregister": true,
+    "shadow_goes_stale_after_source_commit": true,
+    "shadow_readable_in_uc": true,
+    "shadow_sd_survives_source_commit": true,
+    "shadow_sd_types_after_source_commit": {
+      "id": "bigint",
+      "list_ids": "array<bigint>"
+    },
+    "shadow_sd_types_on_register": {
+      "id": "bigint",
+      "list_ids": "array<bigint>"
+    },
+    "shadow_table": "t_rest_list_primitive_shadow",
+    "source_glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "source_table": "t_rest_list_primitive",
+    "status": "\u25d1",
+    "uc_read_shadow_after_reregister": {
+      "describe": {
+        "elapsed_ms": 2515,
+        "ok": true,
+        "row_count": 2,
+        "sample": [
+          [
+            "id",
+            "bigint",
+            null
+          ],
+          [
+            "list_ids",
+            "array<bigint>",
+            null
+          ]
+        ]
+      },
+      "readable": true,
+      "select_count": {
+        "elapsed_ms": 1050,
+        "ok": true,
+        "row_count": 1,
+        "sample": [
+          [
+            "37"
+          ]
+        ]
+      }
+    },
+    "uc_read_shadow_after_source_commit": {
+      "describe": {
+        "elapsed_ms": 1691,
+        "ok": true,
+        "row_count": 2,
+        "sample": [
+          [
+            "id",
+            "bigint",
+            null
+          ],
+          [
+            "list_ids",
+            "array<bigint>",
+            null
+          ]
+        ]
+      },
+      "readable": true,
+      "select_count": {
+        "elapsed_ms": 1049,
+        "ok": true,
+        "row_count": 1,
+        "sample": [
+          [
+            "34"
+          ]
+        ]
+      }
+    },
+    "uc_read_shadow_v1": {
+      "describe": {
+        "elapsed_ms": 3703,
+        "ok": true,
+        "row_count": 2,
+        "sample": [
+          [
+            "id",
+            "bigint",
+            null
+          ],
+          [
+            "list_ids",
+            "array<bigint>",
+            null
+          ]
+        ]
+      },
+      "readable": true,
+      "select_count": {
+        "elapsed_ms": 1279,
+        "ok": true,
+        "row_count": 1,
+        "sample": [
+          [
+            "34"
+          ]
+        ]
+      }
+    }
+  },
+  "10_iceberg_rest_federation": {
+    "blocked_by_workspace_preview": true,
+    "connection_attempts": {
+      "bearer_token_probe": {
+        "error": "Securable kind 'CONNECTION_ICEBERG_REST_BEARER_TOKEN' is not enabled. If this is a securable kind associated with a preview feature, please enable it in workspace settings.",
+        "gated_securable_kind": "CONNECTION_ICEBERG_REST_BEARER_TOKEN",
+        "ok": false,
+        "options_sent": {
+          "bearer_token": "<redacted>",
+          "uri": "https://glue.us-east-1.amazonaws.com/iceberg"
+        }
+      },
+      "service_credential_name": {
+        "error": "Securable kind 'CONNECTION_ICEBERG_REST_OAUTH_M2M' is not enabled. If this is a securable kind associated with a preview feature, please enable it in workspace settings.",
+        "gated_securable_kind": "CONNECTION_ICEBERG_REST_OAUTH_M2M",
+        "ok": false,
+        "options_sent": {
+          "credential_name": "rpw_glue_iceberg_list_eval_svc",
+          "uri": "https://glue.us-east-1.amazonaws.com/iceberg"
+        }
+      },
+      "sigv4_iam_role": {
+        "error": "Securable kind 'CONNECTION_ICEBERG_REST_OAUTH_M2M' is not enabled. If this is a securable kind associated with a preview feature, please enable it in workspace settings.",
+        "gated_securable_kind": "CONNECTION_ICEBERG_REST_OAUTH_M2M",
+        "ok": false,
+        "options_sent": {
+          "auth_type": "sigv4",
+          "aws_iam_role_arn": "arn:aws:iam::<aws-account-id>:role/<role>",
+          "aws_region": "us-east-1",
+          "signing_name": "glue",
+          "uri": "https://glue.us-east-1.amazonaws.com/iceberg"
+        }
+      }
+    },
+    "connection_created_via": null,
+    "endpoint": "https://glue.us-east-1.amazonaws.com/iceberg",
+    "foreign_catalog": null,
+    "gated_securable_kinds": [
+      "CONNECTION_ICEBERG_REST_BEARER_TOKEN",
+      "CONNECTION_ICEBERG_REST_OAUTH_M2M"
+    ],
+    "glue": {
+      "metadata_location": true,
+      "sd_location": "s3://<bucket>/warehouse/rpw_glue_iceberg_list_eval/t_rest_list_primitive",
+      "sd_types": {
+        "id": "bigint",
+        "list_ids": "list<bigint>"
+      },
+      "table_type": "iceberg"
+    },
+    "identity": {
+      "aws": "arn:aws:sts::<aws-account-id>:assumed-role/AWSReservedSSO_databricks-sandbox-admin_cb35520eb3ee11c2/<email>",
+      "databricks": "<email>"
+    },
+    "question": "Can UC federate to the Glue Iceberg REST endpoint (ICEBERG_REST connection), bypassing the Glue SD so list<> tables read?",
+    "readable": false,
+    "recorded_at": "2026-09-18T16:29:25Z",
+    "status": "\u26d4",
+    "table": "t_rest_list_primitive",
+    "uc_read": null
   }
 }

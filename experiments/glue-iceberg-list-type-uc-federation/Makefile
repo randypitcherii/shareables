@@ -2,7 +2,7 @@
 .PHONY: help install lint test test-infrastructure auth-check \
 	tf-init tf-plan tf-apply tf-destroy \
 	setup-uc teardown-uc verify \
-	run-01 run-02 run-03 run-04 run-05 run-06 run-07 run-08 run-core run-all
+	run-01 run-02 run-03 run-04 run-05 run-06 run-07 run-08 run-09 run-10 run-core run-all run-reader-side
 
 # Config comes from $(APP_ENV).env (copy template.env -> dev.env). Real env vars win.
 APP_ENV ?= dev
@@ -88,4 +88,11 @@ run-08: ## any UC-side override that sidesteps SD parsing
 
 run-core: verify run-01 run-02 run-03 ## the three rows that answer the burning question
 
-run-all: verify run-01 run-02 run-03 run-04 run-05 run-06 run-07 run-08 ## verify, then every matrix row
+run-09: ## reader-side mirror: shadow Glue table via register_table (stale? survives commits?)
+	$(M)/09_shadow_register_table.py
+run-10: ## federate to the Glue Iceberg REST endpoint instead (ICEBERG_REST connection)
+	$(M)/10_iceberg_rest_federation.py
+
+run-reader-side: verify run-09 run-10 ## the two rows that answer "the writer is fixed — now what?"
+
+run-all: verify run-01 run-02 run-03 run-04 run-05 run-06 run-07 run-08 run-09 run-10 ## verify, then every matrix row

@@ -24,9 +24,17 @@ a verbatim error class is a first-class result.**
 > federation fails on an Iceberg table iff the Glue `StorageDescriptor` type
 > string contains the token `list<` *anywhere* (top-level or nested inside a
 > `struct`). `map<>` and nested `struct<>` are fine. The AWS Glue Iceberg REST
-> endpoint writes `list<>`; the native `GlueCatalog` writers write `array<>`.
-> Athena reads the same table without complaint. Patching the SD by hand works
-> for exactly zero writer commits. There is no UC-side lever.
+> endpoint writes `list<>`; native `GlueCatalog` writers write `array<>`.
+> Athena reads the same table without complaint.
+>
+> **For the case that matters — the writer is someone else's and cannot
+> change — there is no in-place fix.** Every UC-side lever fails, and patching
+> the SD survives zero writer commits. The one reader-side option that works
+> today is a **shadow Glue table** registered over the same `metadata.json`
+> (row 9): UC reads it, the source writer never touches it, but it goes stale
+> on every source commit until re-registered. Federating to the Glue Iceberg
+> REST endpoint directly (row 10) would sidestep the SD entirely, but the
+> `ICEBERG_REST` connection type is gated behind a workspace preview.
 
 ---
 
@@ -67,8 +75,12 @@ the two catalog implementations above. Date of run: **2026-09-18**, DBSQL `2026.
 | 6 | `glue:UpdateTable` patch `list<>`→`array<>`: UC reads? Survives the next REST-endpoint commit? | Suggested workaround; reported to revert in ~60 s | ◑ | Patch → UC reads immediately ✅. **One** subsequent REST-endpoint append → SD is `list<bigint>` again and UC fails again ❌. `workaround_works_once=true`, `workaround_survives_commit=false` |
 | 7 | Athena reads the same `list<>` SD table? | Athena reads Iceberg from `metadata.json` | ✅ | `COUNT(*)`=19, sample rows return arrays, and Athena's `DESCRIBE` reports `array<bigint>` — it never looks at the SD. **UC-federation-specific** |
 | 8 | Any UC-side lever that sidesteps SD parsing (`REFRESH`, view, `CREATE TABLE USING iceberg LOCATION <metadata.json>`, `read_files`) | — | ❌ | `REFRESH` and `CREATE VIEW` hit the same error; `CREATE TABLE … USING iceberg LOCATION` is rejected (`MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED`); `read_files` on the parquet ✅ proves storage + credentials are fine — the block is purely metadata-side |
+| 9 | **Reader-side mirror:** `GlueCatalog.register_table(<same metadata.json>)` as a shadow Glue table → UC reads it? SD survives source commits? Goes stale? Fresh after re-register? | — | ◑ | Shadow SD is `array<bigint>`; UC reads it ✅ (34 rows). Source writer commits +3 → shadow SD **unchanged** ✅ but UC still reads **34** (stale; metadata truth 37) → re-register → UC reads **37** ✅. Works, needs a re-register trigger per source commit |
+| 10 | **Federate to the Glue Iceberg REST endpoint** (`CREATE CONNECTION … TYPE ICEBERG_REST`) instead of Glue-as-HMS — bypasses the SD entirely | Workspace already has a working `ICEBERG_REST` connection (S3 Tables) | ⛔ | Three option shapes tried (SigV4/IAM role, bearer, credential name); all rejected with `Securable kind 'CONNECTION_ICEBERG_REST_{OAUTH_M2M,BEARER_TOKEN}' is not enabled` — a preview gate this caller cannot flip from the API. Re-run `make run-10` after enabling it in Settings → Previews |
 
-Status vocabulary: ✅ works as claimed · ❌ does not (with evidence) · ◑ partially · ❓ not yet isolated.
+Status vocabulary: ✅ works as claimed · ❌ does not (with evidence) · ◑ partially · ⛔ blocked by an environment gate (re-runnable) · ❓ not yet isolated.
+
+`make run-core` = rows 1–3 (root cause). `make run-reader-side` = rows 9–10 (the customer question).
 
 ## Key findings
 
@@ -100,17 +112,49 @@ Status vocabulary: ✅ works as claimed · ❌ does not (with evidence) · ◑ p
    Glue REST endpoint's SD mapping — or the workload has to switch to a writer
    that produces Hive-canonical SD strings.
 
+6. **A shadow Glue table is a working read-only mirror — with a freshness
+   tax.** `GlueCatalog.register_table` over the source's current
+   `metadata.json` produces a second Glue entry with Hive-canonical `array<>`
+   in its SD. UC reads it. The source writer keeps committing to *its* entry
+   and never touches the shadow (row 9: SD unchanged after a source commit).
+   But the shadow's `metadata_location` is frozen at registration, so it
+   serves the old snapshot until re-registered — 34 rows while the truth was
+   37. Re-registering brings it current.
+7. **Iceberg REST federation exists but is preview-gated here.** The
+   `ICEBERG_REST` connection type is real (this workspace has one pointed at
+   S3 Tables), and it would resolve schema from Iceberg metadata rather than
+   the Glue SD. Creating one fails with `Securable kind … is not enabled`
+   regardless of auth shape. Row 10 is written to fail closed and re-run once
+   the preview is on.
+
 ### For the customer conversation
 
-- **Short term:** if the writer can be pointed at Glue via a native
-  `GlueCatalog` implementation (Iceberg Java/pyiceberg/Spark `GlueCatalog`,
-  Flink Glue catalog) instead of the REST endpoint, UC reads the tables today.
-  Row 3 demonstrates this with no other change.
-- **If the REST endpoint is non-negotiable:** the tables are unreadable via
-  Glue federation until a platform fix ships. Athena and any Iceberg-native
-  reader are unaffected.
-- **Detection:** row 2's `sd_type_of_list_column` field flips the moment either
-  AWS or Databricks changes behaviour — re-run `make run-02` to check.
+The customer's situation: **a Glue Iceberg table with its own writer that
+commits through the Glue Iceberg REST endpoint, and Databricks needs to read
+it through Unity Catalog.** The writer cannot change.
+
+- **Reading the source table in place is not possible today.** Every UC SQL
+  surface fails at resolution (row 5); no UC-side override exists (row 8); a
+  Glue-side SD patch is undone by the next writer commit (row 6). This is a
+  Databricks federation-layer bug — Athena reads the same table fine (row 7)
+  — and the fix belongs there: normalise `list`→`array` in the HMS→Spark
+  converter, or derive the foreign Iceberg schema from `metadata.json`. Rows
+  2 and 5 are a minimal repro to attach to that escalation.
+- **Workable today: a shadow Glue table (row 9).** Register a second Glue
+  entry over the source's `metadata.json` via `GlueCatalog.register_table`;
+  federate that. Cost: it goes stale on every source commit, so it needs a
+  re-register trigger — EventBridge on Glue `UpdateTable` for the source
+  table, or a poll on `metadata_location`. For a streaming writer that is a
+  continuous loop; for micro-batch it is one small Lambda. Read-only, and the
+  shadow must be dropped *before* the source (they share files).
+- **Possibly workable soon: Iceberg REST federation (row 10).** If the
+  `ICEBERG_REST` preview can be enabled on the customer's workspace, federate
+  to `https://glue.<region>.amazonaws.com/iceberg` with SigV4 and the SD never
+  matters. Unverified until the preview is on — `make run-10` is the test.
+- **Not relevant to them:** the writer-path rows (2 vs 3). Those isolate the
+  root cause; they are not a recommendation to change the writer.
+- **Detection:** row 2's `sd_type_of_list_column` flips the moment AWS or
+  Databricks changes behaviour.
 
 ### Setup gotchas worth keeping (all encoded in `terraform/` now)
 
@@ -171,6 +215,7 @@ make setup-uc                                 # creates the UC credentials, then
 make tf-apply setup-uc                        # second pass: trust policy now accepts UC's external ids
 make verify                                   # every auth surface answers
 make run-core                                 # rows 1–3: the burning question
+make run-reader-side                          # rows 9–10: the writer is fixed — now what?
 make run-all                                  # the full grid
 make teardown-uc tf-destroy                   # leave nothing behind
 ```

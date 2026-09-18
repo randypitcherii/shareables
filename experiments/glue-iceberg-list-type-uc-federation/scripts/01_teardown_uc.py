@@ -62,6 +62,14 @@ def _drop_glue_tables(cfg) -> None:
 
     section("glue tables")
     cat = iceberg_catalog(cfg, "glue")
+    # Row 09's shadow entry first: it shares files with its source table, so it
+    # must go before the source is dropped (drop_table on the source purges).
+    shadow = (cfg.glue_database, f"{table_name(cfg, 'rest', 'list_primitive')}_shadow")
+    try:
+        cat.drop_table(shadow)
+        ok(f"dropped {shadow[1]}")
+    except NoSuchTableError:
+        note(f"absent {shadow[1]}")
     for writer in WRITERS:
         for shape in SHAPES:
             ident = (cfg.glue_database, table_name(cfg, writer, shape))
