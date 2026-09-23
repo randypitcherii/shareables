@@ -34,6 +34,39 @@ Practical consequence for a customer: hitting this error is expected, and
 the fix is not in the product UI — the account team must ask Databricks to
 enroll the workspace in the Iceberg REST catalog federation preview.
 
+## How enrollment actually works, and why this row may stay ⛔ for a while
+
+_Added 2026-09-18 after internal research._
+
+**The Foreign Iceberg private-preview FAQ says this in so many words:** under
+"What can't I do with the Foreign Iceberg Preview" — *"You cannot yet
+federate to Iceberg REST Catalogs (ex: Polaris). As a workaround, you can
+read these Iceberg tables using the metadata file location."* That
+workaround is exactly what row 9 (shadow `register_table`) and row 8's
+`CREATE TABLE … USING iceberg LOCATION '<metadata.json>'` probe measure.
+
+**The product direction is branded connectors, not a generic IRC
+connection.** The Lakehouse Federation IRC PRD scopes the next connectors to
+GCP BigLake, Workday Data Cloud, and Palantir Foundry, with a **separate,
+future "Glue IRC" branded connector** ("Existing HMS connector remains; new
+Glue IRC connector is separate"). The *generic* `ICEBERG_REST` connection —
+the thing row 10 tries to create — is listed as **"only as private
+release"**, and SigV4 auth (what the Glue endpoint natively speaks) is
+marked **"not prioritized"**. So even a workspace that gets the generic
+type enabled may not be able to authenticate to `glue.<region>.amazonaws.com/iceberg`
+without an OAuth front.
+
+**Enrollment path, if pursued anyway:** the customer fills in the *Managed
+Iceberg and Iceberg REST Catalog* onboarding survey; the preview team
+enables approved applications weekly; questions go to the internal
+`#iceberg-private-previews` channel. Given the FAQ wording above, expect the
+answer to be "not yet" for IRC federation specifically.
+
+**Net for the customer conversation:** row 10 is not a near-term unblock.
+The realistic paths remain (a) a Databricks-side fix to federation's
+schema derivation, or (b) the reader-side shadow-table pattern from row 9
+with a refresh trigger.
+
 ## What is still unknown once enrolled
 
 - **Which auth shape the Glue endpoint will accept through UC.** All three

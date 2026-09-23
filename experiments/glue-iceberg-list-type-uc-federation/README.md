@@ -76,7 +76,7 @@ the two catalog implementations above. Date of run: **2026-09-18**, DBSQL `2026.
 | 7 | Athena reads the same `list<>` SD table? | Athena reads Iceberg from `metadata.json` | ✅ | `COUNT(*)`=19, sample rows return arrays, and Athena's `DESCRIBE` reports `array<bigint>` — it never looks at the SD. **UC-federation-specific** |
 | 8 | Any UC-side lever that sidesteps SD parsing (`REFRESH`, view, `CREATE TABLE USING iceberg LOCATION <metadata.json>`, `read_files`) | — | ❌ | `REFRESH` and `CREATE VIEW` hit the same error; `CREATE TABLE … USING iceberg LOCATION` is rejected (`MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED`); `read_files` on the parquet ✅ proves storage + credentials are fine — the block is purely metadata-side |
 | 9 | **Reader-side mirror:** `GlueCatalog.register_table(<same metadata.json>)` as a shadow Glue table → UC reads it? SD survives source commits? Goes stale? Fresh after re-register? | — | ◑ | Shadow SD is `array<bigint>`; UC reads it ✅ (34 rows). Source writer commits +3 → shadow SD **unchanged** ✅ but UC still reads **34** (stale; metadata truth 37) → re-register → UC reads **37** ✅. Works, needs a re-register trigger per source commit |
-| 10 | **Federate to the Glue Iceberg REST endpoint** (`CREATE CONNECTION … TYPE ICEBERG_REST`) instead of Glue-as-HMS — bypasses the SD entirely | Workspace already has a working `ICEBERG_REST` connection (S3 Tables) | ⛔ | Three option shapes tried (SigV4/IAM role, bearer, credential name); all rejected with `Securable kind 'CONNECTION_ICEBERG_REST_{OAUTH_M2M,BEARER_TOKEN}' is not enabled`. This is **not** a self-serve Settings → Previews toggle: the generic Iceberg REST connection is a gated private preview that Databricks enrolls per workspace. Re-run `make run-10` once the workspace is enrolled |
+| 10 | **Federate to the Glue Iceberg REST endpoint** (`CREATE CONNECTION … TYPE ICEBERG_REST`) instead of Glue-as-HMS — bypasses the SD entirely | Workspace already has a working `ICEBERG_REST` connection (S3 Tables) | ⛔ | Three option shapes tried (SigV4/IAM role, bearer, credential name); all rejected with `Securable kind 'CONNECTION_ICEBERG_REST_{OAUTH_M2M,BEARER_TOKEN}' is not enabled`. Not a self-serve Settings → Previews toggle — a Databricks-enrolled private preview whose own FAQ says IRC federation is *not yet* supported; roadmap favors a separate branded Glue IRC connector. Not a near-term unblock. Re-run `make run-10` if the gate lifts |
 
 Status vocabulary: ✅ works as claimed · ❌ does not (with evidence) · ◑ partially · ⛔ blocked by an environment gate (re-runnable) · ❓ not yet isolated.
 
@@ -127,8 +127,14 @@ Status vocabulary: ✅ works as claimed · ❌ does not (with evidence) · ◑ p
    regardless of auth shape. The gate is a per-workspace private-preview
    enrollment applied by Databricks — it does not appear under Settings →
    Previews, so a customer cannot self-enable; the account team must request
-   enrollment. Row 10 is written to fail closed and re-run once the
-   workspace is enrolled.
+   enrollment. Internal product docs go further: the *generic* IRC connection
+   is "only as private release", SigV4 auth (what the Glue endpoint speaks) is
+   "not prioritized", and the planned path is a separate branded **Glue IRC**
+   connector on a later roadmap. The current Foreign Iceberg preview FAQ
+   states outright that federating to Iceberg REST catalogs is not yet
+   supported and points at the metadata-file-location workaround (rows 8–9).
+   Row 10 stays fail-closed and re-runs when the gate lifts, but it is not a
+   near-term unblock.
 
 ### For the customer conversation
 
@@ -150,14 +156,14 @@ it through Unity Catalog.** The writer cannot change.
   table, or a poll on `metadata_location`. For a streaming writer that is a
   continuous loop; for micro-batch it is one small Lambda. Read-only, and the
   shadow must be dropped *before* the source (they share files).
-- **Possibly workable soon: Iceberg REST federation (row 10).** If the
-  customer's workspace gets enrolled in the gated Iceberg REST federation
-  preview (Databricks-side, per-workspace — the account team requests it),
-  federate to `https://glue.<region>.amazonaws.com/iceberg` and the SD never
-  matters. Unverified until the preview is on, and note our three auth
-  shapes (SigV4, bearer, credential-name) were all blocked at the same gate,
-  so which auth the Glue endpoint will accept through UC is still
-  unverified. `make run-10` is the test.
+- **Not near-term: Iceberg REST federation (row 10).** Federating straight to
+  `https://glue.<region>.amazonaws.com/iceberg` would make the SD irrelevant,
+  and the connection type exists — but it is a Databricks-enrolled private
+  preview, the preview FAQ says IRC federation is *not yet* supported, and
+  the roadmap favors a separate branded Glue IRC connector over the generic
+  type. Do not position this as the fix. `make run-10` is ready if that
+  changes; see
+  [`docs/research/2026-09-22-iceberg-rest-connection-gating.md`](docs/research/2026-09-22-iceberg-rest-connection-gating.md).
 - **Not relevant to them:** the writer-path rows (2 vs 3). Those isolate the
   root cause; they are not a recommendation to change the writer.
 - **Detection:** row 2's `sd_type_of_list_column` flips the moment AWS or
