@@ -145,6 +145,32 @@ watches two failure classes:
 
 ---
 
+# Migration patterns: Python, UDFs, dynamic SQL, validation, inference
+
+`models/patterns/` holds small, runnable answers to the questions teams ask
+when they move Python-heavy pipelines into dbt. Every example builds on
+**synthetic data**, so it runs on a fresh clone:
+
+| Pattern | Example |
+| --- | --- |
+| Python model (`mapInPandas`, serverless) | `audience_interest_embeddings.py` |
+| Decompose a Python pipeline without a rewrite | [docs/patterns/python-decomposition.md](docs/patterns/python-decomposition.md) |
+| Python UDF managed by dbt | `functions/patterns/normalize_region_code.py` |
+| Dynamic SQL, compile time vs run time | `macros/patterns/one_hot.sql` |
+| Seed-based validation (IANA timezones, ISO region codes) | `seeds/patterns/`, `audience_members_validated.sql` |
+| Inference with MLflow as the source of truth (Spark UDF and `ai_query`) | `audience_segment_scores_*`, `scripts/train_segment_classifier.py` |
+
+```bash
+make patterns           # = uv run dbt build -s tag:patterns
+```
+
+The folder is tagged `patterns` and never `daily`, so the production schedule
+skips it. The inference models stay disabled until you train and register a
+model. See **[models/patterns/README.md](models/patterns/README.md)** for each
+pattern, when to use it, and the train-then-score walkthrough.
+
+---
+
 # Environments & schema routing — the "no `dbt init`" pattern
 
 This project is configured so a brand-new contributor can clone it and run `dbt build` with

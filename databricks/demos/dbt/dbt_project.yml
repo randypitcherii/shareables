@@ -25,6 +25,23 @@ vars:
   # recent data regardless. Keep small for quick demo builds, raise for real backfills.
   usage_history_days: "{{ env_var('DBT_USAGE_HISTORY_DAYS', 90) }}"
 
+  # ---- models/patterns: migration pattern examples (synthetic data only) ----
+  # size of the synthetic audience every pattern example builds from
+  pattern_member_count: "{{ env_var('DBT_PATTERN_MEMBER_COUNT', 5000) }}"
+  # compile-time value list for the one_hot() dynamic-SQL example
+  pattern_device_types: [ctv, mobile, desktop, tablet]
+  # seed-validation circuit breaker: fail the build above this invalid share
+  pattern_max_invalid_share: 0.25
+  # Inference examples depend on infrastructure OUTSIDE dbt, so each one stays
+  # DISABLED until you point it at that infrastructure -- a clean clone still
+  # builds green. See models/patterns/README.md.
+  #   UC-registered MLflow model, e.g. my_catalog.my_schema.audience_segment_classifier
+  segment_model_name: "{{ env_var('DBT_SEGMENT_MODEL_NAME', '') }}"
+  #   Model Serving endpoint serving that same model (ai_query path)
+  segment_serving_endpoint: "{{ env_var('DBT_SEGMENT_SERVING_ENDPOINT', '') }}"
+  #   embedding endpoint for the ai_query embeddings example, e.g. databricks-gte-large-en
+  embedding_endpoint: "{{ env_var('DBT_EMBEDDING_ENDPOINT', '') }}"
+
 flags:
   use_managed_iceberg: true
 
@@ -71,6 +88,28 @@ models:
         'format-version': 3
       +schema: managed_iceberg_examples
 
+    # Migration pattern examples on synthetic data: Python models, Python UDFs,
+    # dynamic-SQL macros, seed-based validation, and MLflow inference. Tagged
+    # `patterns` and deliberately NOT `daily`, so the production schedule never
+    # runs them. Build them with `make patterns`.
+    patterns:
+      +tags: [patterns]
+      +schema: patterns
+      +materialized: table
+      # Python models run as serverless job runs; no cluster to manage
+      +submission_method: serverless_cluster
+      # Gated inference examples. Project vars are not in scope while
+      # dbt_project.yml itself renders, so each config passes the env var as
+      # the var() fallback, the same way +grants does.
+      audience_segment_scores_udf:
+        +enabled: "{{ var('segment_model_name', env_var('DBT_SEGMENT_MODEL_NAME', '')) != '' }}"
+        +meta:
+          segment_model_name: "{{ var('segment_model_name', env_var('DBT_SEGMENT_MODEL_NAME', '')) }}"
+      audience_segment_scores_serving:
+        +enabled: "{{ var('segment_serving_endpoint', env_var('DBT_SEGMENT_SERVING_ENDPOINT', '')) != '' }}"
+      audience_interest_embeddings_ai_query:
+        +enabled: "{{ var('embedding_endpoint', env_var('DBT_EMBEDDING_ENDPOINT', '')) != '' }}"
+
     # Unity Catalog metric views over the system catalog, ported from
     # HobbsAnalytics/databricks-metric-views-system-tables. Each model body IS the
     # metric-view YAML (dimensions + measures); dbt ships it via
@@ -92,10 +131,23 @@ seeds:
     # The schema contract for every system.* column the metric views depend on.
     # tests/assert_system_source_*_match_contract.sql compare it against
     # system.information_schema to catch structure drift in the system catalog.
-    +tags: [metric_views, daily]
+    # (tags are additive down the tree, so they sit on this seed alone rather
+    # than on the whole project -- the patterns seeds must not inherit `daily`)
     system_table_schema_contract:
+      +tags: [metric_views, daily]
       +column_types:
         table_schema: string
         table_name: string
         column_name: string
         data_type: string
+
+    # reference data for the seed-validation pattern (models/patterns/)
+    patterns:
+      +tags: [patterns]
+      +schema: patterns
+
+functions:
+  rpw_dbt_databricks_reference:
+    patterns:
+      +tags: [patterns]
+      +schema: patterns

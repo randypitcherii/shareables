@@ -1,0 +1,15 @@
+functions:
+  - name: normalize_region_code
+    description: >-
+      Normalizes a free-text region code toward ISO 3166-1 alpha-2: uppercases,
+      strips punctuation and whitespace, and maps common aliases (UK -> GB,
+      USA -> US). It does NOT validate: an unknown code passes through, so
+      validation against the ref_iso_region_codes seed happens in SQL.
+    config:
+      volatility: deterministic
+    arguments:
+      - name: raw
+        data_type: string
+        description: The region code as it arrived from the source.
+    returns:
+      data_type: string

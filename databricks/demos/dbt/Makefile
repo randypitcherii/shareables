@@ -22,7 +22,7 @@
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: venv deps build run test pytest deploy deploy-dev deploy-prod deploy-prod-local
+.PHONY: venv deps build run test pytest patterns patterns-seeds train-segment-model deploy deploy-dev deploy-prod deploy-prod-local
 
 # ---- uv venv management ----------------------------------------------------
 
@@ -48,6 +48,27 @@ test: deps
 # python tests for the deployment config itself (catalog defaults, etc.)
 pytest: venv
 	uv run --with pytest pytest tests -q
+
+# ---- migration pattern examples (models/patterns/README.md) ---------------
+
+# build + test every pattern example (synthetic data, never on the daily schedule)
+patterns: deps
+	uv run dbt build -s tag:patterns
+
+# regenerate the reference seeds (IANA timezones, ISO 3166-1 region codes)
+patterns-seeds:
+	uv run scripts/generate_pattern_seeds.py
+
+# train + register the segment classifier (MLflow owns the model lifecycle).
+#   make train-segment-model FEATURES_TABLE=cat.sch.audience_features \
+#     MODEL_NAME=cat.sch.audience_segment_classifier WAREHOUSE_ID=<id> \
+#     [SERVING_ENDPOINT=audience-segment-classifier]
+train-segment-model:
+	@test -n "$(FEATURES_TABLE)" -a -n "$(MODEL_NAME)" -a -n "$(WAREHOUSE_ID)" || \
+		{ echo "set FEATURES_TABLE, MODEL_NAME and WAREHOUSE_ID"; exit 1; }
+	uv run scripts/train_segment_classifier.py --features-table $(FEATURES_TABLE) \
+		--model-name $(MODEL_NAME) --warehouse-id $(WAREHOUSE_ID) \
+		$(if $(SERVING_ENDPOINT),--serving-endpoint $(SERVING_ENDPOINT))
 
 # ---- DABs deploys -----------------------------------------------------------
 

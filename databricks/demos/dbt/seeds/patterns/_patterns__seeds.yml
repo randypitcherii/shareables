@@ -1,0 +1,32 @@
+version: 2
+
+seeds:
+  - name: ref_iana_timezones
+    description: >-
+      Reference list of valid IANA timezone names (Area/Location, plus UTC),
+      generated from the IANA tz database. It includes the tz database's legacy
+      link names (e.g. US/Pacific), because they are still valid identifiers.
+      Regenerate with `make patterns-seeds`.
+    config:
+      column_types:
+        timezone: string
+        area: string
+    columns:
+      - name: timezone
+        data_tests:
+          - unique
+          - not_null
+
+  - name: ref_iso_region_codes
+    description: >-
+      ISO 3166-1 alpha-2 country codes and names. Regenerate with
+      `make patterns-seeds`.
+    config:
+      column_types:
+        region_code: string
+        region_name: string
+    columns:
+      - name: region_code
+        data_tests:
+          - unique
+          - not_null

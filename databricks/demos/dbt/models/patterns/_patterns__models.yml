@@ -1,0 +1,156 @@
+version: 2
+
+models:
+  - name: synth_audience_members
+    description: >-
+      Synthetic raw audience members, deterministic per member_id. Region codes
+      and timezones are deliberately dirty, as real source data is. The
+      `in_segment` label comes from a known logistic function, so the classifier
+      has real signal to learn. Stands in for a real source table in every
+      pattern example.
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: audience_members_validated
+    description: >-
+      Seed-validation pattern: every raw member, with its region code
+      normalized by the `normalize_region_code` Python UDF, and region code and
+      timezone checked against the ref_iso_region_codes and ref_iana_timezones
+      seeds. No row is dropped. Invalid values get a NULL `_clean` column and
+      is_valid = false.
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+      - name: region_code_clean
+        description: ISO 3166-1 alpha-2 code, or NULL when the raw value is not valid.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('ref_iso_region_codes')
+                field: region_code
+      - name: timezone_clean
+        description: IANA timezone name, or NULL when the raw value is not valid.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('ref_iana_timezones')
+                field: timezone
+      - name: is_valid
+        description: >-
+          True when both the region code and the timezone are valid. The
+          expression_is_true test WARNS with the number of invalid rows, so bad
+          source data is visible on every build without failing it. The
+          singular test assert_patterns_invalid_share_below_threshold fails the
+          build when the share of invalid rows gets too high.
+        data_tests:
+          - dbt_utils.expression_is_true:
+              name: warn_on_invalid_audience_members
+              arguments:
+                expression: "= true"
+              config:
+                severity: warn
+
+  - name: audience_features
+    description: >-
+      Classifier features for valid members only. The device one-hot columns
+      come from the one_hot() macro, with a COMPILE-TIME value list
+      (the pattern_device_types var), so the model's input signature is fixed.
+      MLflow trains on this table (scripts/train_segment_classifier.py).
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+      # the hard gate: invalid reference values must never reach features
+      - name: region_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('ref_iso_region_codes')
+                field: region_code
+      - name: timezone
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('ref_iana_timezones')
+                field: timezone
+
+  - name: audience_region_mix
+    description: >-
+      Run-time dynamic SQL: members per timezone, with one column per region
+      code found in the data (dbt_utils.get_column_values + one_hot(agg='sum')).
+      The column set follows the data.
+    columns:
+      - name: timezone
+        data_tests:
+          - unique
+          - not_null
+
+  - name: audience_interest_embeddings
+    description: >-
+      Python model: a stage lifted unchanged from a legacy Python pipeline, run
+      through mapInPandas on serverless compute. It builds a 64-dimension hashed
+      trigram embedding of each member's interests.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: embeddings_have_64_dimensions
+          arguments:
+            expression: "size(embedding) = 64"
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: audience_interest_embeddings_ai_query
+    description: >-
+      The same embeddings from a Model Serving endpoint through ai_query().
+      Disabled unless the embedding_endpoint var is set.
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: audience_segment_scores_udf
+    description: >-
+      Inference, low-resource path. The registered MLflow model
+      (`segment_model_name`@champion) runs as a Spark UDF inside a serverless
+      Python model. Disabled unless segment_model_name is set.
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+      - name: segment_probability
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: audience_segment_scores_serving
+    description: >-
+      Inference, high-resource path. The same registered model behind a Model
+      Serving endpoint, called from SQL with ai_query(). Disabled unless
+      segment_serving_endpoint is set.
+    columns:
+      - name: member_id
+        data_tests:
+          - unique
+          - not_null
+      - name: segment_probability
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
