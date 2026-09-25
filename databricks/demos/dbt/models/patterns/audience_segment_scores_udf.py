@@ -26,6 +26,10 @@ FEATURES = [
 
 
 def model(dbt, session):
+    # environment_key / environment_dependencies raise dbt-core's
+    # CustomKeyInConfigDeprecation, but dbt-databricks 1.12 reads them ONLY from
+    # the top-level config (not config.meta). Moving them would silently drop
+    # the pins, so the warning is expected here.
     dbt.config(
         materialized="table",
         environment_key="segment_scoring",
