@@ -4,10 +4,8 @@ models:
   - name: synth_audience_members
     description: >-
       Synthetic raw audience members, deterministic per member_id. Region codes
-      and timezones are deliberately dirty, as real source data is. The
-      `in_segment` label comes from a known logistic function, so the classifier
-      has real signal to learn. Stands in for a real source table in every
-      pattern example.
+      and timezones are deliberately dirty, as real source data is. Stands in
+      for a real source table in every pattern example.
     columns:
       - name: member_id
         data_tests:
@@ -57,10 +55,9 @@ models:
 
   - name: audience_features
     description: >-
-      Classifier features for valid members only. The device one-hot columns
+      Device features for valid members only. The device one-hot columns
       come from the one_hot() macro, with a COMPILE-TIME value list
       (the pattern_device_types var), so the model's input signature is fixed.
-      MLflow trains on this table (scripts/train_segment_classifier.py).
     columns:
       - name: member_id
         data_tests:
@@ -108,49 +105,3 @@ models:
         data_tests:
           - unique
           - not_null
-
-  - name: audience_interest_embeddings_ai_query
-    description: >-
-      The same embeddings from a Model Serving endpoint through ai_query().
-      Disabled unless the embedding_endpoint var is set.
-    columns:
-      - name: member_id
-        data_tests:
-          - unique
-          - not_null
-
-  - name: audience_segment_scores_udf
-    description: >-
-      Inference, low-resource path. The registered MLflow model
-      (`segment_model_name`@champion) runs as a Spark UDF inside a serverless
-      Python model. Disabled unless segment_model_name is set.
-    columns:
-      - name: member_id
-        data_tests:
-          - unique
-          - not_null
-      - name: segment_probability
-        data_tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              arguments:
-                min_value: 0
-                max_value: 1
-
-  - name: audience_segment_scores_serving
-    description: >-
-      Inference, high-resource path. The same registered model behind a Model
-      Serving endpoint, called from SQL with ai_query(). Disabled unless
-      segment_serving_endpoint is set.
-    columns:
-      - name: member_id
-        data_tests:
-          - unique
-          - not_null
-      - name: segment_probability
-        data_tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              arguments:
-                min_value: 0
-                max_value: 1

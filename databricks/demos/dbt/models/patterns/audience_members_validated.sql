@@ -50,6 +50,5 @@ select
     sessions_30d,
     avg_watch_minutes,
     days_since_signup,
-    interests_text,
-    in_segment
+    interests_text
 from validated

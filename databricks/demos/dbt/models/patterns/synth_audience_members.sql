@@ -11,9 +11,6 @@
       abbreviation ('EST5')
   audience_members_validated.sql cleans and validates them against seeds.
 
-  `in_segment` is the label for the logistic regression example. It comes from
-  a known logistic function of the features plus noise, so the trained model
-  has a real signal to recover.
 -#}
 {%- set regions = [
     'US', 'US', 'US', 'US', 'US', 'US', 'us ', 'USA',
@@ -51,8 +48,7 @@ features as (
             {{ synthetic_choice('member_id', 'interest_1', interests) }},
             {{ synthetic_choice('member_id', 'interest_2', interests) }},
             {{ synthetic_choice('member_id', 'interest_3', interests) }}
-        ) as interests_text,
-        {{ synthetic_uniform('member_id', 'label_noise') }} as label_draw
+        ) as interests_text
     from members
 )
 
@@ -64,14 +60,5 @@ select
     sessions_30d,
     avg_watch_minutes,
     days_since_signup,
-    interests_text,
-    -- the "true" model the logistic regression should recover:
-    --   logit = -3 + 0.06*sessions + 0.012*watch + 0.9*[ctv] - 0.0008*tenure
-    label_draw < 1 / (1 + exp(-(
-        -3.0
-        + 0.06 * sessions_30d
-        + 0.012 * avg_watch_minutes
-        + 0.9 * cast(device_type = 'ctv' as int)
-        - 0.0008 * days_since_signup
-    ))) as in_segment
+    interests_text
 from features

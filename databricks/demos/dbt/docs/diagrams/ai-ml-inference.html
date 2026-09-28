@@ -1,0 +1,241 @@
+<!-- ai_ml_inference: the dbt DAG plus where each inference path runs. Render:
+     $HOME/.agents/skills/diagram/render.sh databricks/demos/dbt/docs/diagrams/ai-ml-inference.html databricks/demos/dbt/docs/diagrams/ai-ml-inference.png
+-->
+<!DOCTYPE html>
+<!-- Diagram template — copy this whole file, then replace the <body>.
+     Self-contained on purpose: system fonts, inline CSS, inline SVG, zero
+     network requests. Never link an external stylesheet, font, or image — the
+     PNG must render identically offline. Render with ./render.sh <file>.html -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>ai_ml_inference: batch inference from a UC model in dbt</title>
+<style>
+/* ══ House theme: Brief. Copy verbatim; change only --canvas-w / --canvas-h. ══
+   A diagram is a one-slide briefing: brand bar, title + one-sentence subtitle,
+   kicker-labelled sections, cards that carry a headline and plain-weight copy. */
+:root{
+  --ink:#000000;            /* every heading, stroke, and bullet */
+  --paper:#FFFFFF;          /* canvas + default card fill */
+  --brand:#0B5CFF;          /* the other party / the boundary crossed — one per diagram */
+  --brand-tint:#E9F0FF;     /* fill for .brand cards */
+  --gate:#FFD24D;           /* the moment a human must act — the anchor colour */
+  --gate-tint:#FFF4D2;      /* fill for .gate cards */
+  --muted:#F2F2F2;          /* de-emphasised / stop states */
+  --font:-apple-system,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --canvas-w:1440px;        /* PNG width in CSS px — keep <= 1600 */
+  --canvas-h:600px;         /* slide proportion (16:7.5). A *minimum*, never a clip; 0 = hug content */
+  --gutter:34px;            /* width of a chevron / connector column */
+}
+*{margin:0;padding:0;box-sizing:border-box}
+/* body carries the width so render.sh can measure the page off it. min-height,
+   never height: a slide keeps its shape when content is short, grows when it is not. */
+body{width:var(--canvas-w);min-height:var(--canvas-h);background:var(--paper);color:var(--ink);
+     font-family:var(--font);font-weight:700;-webkit-font-smoothing:antialiased;
+     display:flex;flex-direction:column}
+
+/* ── Frame: brand bar, then title + subtitle on one baseline ─────────────── */
+.brand-bar{height:5px;background:var(--brand);flex:0 0 auto}
+.hd{flex:0 0 auto;padding:19px 34px 13px;display:flex;align-items:baseline;gap:18px;
+    border-bottom:1px solid var(--ink)}
+.hd h1{font-size:24px;letter-spacing:-.015em;white-space:nowrap}
+.hd p{font-size:13.5px;font-weight:400}
+
+/* ── Canvas: sections stack top-to-bottom; each section is a kicker + a row ── */
+.canvas{flex:1 1 auto;min-height:0;padding:16px 34px 18px;display:flex;flex-direction:column;gap:16px}
+.section{display:flex;flex-direction:column;gap:11px}
+.section.grow{flex:1 1 auto;min-height:0}
+.kicker{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+        padding-top:7px;border-top:4px solid var(--ink)}
+.kicker.gate{border-top-color:var(--gate)}
+.kicker.brand{border-top-color:var(--brand)}
+.kicker.dashed{border-top-style:dashed}
+
+/* Rows: restate grid-template-columns per diagram. Content columns alternate
+   with --gutter columns that hold a chevron or an SVG connector. */
+.row{display:grid;gap:0 0;align-items:stretch}
+.row > .card{min-width:0}
+.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
+.cols4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.cols6{display:grid;grid-template-columns:repeat(6,1fr);gap:11px}
+
+/* ── Cards: a headline, 2–3 plain-weight bullets, optional state footer ───── */
+.card{border:1px solid var(--ink);border-radius:4px;background:var(--paper);
+      padding:14px 13px 12px;display:flex;flex-direction:column}
+.card.gate{background:var(--gate-tint);border-left:7px solid var(--gate)}
+.card.brand{background:var(--brand-tint);border:1.5px solid var(--brand)}
+.card.muted{background:var(--muted)}
+.card.aside{border-style:dashed}
+.card h4{font-size:15px;line-height:1.2;margin-bottom:10px}
+.card ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.card li{font-size:12px;font-weight:400;line-height:1.32;padding-left:12px;position:relative}
+.card li::before{content:"";position:absolute;left:0;top:5.5px;width:5px;height:5px;
+                 background:var(--ink);border-radius:50%}
+.card p{font-size:12px;font-weight:400;line-height:1.35}
+code{font-family:var(--mono);font-size:.92em;font-weight:400}
+.num{width:25px;height:25px;border-radius:50%;background:var(--ink);color:var(--paper);
+     font-size:13.5px;display:flex;align-items:center;justify-content:center;
+     margin-bottom:9px;flex:0 0 auto}
+.card.gate .num{background:var(--gate);color:var(--ink)}
+.card.brand .num{background:var(--brand)}
+.state{margin-top:auto;padding-top:8px;border-top:1px solid var(--ink);font-size:10.5px;
+       letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;border:1px solid var(--ink);background:var(--paper);flex:0 0 auto}
+.dot.gate{background:var(--gate)}
+.dot.brand{background:var(--brand);border-color:var(--brand)}
+.phrase{font-family:var(--mono);font-size:12px;background:var(--paper);border:1.5px solid var(--ink);
+        border-radius:3px;padding:6px 9px;white-space:nowrap;align-self:flex-start}
+.big{font-size:42px;line-height:.94;letter-spacing:-.03em}        /* a by-the-numbers tile */
+.big + em{font-style:normal;font-size:12.5px;line-height:1.2;margin-top:5px;display:block}
+
+/* ── Groups: a bordered container of nodes, for the journey framing ────────── */
+.group{border:1.5px solid var(--ink);padding:13px 15px 14px;display:flex;flex-direction:column;min-width:0}
+.group.brand{border-color:var(--brand)}
+.group h3{font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px;
+          display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.group h3 .num{margin:0;width:22px;height:22px;font-size:12px;background:var(--brand)}
+.verb{font-size:10.5px;text-transform:none;letter-spacing:0;border:1px solid var(--ink);
+      border-radius:99px;padding:2px 9px;margin-left:auto}
+.subhead{font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin:2px 0 8px;
+         display:flex;align-items:center;gap:8px}
+.subhead::after{content:"";flex:1;height:1px;background:var(--ink)}
+.vstack{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;gap:9px;min-height:0}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.node{border:1px solid var(--ink);border-radius:4px;background:var(--paper);padding:9px 13px 10px;text-align:center}
+.node b{display:block;font-size:14px;line-height:1.2}
+.node span{display:block;font-size:11.5px;font-weight:400;line-height:1.35;margin-top:4px}
+.node.brand{background:var(--brand-tint);border:1.5px solid var(--brand)}
+.node.gate{background:var(--gate-tint);border-left:7px solid var(--gate);text-align:left}
+.node.muted{background:var(--muted)}
+.node.aside{border-style:dashed;text-align:left}
+
+/* ── Connectors ─────────────────────────────────────────────────────────────
+   Chevron: the default between cards in a row. */
+.chev{display:flex;align-items:center;justify-content:center}
+.chev svg{width:24px;height:24px}
+/* SVG gutter: for fan-out or a labelled edge. viewBox 0 0 100 100 with
+   preserveAspectRatio="none" makes x/y percentages of the cell. */
+.conn{position:relative}
+.conn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.conn svg > path,.conn svg > line{fill:none;stroke:var(--ink);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.conn svg > .brand{stroke:var(--brand);stroke-width:2.5}
+.conn svg > .dashed{stroke-dasharray:5 4}
+.elabel{position:absolute;transform:translate(-50%,-50%);background:var(--paper);
+        padding:0 4px;font-size:11.5px;white-space:nowrap}
+</style>
+<style>
+.lane{display:grid;grid-template-columns:1.15fr var(--gutter) 1.15fr var(--gutter) 1fr;grid-template-rows:auto auto;column-gap:0;row-gap:12px;align-items:stretch}
+.dag{display:grid;grid-template-columns:1fr var(--gutter) 1.25fr var(--gutter) 1fr;grid-template-rows:auto auto;row-gap:12px;align-items:stretch}
+.dag .node,.lane .node{display:flex;flex-direction:column;justify-content:center}
+.tag{display:inline-block;align-self:flex-start;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;border:1px solid var(--ink);border-radius:3px;padding:1px 5px;margin-bottom:5px}
+.tag.brand{border-color:var(--brand);color:var(--brand)}
+.node.left{text-align:left}
+</style>
+</head>
+<body>
+<div class="brand-bar"></div>
+<div class="hd">
+  <h1>dbt applies one Unity Catalog model two ways, at batch time</h1>
+  <p>Top: the dbt DAG. Bottom: where each path runs. Same model version; a test proves both agree.</p>
+</div>
+<div class="canvas">
+
+  <div class="section">
+    <div class="kicker">The dbt DAG &middot; make ai-ml-inference</div>
+    <div class="dag">
+      <div class="node left" style="grid-column:1;grid-row:1 / span 2">
+        <span class="tag">model &middot; SQL</span>
+        <b>ai_ml_inference_input</b>
+        <span>The rows to score: 1,000 synthetic text descriptions. Any table works.</span>
+      </div>
+      <div class="chev" style="grid-column:2;grid-row:1"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="node left" style="grid-column:3;grid-row:1">
+        <span class="tag">path A &middot; Python model</span>
+        <b>ai_ml_inference_embeddings_python</b>
+        <span>Loads the UC model inside <code>mapInPandas</code>. Always on.</span>
+      </div>
+      <div class="chev" style="grid-column:2;grid-row:2"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="node left aside" style="grid-column:3;grid-row:2">
+        <span class="tag">path B &middot; SQL model &middot; opt-in</span>
+        <b>ai_ml_inference_embeddings_serving</b>
+        <span><code>ai_query()</code> against the serving endpoint. On when <code>DBT_AI_ML_INFERENCE_SERVING_ENDPOINT</code> is set.</span>
+      </div>
+      <div class="chev" style="grid-column:4;grid-row:1"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="chev" style="grid-column:4;grid-row:2"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="node left aside" style="grid-column:5;grid-row:1 / span 2">
+        <span class="tag">test &middot; opt-in</span>
+        <b>assert_ai_ml_inference_paths_agree</b>
+        <span>Every row, both paths: cosine similarity &ge; 0.999. Fails on a missing row, wrong model version, or wrong column.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="kicker">Where each path runs &middot; the model never moves, only who loads it</div>
+    <div class="lane">
+      <div class="node left" style="grid-column:1;grid-row:1">
+        <span class="tag">path A &middot; per build</span>
+        <b>Serverless job run</b>
+        <span>dbt submits the Python model. Pinned env: <code>mlflow</code>, <code>transformers</code>, <code>torch</code>. Exists only while the build runs.</span>
+      </div>
+      <div class="chev" style="grid-column:2;grid-row:1"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="node left" style="grid-column:3;grid-row:1">
+        <span class="tag">path A</span>
+        <b>Spark tasks load the model</b>
+        <span><code>mlflow.pyfunc.load_model(&quot;models:/&hellip;/2&quot;)</code> once per task, then score every batch it holds.</span>
+      </div>
+      <div class="node left" style="grid-column:1;grid-row:2">
+        <span class="tag">path B &middot; per build</span>
+        <b>SQL warehouse</b>
+        <span>Runs the <code>ai_query()</code> model like any SQL and sends the rows to the endpoint in batches.</span>
+      </div>
+      <div class="chev" style="grid-column:2;grid-row:2"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#000" stroke-width="2.5"/></svg></div>
+      <div class="node left gate" style="grid-column:3;grid-row:2">
+        <span class="tag">path B &middot; you create it once</span>
+        <b>Model Serving endpoint</b>
+        <span>Serves v2 from <code>serving_endpoint.json</code> and scales to zero between builds. Create it with:</span><span class="phrase">make ai-ml-inference-endpoint</span>
+      </div>
+      <div class="chev" style="grid-column:4;grid-row:1"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#0B5CFF" stroke-width="2.5"/></svg></div>
+      <div class="chev" style="grid-column:4;grid-row:2"><svg viewBox="0 0 24 24"><path d="M6,4 L17,12 L6,20" fill="none" stroke="#0B5CFF" stroke-width="2.5"/></svg></div>
+      <div class="node left brand" style="grid-column:5;grid-row:1 / span 2">
+        <span class="tag brand">Unity Catalog &middot; model registry</span>
+        <b>system.ai.bge_small_en_v1_5 &middot; v2</b>
+        <span>A logged MLflow model, 24M-parameter text embeddings, in every workspace. Swap in any UC model by changing two vars. dbt never trains or registers it.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section grow">
+    <div class="kicker">How to choose</div>
+    <div class="cols3" style="flex:1 1 auto">
+      <div class="card">
+        <h4>Path A: load the model in a Python model</h4>
+        <ul>
+          <li>No infrastructure outside dbt; compute bills only during the build</li>
+          <li>A build took about 6 minutes here, mostly installing the pinned env</li>
+          <li>Best for scheduled batch scoring that only dbt needs</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Path B: ai_query() against an endpoint</h4>
+        <ul>
+          <li>The scoring model is pure SQL, so it runs on the warehouse</li>
+          <li>The same endpoint also serves apps and other pipelines</li>
+          <li>After an idle period, the first call waits for a cold start</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Either way</h4>
+        <ul>
+          <li>dbt knows only a model URI or an endpoint name</li>
+          <li>For your own models, point both at an alias such as <code>@champion</code></li>
+          <li>Demo folder: tagged <code>ai_ml_inference</code>, off in production</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

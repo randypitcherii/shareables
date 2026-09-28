@@ -1,4 +1,4 @@
-"""Contracts for the migration pattern examples (models/patterns/).
+"""Contracts for the demo folders (models/patterns/, models/ai_ml_inference/).
 
 These run without a warehouse: `dbt ls` only parses the project, and the UDF
 body is plain Python.
@@ -16,10 +16,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 GATED = {
-    "audience_segment_scores_udf": "DBT_SEGMENT_MODEL_NAME",
-    "audience_segment_scores_serving": "DBT_SEGMENT_SERVING_ENDPOINT",
-    "audience_interest_embeddings_ai_query": "DBT_EMBEDDING_ENDPOINT",
+    "ai_ml_inference_embeddings_serving": "DBT_AI_ML_INFERENCE_SERVING_ENDPOINT",
+    "assert_ai_ml_inference_paths_agree": "DBT_AI_ML_INFERENCE_SERVING_ENDPOINT",
 }
+DEMO_TAGS = ("patterns", "ai_ml_inference")
 
 
 def dbt_ls(*selectors: str, **env_overrides: str) -> list[dict]:
@@ -71,26 +71,64 @@ def test_patterns_select_the_whole_folder(patterns: list[dict]) -> None:
     } <= names
 
 
-def test_production_schedule_never_runs_patterns() -> None:
+@pytest.fixture(scope="module")
+def ai_ml_inference() -> list[dict]:
+    return dbt_ls("-s", "tag:ai_ml_inference")
+
+
+def test_ai_ml_inference_selects_its_folder(ai_ml_inference: list[dict]) -> None:
+    names = {r["name"] for r in ai_ml_inference}
+    assert {"ai_ml_inference_input", "ai_ml_inference_embeddings_python"} <= names
+    # the demo is self-contained: no pattern model rides along
+    assert not [r for r in ai_ml_inference if "patterns" in r.get("tags", [])]
+
+
+def test_production_schedule_never_runs_demos() -> None:
     # tags are additive, so a project-level `daily` would leak into every folder
     daily = dbt_ls("-s", "tag:daily")
     assert daily, "the daily selector should still select the production models"
-    leaked = [r["unique_id"] for r in daily if "patterns" in r.get("tags", [])]
+    leaked = [r["unique_id"] for r in daily if set(DEMO_TAGS) & set(r.get("tags", []))]
     assert leaked == []
 
 
-def test_gated_models_are_disabled_by_default(patterns: list[dict]) -> None:
-    names = {r["name"] for r in patterns}
+def test_demos_are_disabled_in_production() -> None:
+    # CD builds every MODIFIED node in production, whatever its tags
+    everything = dbt_ls(DBT_DEPLOYMENT_ENVIRONMENT="production")
+    assert everything, "production should still parse the real models"
+    leaked = [r["unique_id"] for r in everything if set(DEMO_TAGS) & set(r.get("tags", []))]
+    assert leaked == []
+
+
+def test_gated_nodes_are_disabled_by_default(ai_ml_inference: list[dict]) -> None:
+    names = {r["name"] for r in ai_ml_inference}
     assert names.isdisjoint(GATED)
 
 
-@pytest.mark.parametrize(("model", "env_var"), GATED.items())
-def test_gated_model_enables_when_configured(model: str, env_var: str) -> None:
-    names = {
-        r["name"]
-        for r in dbt_ls("-s", model, **{env_var: "some_catalog.some_schema.thing"})
-    }
-    assert model in names
+@pytest.mark.parametrize(("node", "env_var"), GATED.items())
+def test_gated_node_enables_when_configured(node: str, env_var: str) -> None:
+    names = {r["name"] for r in dbt_ls("-s", node, **{env_var: "some-endpoint"})}
+    assert node in names
+
+
+def test_python_model_and_endpoint_apply_the_same_model_version() -> None:
+    project = (ROOT / "dbt_project.yml").read_text()
+    spec = json.loads((ROOT / "models" / "ai_ml_inference" / "serving_endpoint.json").read_text())
+    (entity,) = spec["config"]["served_entities"]
+    assert f"'DBT_AI_ML_INFERENCE_MODEL_NAME', '{entity['entity_name']}'" in project
+    assert f"'DBT_AI_ML_INFERENCE_MODEL_VERSION', '{entity['entity_version']}'" in project
+    assert entity["scale_to_zero_enabled"] is True
+
+
+def test_nothing_trains_or_registers_a_model() -> None:
+    # the demo APPLIES a logged model; model lifecycle lives outside this repo
+    forbidden = re.compile(r"\.fit\(|log_model|register_model|registered_model_alias")
+    offenders = [
+        str(path.relative_to(ROOT))
+        for folder in ("models", "scripts", "macros")
+        for path in (ROOT / folder).rglob("*")
+        if path.suffix in {".py", ".sql"} and forbidden.search(path.read_text())
+    ]
+    assert offenders == []
 
 
 def load_normalize_region_code():

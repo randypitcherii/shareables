@@ -1,0 +1,17 @@
+{
+  "comment": "Model Serving endpoint for the ai_ml_inference serving path. `make ai-ml-inference-endpoint` sets the name (ai-ml-inference-<user>) and applies this config. Keep entity_name/entity_version in sync with the ai_ml_inference_model_* vars in dbt_project.yml.",
+  "config": {
+    "served_entities": [
+      {
+        "entity_name": "system.ai.bge_small_en_v1_5",
+        "entity_version": "2",
+        "workload_size": "Small",
+        "scale_to_zero_enabled": true
+      }
+    ]
+  },
+  "tags": [
+    { "key": "repo", "value": "randypitcherii/shareables" },
+    { "key": "demo", "value": "ai_ml_inference" }
+  ]
+}

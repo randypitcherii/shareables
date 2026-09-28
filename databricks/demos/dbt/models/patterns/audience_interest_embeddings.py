@@ -12,9 +12,8 @@ Two patterns in one file:
 2. **mapInPandas for per-batch Python.** Spark hands the function an iterator of
    pandas DataFrames (one per Arrow batch), so any pandas / numpy / scikit-learn
    code runs as-is, in parallel, with no Python row loop over the table. This is
-   the self-hosted path for embeddings. The managed alternative is
-   audience_interest_embeddings_ai_query.sql (a Model Serving endpoint via
-   ai_query): less code to own, but it bills per token.
+   the pattern for porting existing batch Python. For scoring with a real
+   model logged in Unity Catalog, see models/ai_ml_inference/.
 
 The "embedding" is a hashed character-trigram vector, a deterministic stand-in
 for a real encoder that needs no model download. Swap `embed_texts` for a

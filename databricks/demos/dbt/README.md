@@ -145,7 +145,7 @@ watches two failure classes:
 
 ---
 
-# Migration patterns: Python, UDFs, dynamic SQL, validation, inference
+# Migration patterns: Python, UDFs, dynamic SQL, validation
 
 `models/patterns/` holds small, runnable answers to the questions teams ask
 when they move Python-heavy pipelines into dbt. Every example builds on
@@ -158,16 +158,34 @@ when they move Python-heavy pipelines into dbt. Every example builds on
 | Python UDF managed by dbt | `functions/patterns/normalize_region_code.py` |
 | Dynamic SQL, compile time vs run time | `macros/patterns/one_hot.sql` |
 | Seed-based validation (IANA timezones, ISO region codes) | `seeds/patterns/`, `audience_members_validated.sql` |
-| Inference with MLflow as the source of truth (Spark UDF and `ai_query`) | `audience_segment_scores_*`, `scripts/train_segment_classifier.py` |
 
 ```bash
 make patterns           # = uv run dbt build -s tag:patterns
 ```
 
-The folder is tagged `patterns` and never `daily`, so the production schedule
-skips it. The inference models stay disabled until you train and register a
-model. See **[models/patterns/README.md](models/patterns/README.md)** for each
-pattern, when to use it, and the train-then-score walkthrough.
+The folder is tagged `patterns`, never `daily`, and is disabled in production.
+See **[models/patterns/README.md](models/patterns/README.md)** for each
+pattern and when to use it.
+
+---
+
+# AI/ML inference: apply a Unity Catalog model from dbt
+
+![dbt applies one Unity Catalog model two ways, at batch time](docs/diagrams/ai-ml-inference.png)
+
+`models/ai_ml_inference/` applies an MLflow model that is **already logged in
+Unity Catalog** to a table, in batch, two ways: a dbt Python model that loads
+the model (path A), and `ai_query()` against a serving endpoint (path B). A
+test proves both give the same answer. dbt never trains or registers a model.
+The demo uses `system.ai.bge_small_en_v1_5`, which every workspace has.
+
+```bash
+make ai-ml-inference            # = uv run dbt build -s tag:ai_ml_inference
+make ai-ml-inference-endpoint   # once, to enable path B
+```
+
+See **[models/ai_ml_inference/README.md](models/ai_ml_inference/README.md)**
+for how each path runs and how to choose.
 
 ---
 

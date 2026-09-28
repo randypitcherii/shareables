@@ -22,7 +22,7 @@
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: venv deps build run test pytest patterns patterns-seeds train-segment-model deploy deploy-dev deploy-prod deploy-prod-local
+.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint deploy deploy-dev deploy-prod deploy-prod-local
 
 # ---- uv venv management ----------------------------------------------------
 
@@ -59,16 +59,42 @@ patterns: deps
 patterns-seeds:
 	uv run scripts/generate_pattern_seeds.py
 
-# train + register the segment classifier (MLflow owns the model lifecycle).
-#   make train-segment-model FEATURES_TABLE=cat.sch.audience_features \
-#     MODEL_NAME=cat.sch.audience_segment_classifier WAREHOUSE_ID=<id> \
-#     [SERVING_ENDPOINT=audience-segment-classifier]
-train-segment-model:
-	@test -n "$(FEATURES_TABLE)" -a -n "$(MODEL_NAME)" -a -n "$(WAREHOUSE_ID)" || \
-		{ echo "set FEATURES_TABLE, MODEL_NAME and WAREHOUSE_ID"; exit 1; }
-	uv run scripts/train_segment_classifier.py --features-table $(FEATURES_TABLE) \
-		--model-name $(MODEL_NAME) --warehouse-id $(WAREHOUSE_ID) \
-		$(if $(SERVING_ENDPOINT),--serving-endpoint $(SERVING_ENDPOINT))
+# ---- batch inference from a UC-logged MLflow model (models/ai_ml_inference/) --
+
+# build + test both inference paths. The ai_query path runs only when
+# DBT_AI_ML_INFERENCE_SERVING_ENDPOINT is set (in .env or the environment).
+ai-ml-inference: deps
+	uv run dbt build -s tag:ai_ml_inference
+
+# create (or re-point) YOUR serving endpoint from serving_endpoint.json and wait
+# until it is READY. One endpoint per developer: ai-ml-inference-<user>.
+# Uses the databricks CLI's normal auth (DATABRICKS_CONFIG_PROFILE or DEFAULT).
+AI_ML_INFERENCE_ENDPOINT ?= ai-ml-inference-$(shell printf '%s' "$${DBT_DEV_USER:-$$USER}" | cut -d@ -f1 | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')
+AI_ML_INFERENCE_SPEC := models/ai_ml_inference/serving_endpoint.json
+ai-ml-inference-endpoint:
+	@want=$$(jq -c '[.config.served_entities[] | {entity_name, entity_version}]' $(AI_ML_INFERENCE_SPEC)); \
+	if current=$$(databricks serving-endpoints get $(AI_ML_INFERENCE_ENDPOINT) -o json 2>/dev/null); then \
+		have=$$(echo "$$current" | jq -c '[(.pending_config // .config).served_entities[] | {entity_name, entity_version}]'); \
+		if [ "$$have" = "$$want" ]; then \
+			echo "$(AI_ML_INFERENCE_ENDPOINT) already serves $$want"; \
+		else \
+			echo "re-pointing $(AI_ML_INFERENCE_ENDPOINT): $$have -> $$want"; \
+			jq '.config' $(AI_ML_INFERENCE_SPEC) | databricks serving-endpoints update-config $(AI_ML_INFERENCE_ENDPOINT) --no-wait --json @/dev/stdin >/dev/null; \
+		fi; \
+	else \
+		echo "creating $(AI_ML_INFERENCE_ENDPOINT) -> $$want"; \
+		jq --arg n $(AI_ML_INFERENCE_ENDPOINT) 'del(.comment) | .name = $$n' $(AI_ML_INFERENCE_SPEC) | databricks serving-endpoints create --no-wait --json @/dev/stdin >/dev/null; \
+	fi
+	@echo "waiting for READY (a first deploy takes several minutes) ..."
+	@while :; do \
+		state=$$(databricks serving-endpoints get $(AI_ML_INFERENCE_ENDPOINT) -o json | jq -r '.state.ready + "/" + .state.config_update'); \
+		case "$$state" in \
+			READY/NOT_UPDATING) break ;; \
+			*UPDATE_FAILED*) echo "deploy failed: see the endpoint's events in the Serving UI"; exit 1 ;; \
+		esac; \
+		echo "  $$state"; sleep 30; \
+	done
+	@echo "ready. add to .env:  DBT_AI_ML_INFERENCE_SERVING_ENDPOINT=$(AI_ML_INFERENCE_ENDPOINT)"
 
 # ---- DABs deploys -----------------------------------------------------------
 
