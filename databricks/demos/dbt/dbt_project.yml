@@ -3,6 +3,10 @@ version: '1.0.0'
 
 profile: 'rpw_dbt_databricks_reference'
 
+# copied into target/ by `dbt docs generate`, so doc blocks can show diagrams
+# with ![...](docs/diagrams/<file>.png)
+asset-paths: ["docs/diagrams"]
+
 # ---------------------------------------------------------------------------
 # Environment-driven configuration (the portable-onboarding pattern)
 #
@@ -24,6 +28,28 @@ vars:
   # full-refresh history window for system.billing.usage; incremental runs scan only
   # recent data regardless. Keep small for quick demo builds, raise for real backfills.
   usage_history_days: "{{ env_var('DBT_USAGE_HISTORY_DAYS', 90) }}"
+
+  # ---- models/patterns: migration pattern examples (synthetic data only) ----
+  # size of the synthetic audience every pattern example builds from
+  pattern_member_count: "{{ env_var('DBT_PATTERN_MEMBER_COUNT', 5000) }}"
+  # compile-time value list for the one_hot() dynamic-SQL example
+  pattern_device_types: [ctv, mobile, desktop, tablet]
+  # seed-validation circuit breaker: fail the build above this invalid share
+  pattern_max_invalid_share: 0.25
+
+  # ---- models/ai_ml_inference: batch inference from a UC-logged MLflow model ----
+  # The model to apply. Any MLflow model logged in Unity Catalog works. The
+  # default is a small embedding model that Databricks already provides in every
+  # workspace, so the demo needs no training and no registration. Version 2, not
+  # 3: v3's logged requirements pin transformers==4.44.0.dev0, which is not on
+  # PyPI, so Model Serving cannot build a container for it.
+  ai_ml_inference_model_name: "{{ env_var('DBT_AI_ML_INFERENCE_MODEL_NAME', 'system.ai.bge_small_en_v1_5') }}"
+  ai_ml_inference_model_version: "{{ env_var('DBT_AI_ML_INFERENCE_MODEL_VERSION', '2') }}"
+  ai_ml_inference_row_count: "{{ env_var('DBT_AI_ML_INFERENCE_ROW_COUNT', 1000) }}"
+  # The Model Serving endpoint for the ai_query() path. Empty = that path is
+  # DISABLED, so a clean clone builds green. `make ai-ml-inference-endpoint`
+  # creates it and prints the value to set.
+  ai_ml_inference_serving_endpoint: "{{ env_var('DBT_AI_ML_INFERENCE_SERVING_ENDPOINT', '') }}"
 
 flags:
   use_managed_iceberg: true
@@ -71,6 +97,37 @@ models:
         'format-version': 3
       +schema: managed_iceberg_examples
 
+    # Migration pattern examples on synthetic data: Python models, Python UDFs,
+    # dynamic-SQL macros, and seed-based validation. Tagged
+    # `patterns` and deliberately NOT `daily`, so the production schedule never
+    # runs them. Build them with `make patterns`.
+    patterns:
+      +tags: [patterns]
+      +schema: patterns
+      +materialized: table
+      # Demo examples are never deployed. The daily schedule selects tag:daily,
+      # but CD builds EVERY modified node in production, so the folder itself
+      # switches off there.
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"
+      # Python models run as serverless job runs; no cluster to manage
+      +submission_method: serverless_cluster
+
+    # Batch inference from a UC-logged MLflow model, two ways (Python model +
+    # ai_query against a serving endpoint). See models/ai_ml_inference/README.md.
+    # Same production guard as patterns. Project vars are not in scope while
+    # dbt_project.yml renders, so configs pass the env var as the var() fallback.
+    ai_ml_inference:
+      +tags: [ai_ml_inference]
+      +schema: ai_ml_inference
+      +materialized: table
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"
+      +submission_method: serverless_cluster
+      ai_ml_inference_embeddings_python:
+        +meta:
+          ai_ml_inference_model_uri: "models:/{{ var('ai_ml_inference_model_name', env_var('DBT_AI_ML_INFERENCE_MODEL_NAME', 'system.ai.bge_small_en_v1_5')) }}/{{ var('ai_ml_inference_model_version', env_var('DBT_AI_ML_INFERENCE_MODEL_VERSION', '2')) }}"
+      ai_ml_inference_embeddings_serving:
+        +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' and var('ai_ml_inference_serving_endpoint', env_var('DBT_AI_ML_INFERENCE_SERVING_ENDPOINT', '')) != '' }}"
+
     # Unity Catalog metric views over the system catalog, ported from
     # HobbsAnalytics/databricks-metric-views-system-tables. Each model body IS the
     # metric-view YAML (dimensions + measures); dbt ships it via
@@ -92,10 +149,25 @@ seeds:
     # The schema contract for every system.* column the metric views depend on.
     # tests/assert_system_source_*_match_contract.sql compare it against
     # system.information_schema to catch structure drift in the system catalog.
-    +tags: [metric_views, daily]
+    # (tags are additive down the tree, so they sit on this seed alone rather
+    # than on the whole project -- the patterns seeds must not inherit `daily`)
     system_table_schema_contract:
+      +tags: [metric_views, daily]
       +column_types:
         table_schema: string
         table_name: string
         column_name: string
         data_type: string
+
+    # reference data for the seed-validation pattern (models/patterns/)
+    patterns:
+      +tags: [patterns]
+      +schema: patterns
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"
+
+functions:
+  rpw_dbt_databricks_reference:
+    patterns:
+      +tags: [patterns]
+      +schema: patterns
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"

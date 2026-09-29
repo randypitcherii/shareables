@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: ai_ml_inference_input
+    description: |
+      The rows to score: synthetic, deterministic short text descriptions.
+      Stands in for any table that needs predictions.
+
+      {{ doc('ai_ml_inference_overview') }}
+    columns:
+      - name: input_id
+        data_tests:
+          - unique
+          - not_null
+      - name: input_text
+        data_tests:
+          - not_null
+
+  - name: ai_ml_inference_embeddings_python
+    description: >-
+      Inference path A. A dbt Python model loads the UC-logged MLflow model
+      (the ai_ml_inference_model_name / _version vars) inside mapInPandas and
+      scores every row in batch on serverless compute. No endpoint is needed.
+    columns:
+      - name: input_id
+        data_tests:
+          - unique
+          - not_null
+      - name: embedding
+        description: 384-dimension embedding from the UC model.
+        data_tests:
+          - not_null
+      - name: model_uri
+        description: The exact UC model version that produced the row.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: ai_ml_inference_python_embeddings_have_384_dimensions
+          arguments:
+            expression: "size(embedding) = 384"
+      # every input row gets scored: no silent drops in the mapInPandas unpacking
+      - dbt_utils.equal_rowcount:
+          name: ai_ml_inference_python_scores_every_input
+          arguments:
+            compare_model: ref('ai_ml_inference_input')
+
+  - name: ai_ml_inference_embeddings_serving
+    description: >-
+      Inference path B. The same UC model version is served by a Model Serving
+      endpoint, and ai_query() calls it from SQL on the warehouse. Disabled
+      until DBT_AI_ML_INFERENCE_SERVING_ENDPOINT is set.
+    columns:
+      - name: input_id
+        data_tests:
+          - unique
+          - not_null
+      - name: embedding
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: ai_ml_inference_serving_embeddings_have_384_dimensions
+          arguments:
+            expression: "size(embedding) = 384"
