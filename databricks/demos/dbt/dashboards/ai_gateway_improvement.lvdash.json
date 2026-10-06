@@ -1,0 +1,1861 @@
+{
+  "datasets": [
+    {
+      "name": "recs",
+      "displayName": "Recommendations",
+      "queryLines": [
+        "select title, detector, category, scope_type, scope_value, people_impacted_band, people_impacted, affected_sessions, round(est_monthly_savings_usd, 2) as est_monthly_savings_usd, impact_score, severity, action, evidence, array_join(example_session_ids, ', ') as example_session_ids, generated_at from ai_gateway__recommendations"
+      ]
+    },
+    {
+      "name": "rec_trend",
+      "displayName": "Recommendation trend",
+      "queryLines": [
+        "select date_trunc('day', snapshot_at) as day, category, max(total_savings) as est_monthly_savings_usd from ( select snapshot_at, category, sum(est_monthly_savings_usd) as total_savings from ai_gateway__recommendation_history group by snapshot_at, category ) group by all"
+      ]
+    },
+    {
+      "name": "sessions",
+      "displayName": "Sessions",
+      "queryLines": [
+        "select session_id, started_at, session_date, requester, team, client_family, client_version, workload_type_rule as workload_type, invocation_source, primary_model, primary_model_tier, n_requests, n_subagents, round(duration_seconds / 60, 1) as duration_minutes, input_tokens, output_tokens, cache_hit_ratio, max_input_tokens, error_rate, round(est_cost_usd, 4) as est_cost_usd, has_payload_logging, has_transcript, is_scored, token_efficiency, model_fit, context_pressure, round(thrash_probability, 2) as thrash_probability, goal_category, complexity, outcome, quality, user_frustration, primary_friction, prompt_clarity, first_user_request from ai_gateway__sessions"
+      ]
+    },
+    {
+      "name": "daily",
+      "displayName": "Daily usage",
+      "queryLines": [
+        "select event_date, endpoint_name, client_family, model_tier, count(*) as requests, sum(case when is_error then 1 else 0 end) as errors, sum(case when is_rate_limited then 1 else 0 end) as rate_limited, sum(est_cost_usd) as est_cost_usd, sum(cache_read_tokens) as cache_read_tokens, sum(input_tokens) as input_tokens from int_ai_gateway__usage_events where service_type != 'MCP_SERVICE' group by all"
+      ]
+    },
+    {
+      "name": "health",
+      "displayName": "Measurement health",
+      "queryLines": [
+        "select metric_group, metric, value, detail, computed_at from ai_gateway__measurement_health"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "start",
+      "displayName": "Start here",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "intro",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## What to fix first\nRanked by **impact score** = dollars at stake (log) + people affected (log) + severity. Savings are list-price estimates per month. \ud83d\udc64 1 person \u00b7 \ud83d\udc65 2-9 \u00b7 \ud83c\udfe2 10+. Check **Measurement health** before acting on a number."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_savings",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "v_c_savings",
+                      "expression": "SUM(`est_monthly_savings_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Est. monthly savings (USD)",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "v_c_savings",
+                  "rowNumber": 0
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_recs",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "v_c_recs",
+                      "expression": "COUNT(`title`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Open recommendations",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "v_c_recs",
+                  "rowNumber": 0
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_sessions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "v_c_sessions",
+                      "expression": "COUNT(`session_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Sessions (window)",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "v_c_sessions",
+                  "rowNumber": 0
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "t_top",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "people_impacted_band",
+                      "expression": "`people_impacted_band`"
+                    },
+                    {
+                      "name": "est_monthly_savings_usd",
+                      "expression": "`est_monthly_savings_usd`"
+                    },
+                    {
+                      "name": "impact_score",
+                      "expression": "`impact_score`"
+                    },
+                    {
+                      "name": "action",
+                      "expression": "`action`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Top recommendations",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "people_impacted_band"
+                  },
+                  {
+                    "fieldName": "est_monthly_savings_usd"
+                  },
+                  {
+                    "fieldName": "impact_score"
+                  },
+                  {
+                    "fieldName": "action"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "b_cat",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "savings",
+                      "expression": "SUM(`est_monthly_savings_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Est. monthly savings by category",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "savings",
+                  "displayName": "Est. monthly savings by category",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "category",
+                  "displayName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "l_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "rec_trend",
+                  "fields": [
+                    {
+                      "name": "day",
+                      "expression": "`day`"
+                    },
+                    {
+                      "name": "savings",
+                      "expression": "SUM(`est_monthly_savings_usd`)"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "frame": {
+                "title": "Est. monthly savings over time",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "day",
+                  "displayName": "day",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "savings",
+                  "displayName": "Est. monthly savings over time",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "category",
+                  "displayName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 14,
+            "width": 3,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "recs",
+      "displayName": "Recommendations",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "f_cat",
+            "queries": [
+              {
+                "name": "filter_f_cat",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Category",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "category",
+                    "queryName": "filter_f_cat"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_det",
+            "queries": [
+              {
+                "name": "filter_f_det",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "detector",
+                      "expression": "`detector`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Detector",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "detector",
+                    "queryName": "filter_f_det"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_band",
+            "queries": [
+              {
+                "name": "filter_f_band",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "people_impacted_band",
+                      "expression": "`people_impacted_band`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "People impacted",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "people_impacted_band",
+                    "queryName": "filter_f_band"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "t_recs",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "recs",
+                  "fields": [
+                    {
+                      "name": "title",
+                      "expression": "`title`"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "scope_type",
+                      "expression": "`scope_type`"
+                    },
+                    {
+                      "name": "scope_value",
+                      "expression": "`scope_value`"
+                    },
+                    {
+                      "name": "people_impacted_band",
+                      "expression": "`people_impacted_band`"
+                    },
+                    {
+                      "name": "people_impacted",
+                      "expression": "`people_impacted`"
+                    },
+                    {
+                      "name": "affected_sessions",
+                      "expression": "`affected_sessions`"
+                    },
+                    {
+                      "name": "est_monthly_savings_usd",
+                      "expression": "`est_monthly_savings_usd`"
+                    },
+                    {
+                      "name": "impact_score",
+                      "expression": "`impact_score`"
+                    },
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "action",
+                      "expression": "`action`"
+                    },
+                    {
+                      "name": "evidence",
+                      "expression": "`evidence`"
+                    },
+                    {
+                      "name": "example_session_ids",
+                      "expression": "`example_session_ids`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "All recommendations",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "title"
+                  },
+                  {
+                    "fieldName": "category"
+                  },
+                  {
+                    "fieldName": "scope_type"
+                  },
+                  {
+                    "fieldName": "scope_value"
+                  },
+                  {
+                    "fieldName": "people_impacted_band"
+                  },
+                  {
+                    "fieldName": "people_impacted"
+                  },
+                  {
+                    "fieldName": "affected_sessions"
+                  },
+                  {
+                    "fieldName": "est_monthly_savings_usd"
+                  },
+                  {
+                    "fieldName": "impact_score"
+                  },
+                  {
+                    "fieldName": "severity"
+                  },
+                  {
+                    "fieldName": "action"
+                  },
+                  {
+                    "fieldName": "evidence"
+                  },
+                  {
+                    "fieldName": "example_session_ids"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "displayName": "Sessions explorer",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "f_client",
+            "queries": [
+              {
+                "name": "filter_f_client",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Client",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "client_family",
+                    "queryName": "filter_f_client"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_workload",
+            "queries": [
+              {
+                "name": "filter_f_workload",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "workload_type",
+                      "expression": "`workload_type`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Workload",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "workload_type",
+                    "queryName": "filter_f_workload"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_model",
+            "queries": [
+              {
+                "name": "filter_f_model",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "primary_model",
+                      "expression": "`primary_model`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Model",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "primary_model",
+                    "queryName": "filter_f_model"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "t_sessions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "session_id",
+                      "expression": "`session_id`"
+                    },
+                    {
+                      "name": "started_at",
+                      "expression": "`started_at`"
+                    },
+                    {
+                      "name": "requester",
+                      "expression": "`requester`"
+                    },
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "primary_model",
+                      "expression": "`primary_model`"
+                    },
+                    {
+                      "name": "n_requests",
+                      "expression": "`n_requests`"
+                    },
+                    {
+                      "name": "duration_minutes",
+                      "expression": "`duration_minutes`"
+                    },
+                    {
+                      "name": "est_cost_usd",
+                      "expression": "`est_cost_usd`"
+                    },
+                    {
+                      "name": "cache_hit_ratio",
+                      "expression": "`cache_hit_ratio`"
+                    },
+                    {
+                      "name": "max_input_tokens",
+                      "expression": "`max_input_tokens`"
+                    },
+                    {
+                      "name": "error_rate",
+                      "expression": "`error_rate`"
+                    },
+                    {
+                      "name": "token_efficiency",
+                      "expression": "`token_efficiency`"
+                    },
+                    {
+                      "name": "model_fit",
+                      "expression": "`model_fit`"
+                    },
+                    {
+                      "name": "goal_category",
+                      "expression": "`goal_category`"
+                    },
+                    {
+                      "name": "outcome",
+                      "expression": "`outcome`"
+                    },
+                    {
+                      "name": "primary_friction",
+                      "expression": "`primary_friction`"
+                    },
+                    {
+                      "name": "user_frustration",
+                      "expression": "`user_frustration`"
+                    },
+                    {
+                      "name": "first_user_request",
+                      "expression": "`first_user_request`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Sessions (paste an example_session_id into the table search)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "session_id"
+                  },
+                  {
+                    "fieldName": "started_at"
+                  },
+                  {
+                    "fieldName": "requester"
+                  },
+                  {
+                    "fieldName": "client_family"
+                  },
+                  {
+                    "fieldName": "primary_model"
+                  },
+                  {
+                    "fieldName": "n_requests"
+                  },
+                  {
+                    "fieldName": "duration_minutes"
+                  },
+                  {
+                    "fieldName": "est_cost_usd"
+                  },
+                  {
+                    "fieldName": "cache_hit_ratio"
+                  },
+                  {
+                    "fieldName": "max_input_tokens"
+                  },
+                  {
+                    "fieldName": "error_rate"
+                  },
+                  {
+                    "fieldName": "token_efficiency"
+                  },
+                  {
+                    "fieldName": "model_fit"
+                  },
+                  {
+                    "fieldName": "goal_category"
+                  },
+                  {
+                    "fieldName": "outcome"
+                  },
+                  {
+                    "fieldName": "primary_friction"
+                  },
+                  {
+                    "fieldName": "user_frustration"
+                  },
+                  {
+                    "fieldName": "first_user_request"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 14
+          }
+        }
+      ]
+    },
+    {
+      "name": "efficiency",
+      "displayName": "Efficiency",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "b_fit",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "model_fit",
+                      "expression": "`model_fit`"
+                    },
+                    {
+                      "name": "sessions_n",
+                      "expression": "COUNT(`session_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Scored sessions by model fit",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "sessions_n",
+                  "displayName": "Scored sessions by model fit",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "model_fit",
+                  "displayName": "model fit",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_tier",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "primary_model_tier",
+                      "expression": "`primary_model_tier`"
+                    },
+                    {
+                      "name": "cost",
+                      "expression": "SUM(`est_cost_usd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Est. cost by model tier",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "cost",
+                  "displayName": "Est. cost by model tier",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "primary_model_tier",
+                  "displayName": "primary model tier",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_cache",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "cache",
+                      "expression": "MEDIAN(`cache_hit_ratio`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Median prompt-cache hit ratio by client",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "cache",
+                  "displayName": "Median prompt-cache hit ratio by client",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "client_family",
+                  "displayName": "client family",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "b_eff",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "eff",
+                      "expression": "AVG(`token_efficiency`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Avg token efficiency (0-4) by client",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "eff",
+                  "displayName": "Avg token efficiency (0-4) by client",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "client_family",
+                  "displayName": "client family",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 6,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "t_ctx",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "session_id",
+                      "expression": "`session_id`"
+                    },
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "primary_model",
+                      "expression": "`primary_model`"
+                    },
+                    {
+                      "name": "max_input_tokens",
+                      "expression": "`max_input_tokens`"
+                    },
+                    {
+                      "name": "n_requests",
+                      "expression": "`n_requests`"
+                    },
+                    {
+                      "name": "context_pressure",
+                      "expression": "`context_pressure`"
+                    },
+                    {
+                      "name": "est_cost_usd",
+                      "expression": "`est_cost_usd`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Largest-context sessions",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "session_id"
+                  },
+                  {
+                    "fieldName": "client_family"
+                  },
+                  {
+                    "fieldName": "primary_model"
+                  },
+                  {
+                    "fieldName": "max_input_tokens"
+                  },
+                  {
+                    "fieldName": "n_requests"
+                  },
+                  {
+                    "fieldName": "context_pressure"
+                  },
+                  {
+                    "fieldName": "est_cost_usd"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "quality",
+      "displayName": "Quality & friction",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "q_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Content scores exist only for sessions on model services that log payloads to an inference table. Coverage is on **Measurement health**."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "b_friction",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "primary_friction",
+                      "expression": "`primary_friction`"
+                    },
+                    {
+                      "name": "n",
+                      "expression": "COUNT(`session_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Sessions by primary friction",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "n",
+                  "displayName": "Sessions by primary friction",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "primary_friction",
+                  "displayName": "primary friction",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "b_outcome",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "outcome",
+                      "expression": "`outcome`"
+                    },
+                    {
+                      "name": "n",
+                      "expression": "COUNT(`session_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Sessions by outcome",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "n",
+                  "displayName": "Sessions by outcome",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "outcome",
+                  "displayName": "outcome",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 1,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "b_goal",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "goal_category",
+                      "expression": "`goal_category`"
+                    },
+                    {
+                      "name": "q",
+                      "expression": "AVG(`quality`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Avg quality (0-4) by task type",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "q",
+                  "displayName": "Avg quality (0-4) by task type",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "goal_category",
+                  "displayName": "goal category",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "b_frus",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "f",
+                      "expression": "AVG(`user_frustration`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Avg frustration (0-3) by client",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "f",
+                  "displayName": "Avg frustration (0-3) by client",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "client_family",
+                  "displayName": "client family",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 8,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "t_frus",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sessions",
+                  "fields": [
+                    {
+                      "name": "session_id",
+                      "expression": "`session_id`"
+                    },
+                    {
+                      "name": "requester",
+                      "expression": "`requester`"
+                    },
+                    {
+                      "name": "client_family",
+                      "expression": "`client_family`"
+                    },
+                    {
+                      "name": "goal_category",
+                      "expression": "`goal_category`"
+                    },
+                    {
+                      "name": "outcome",
+                      "expression": "`outcome`"
+                    },
+                    {
+                      "name": "primary_friction",
+                      "expression": "`primary_friction`"
+                    },
+                    {
+                      "name": "user_frustration",
+                      "expression": "`user_frustration`"
+                    },
+                    {
+                      "name": "first_user_request",
+                      "expression": "`first_user_request`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Most frustrating sessions",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "session_id"
+                  },
+                  {
+                    "fieldName": "requester"
+                  },
+                  {
+                    "fieldName": "client_family"
+                  },
+                  {
+                    "fieldName": "goal_category"
+                  },
+                  {
+                    "fieldName": "outcome"
+                  },
+                  {
+                    "fieldName": "primary_friction"
+                  },
+                  {
+                    "fieldName": "user_frustration"
+                  },
+                  {
+                    "fieldName": "first_user_request"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "reliability",
+      "displayName": "Reliability",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "l_err",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "daily",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    },
+                    {
+                      "name": "errors",
+                      "expression": "SUM(`errors`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "frame": {
+                "title": "Errors per day",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "event_date",
+                  "displayName": "event_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "errors",
+                  "displayName": "Errors per day",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "l_429",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "daily",
+                  "fields": [
+                    {
+                      "name": "event_date",
+                      "expression": "`event_date`"
+                    },
+                    {
+                      "name": "rl",
+                      "expression": "SUM(`rate_limited`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "frame": {
+                "title": "Rate-limited (429) per day",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "event_date",
+                  "displayName": "event_date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "rl",
+                  "displayName": "Rate-limited (429) per day",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_err_ep",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "daily",
+                  "fields": [
+                    {
+                      "name": "endpoint_name",
+                      "expression": "`endpoint_name`"
+                    },
+                    {
+                      "name": "e",
+                      "expression": "SUM(`errors`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Errors by model service",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "e",
+                  "displayName": "Errors by model service",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "endpoint_name",
+                  "displayName": "endpoint name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "health",
+      "displayName": "Measurement health",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "h_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Is the measurement trustworthy? **coverage** = how much is scored; **confidence** = answers below the gating threshold (shown as unclear); **stability** = agreement when a session is re-scored; **anchors** = does a judged score track its deterministic twin; **cost** = estimate vs billing."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_group",
+            "queries": [
+              {
+                "name": "filter_f_group",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "metric_group",
+                      "expression": "`metric_group`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Group",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "metric_group",
+                    "queryName": "filter_f_group"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "t_health",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "metric_group",
+                      "expression": "`metric_group`"
+                    },
+                    {
+                      "name": "metric",
+                      "expression": "`metric`"
+                    },
+                    {
+                      "name": "value",
+                      "expression": "`value`"
+                    },
+                    {
+                      "name": "detail",
+                      "expression": "`detail`"
+                    },
+                    {
+                      "name": "computed_at",
+                      "expression": "`computed_at`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Health metrics",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "metric_group"
+                  },
+                  {
+                    "fieldName": "metric"
+                  },
+                  {
+                    "fieldName": "value"
+                  },
+                  {
+                    "fieldName": "detail"
+                  },
+                  {
+                    "fieldName": "computed_at"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 14
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+version: 2
+
+seeds:
+  - name: ai_gateway_golden_sessions
+    description: >-
+      Hand-labelled synthetic sessions for the content rubric. Each row is a
+      distilled transcript (same shape the ai_gateway_distill_transcript UDF
+      emits) plus the labels a careful human would give. `make ai-gateway-eval`
+      scores them with the live rubric and fails below the accuracy floor.
+      Labels are deliberately unambiguous: this set catches a broken or
+      drifted rubric, not subtle judgement differences.
+    config:
+      delimiter: ","
+      column_types:
+        n_tool_errors: int
+        expected_frustration_min: double
+        expected_frustration_max: double
+    columns:
+      - name: golden_id
+        data_tests: [unique, not_null]

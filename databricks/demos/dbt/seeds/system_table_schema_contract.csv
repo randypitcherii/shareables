@@ -167,6 +167,8 @@ ai_gateway,usage,service_id,string
 ai_gateway,usage,service_name,string
 ai_gateway,usage,service_tags,"map<string,string>"
 ai_gateway,usage,mcp_metadata,"struct<tool_name:string,server_type:string,client_name:string,json_rpc_method:string>"
+ai_gateway,usage,session_metadata,"struct<client_session_id:string,client_subagent_id:string,coding_agent:string,agent_version:string,surface:string,reasoning_effort:string,smart_router_name:string>"
+ai_gateway,usage,auth_mode,string
 billing,list_prices,account_id,string
 billing,list_prices,price_start_time,timestamp
 billing,list_prices,price_end_time,timestamp

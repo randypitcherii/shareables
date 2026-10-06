@@ -22,7 +22,7 @@
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint deploy deploy-dev deploy-prod deploy-prod-local
+.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint ai-gateway ai-gateway-eval ai-gateway-dashboard deploy deploy-dev deploy-prod deploy-prod-local
 
 # ---- uv venv management ----------------------------------------------------
 
@@ -95,6 +95,23 @@ ai-ml-inference-endpoint:
 		echo "  $$state"; sleep 30; \
 	done
 	@echo "ready. add to .env:  DBT_AI_ML_INFERENCE_SERVING_ENDPOINT=$(AI_ML_INFERENCE_ENDPOINT)"
+
+# ---- AI Gateway improvement loop (models/ai_gateway_improvement/README.md) ---
+
+# build + test the loop into your dev schema (what dbt Hourly runs in prod).
+# Defaults are production-sized; for a quick first look try:
+#   DBT_AI_GATEWAY_HISTORY_DAYS=3 DBT_AI_GATEWAY_MAX_SESSIONS_PER_RUN=25 make ai-gateway
+ai-gateway: deps
+	uv run dbt build -s tag:ai_gateway_improvement
+
+# score the hand-labelled golden set with the live rubrics; fails below the
+# accuracy floors. Run it after every rubric edit.
+ai-gateway-eval: deps
+	uv run dbt build -s tag:ai_gateway_eval
+
+# regenerate the dashboard JSON from scripts/build_ai_gateway_dashboard.py
+ai-gateway-dashboard:
+	uv run --no-project python scripts/build_ai_gateway_dashboard.py
 
 # ---- DABs deploys -----------------------------------------------------------
 

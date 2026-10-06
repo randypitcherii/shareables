@@ -51,6 +51,30 @@ vars:
   # creates it and prints the value to set.
   ai_ml_inference_serving_endpoint: "{{ env_var('DBT_AI_ML_INFERENCE_SERVING_ENDPOINT', '') }}"
 
+  # ---- models/ai_gateway_improvement: the AI Gateway improvement loop ----
+  # See models/ai_gateway_improvement/README.md. Defaults are production-sized;
+  # CI shrinks the history and the scoring cap (see the models' configs).
+  # days of system.ai_gateway.usage the streaming mirror loads on first build
+  ai_gateway_history_days: "{{ env_var('DBT_AI_GATEWAY_HISTORY_DAYS', 30) }}"
+  # idle gap that closes a synthetic session (no client session id)
+  ai_gateway_session_gap_minutes: 30
+  # max sessions scored by ai_decide per run (top by cost + a random sample).
+  # Measured on an X-Small serverless warehouse: ~2-3 question-evaluations/s,
+  # so a session costs ~2 s (metadata rubric, 5 questions) to ~6 s (plus the
+  # content rubric, 11 more). 100/run fits an hourly job with room to spare
+  # (2,400 sessions/day, costliest first). Raise it after measuring yours.
+  ai_gateway_max_sessions_per_run: "{{ env_var('DBT_AI_GATEWAY_MAX_SESSIONS_PER_RUN', 100) }}"
+  # share of each run's cap reserved for a uniform random sample
+  ai_gateway_random_sample_share: 0.1
+  # share of each run's cap spent re-scoring already-scored sessions (stability probe)
+  ai_gateway_stability_probe_share: 0.02
+  # answers below this confidence aggregate as `unclear`
+  ai_gateway_min_confidence: 0.6
+  # bounded transcript size passed to ai_decide
+  ai_gateway_max_state_chars: 12000
+  # request_tags / service_tags keys that name the owning team, in priority order
+  ai_gateway_team_tag_keys: [team, cost_center, project]
+
 flags:
   use_managed_iceberg: true
 
@@ -128,6 +152,28 @@ models:
       ai_ml_inference_embeddings_serving:
         +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' and var('ai_ml_inference_serving_endpoint', env_var('DBT_AI_ML_INFERENCE_SERVING_ENDPOINT', '')) != '' }}"
 
+    # The AI Gateway improvement loop: system.ai_gateway.usage + inference
+    # tables -> sessions -> ai_decide scores -> ranked recommendations.
+    # Tagged `hourly`, so the dbt Hourly job builds it. Streaming table and
+    # materialized views refresh incrementally on each build.
+    ai_gateway_improvement:
+      +tags: [ai_gateway_improvement, hourly]
+      +schema: ai_gateway_improvement
+      +materialized: table
+      # Per-user, account-wide data: NOT granted to `account users`. Production
+      # grants SELECT to the group named in DBT_AI_GATEWAY_READERS (if set). The
+      # dashboard needs no grant: it runs with the owner's embedded credentials.
+      +grants:
+        select: "{{ [env_var('DBT_AI_GATEWAY_READERS', '')] if (var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) == 'production' and env_var('DBT_AI_GATEWAY_READERS', '') != '') else [] }}"
+
+    # The golden-set eval for the scoring rubrics. On demand only
+    # (make ai-gateway-eval): no cadence tag, so no schedule ever runs it.
+    ai_gateway_improvement_eval:
+      +tags: [ai_gateway_eval]
+      +schema: ai_gateway_improvement
+      +materialized: table
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"
+
     # Unity Catalog metric views over the system catalog, ported from
     # HobbsAnalytics/databricks-metric-views-system-tables. Each model body IS the
     # metric-view YAML (dimensions + measures); dbt ships it via
@@ -159,6 +205,16 @@ seeds:
         column_name: string
         data_type: string
 
+    # price / tier map and the golden-set labels for the AI Gateway loop
+    ai_gateway_improvement:
+      +tags: [ai_gateway_improvement, hourly]
+      +schema: ai_gateway_improvement
+    # labelled sessions for the rubric eval; on demand only
+    ai_gateway_improvement_eval:
+      +tags: [ai_gateway_eval]
+      +schema: ai_gateway_improvement
+      +enabled: "{{ var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) != 'production' }}"
+
     # reference data for the seed-validation pattern (models/patterns/)
     patterns:
       +tags: [patterns]
@@ -167,6 +223,9 @@ seeds:
 
 functions:
   rpw_dbt_databricks_reference:
+    ai_gateway_improvement:
+      +tags: [ai_gateway_improvement, hourly]
+      +schema: ai_gateway_improvement
     patterns:
       +tags: [patterns]
       +schema: patterns

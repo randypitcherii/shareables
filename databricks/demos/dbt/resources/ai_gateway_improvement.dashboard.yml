@@ -1,0 +1,22 @@
+# The AI Gateway improvement loop dashboard (models/ai_gateway_improvement/).
+#
+# Generated JSON: edit scripts/build_ai_gateway_dashboard.py, not the file.
+# Dataset queries are unqualified; dataset_catalog / dataset_schema point
+# them at this target's dbt output, so one JSON serves dev and prod.
+#
+# Embedded credentials: the data is per-user and account-wide, so viewers
+# never get table grants -- they see the dashboard through its owner's
+# access. Share it deliberately: CAN_READ goes only to the group in
+# ai_gateway_dashboard_viewers (default: workspace admins).
+resources:
+  dashboards:
+    ai_gateway_improvement:
+      display_name: AI Gateway Improvement Loop
+      file_path: ../dashboards/ai_gateway_improvement.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.ai_gateway_catalog}
+      dataset_schema: ${var.ai_gateway_schema}
+      embed_credentials: true
+      permissions:
+        - group_name: ${var.ai_gateway_dashboard_viewers}
+          level: CAN_READ

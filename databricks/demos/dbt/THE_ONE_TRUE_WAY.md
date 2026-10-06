@@ -205,8 +205,9 @@ against captured production state). The job surface (`dbt CI`, `dbt CD`, `dbt Da
 `dbt Hourly`) is fixed; the repo's contents decide what each run actually does.
 
 - **In this repo:** `+tags: [.., daily]` per layer in `dbt_project.yml`;
-  `resources/dbt_hourly.job.yml` exists (paused) before any `tag:hourly` model does —
-  the first hourly model activates it with zero job edits; `resources/dbt_cd.job.yml` +
+  `resources/dbt_hourly.job.yml` existed (paused) before any `tag:hourly` model did —
+  the first hourly models (the AI Gateway improvement loop) activated it by flipping
+  only its pause status; `resources/dbt_cd.job.yml` +
   `.github/workflows/dbt-cd.yml` for merge-triggered deploys.
 
 ### 16. The dbt version is uv-owned, exactly pinned, and wrapped in a Makefile

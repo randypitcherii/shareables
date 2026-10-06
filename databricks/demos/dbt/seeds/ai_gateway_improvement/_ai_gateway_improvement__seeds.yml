@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: ai_gateway_model_prices
+    description: >-
+      Maps each gateway destination_model to a family, a tier, and list prices
+      per million tokens by token class. The first matching model_pattern by
+      ascending priority wins. THE PRICES ARE ILLUSTRATIVE DEFAULTS, not your
+      contract: edit this file to your rates. Cost here is an estimate used to
+      rank recommendations; the measurement-health page reconciles it against
+      system.billing. Rows with is_tier_reference = true define the price a
+      session would pay one tier down (model-overkill savings).
+    config:
+      column_types:
+        priority: int
+        model_pattern: string
+        model_family: string
+        model_tier: string
+        usd_per_mtok_input: decimal(18,6)
+        usd_per_mtok_output: decimal(18,6)
+        usd_per_mtok_cache_read: decimal(18,6)
+        usd_per_mtok_cache_write: decimal(18,6)
+        is_tier_reference: boolean
+    columns:
+      - name: priority
+        data_tests: [unique, not_null]
+      - name: model_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [premium, standard, economy, open, embedding]

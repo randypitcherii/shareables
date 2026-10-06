@@ -1,0 +1,155 @@
+version: 2
+
+models:
+  - name: stg_ai_gateway__usage
+    description: >-
+      Streaming-table mirror of system.ai_gateway.usage (append-only, each row
+      read once). Exists because a materialized view over a Delta-Shared system
+      table cannot refresh incrementally; over this mirror, every downstream
+      materialized view can. First build loads ai_gateway_history_days.
+    columns:
+      - name: request_id
+        data_tests: [not_null]
+      - name: event_time
+        data_tests: [not_null]
+
+  - name: int_ai_gateway__model_catalog
+    description: >-
+      One row per destination_model with family, tier, list prices, and the
+      prices one tier down, resolved from the ai_gateway_model_prices seed.
+    columns:
+      - name: destination_model
+        data_tests: [unique, not_null]
+
+  - name: int_ai_gateway__usage_events
+    description: >-
+      Materialized view, one row per gateway invocation: normalized client
+      family, team, tokens by class (uncached = input - cache read - cache
+      write), status flags, and list-price cost estimates (actual, one tier
+      down, and without caching).
+    columns:
+      - name: client_family
+        description: Normalized client. See macros/ai_gateway_improvement/client_family.sql.
+        data_tests: [not_null]
+      - name: est_cost_usd
+        description: List-price estimate in USD from the ai_gateway_model_prices seed.
+      - name: uncached_input_tokens
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+  - name: int_ai_gateway__session_events
+    description: >-
+      Materialized view assigning each model invocation to a session: the
+      client session id when present (native), otherwise an idle-gap rule over
+      requester + workspace + client family + invocation source (synthetic).
+    columns:
+      - name: session_id
+        data_tests: [not_null]
+      - name: session_id_source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [native, synthetic]
+
+  - name: int_ai_gateway__sessions
+    description: Materialized view, one row per session with volume, token, reliability, and cost metrics.
+    columns:
+      - name: session_id
+        data_tests: [unique, not_null]
+
+  - name: int_ai_gateway__session_metrics
+    description: >-
+      Sessions plus derived ratios, the clock-based is_closed flag, the
+      rule-based workload type, and metadata_state (the JSON the metadata
+      rubric judges).
+
+  - name: int_ai_gateway__payloads
+    description: >-
+      UNION ALL over every inference (payload) table this run's principal can
+      read, discovered from endpoint_metadata.inference_table. Re-created each
+      build. Empty but typed when nothing is readable.
+
+  - name: int_ai_gateway__session_transcripts
+    description: >-
+      One distilled, redacted, bounded transcript summary per finished session
+      with a readable payload: the session's largest main-agent request, run
+      through the ai_gateway_distill_transcript UDF.
+    data_tests:
+      # the UDF's size bound holds (slack for JSON escaping)
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "length(transcript) <= {{ var('ai_gateway_max_state_chars') }} + 2000"
+    columns:
+      - name: session_id
+        data_tests: [unique, not_null]
+      - name: transcript
+        data_tests: [not_null]
+
+  - name: ai_gateway__session_scores
+    description: >-
+      Append-only ai_decide scores: each finished session scored once per
+      rubric version (top cost + random sample per run), plus flagged
+      stability-probe re-scores. Raw VARIANT answers kept alongside typed
+      columns (md_* metadata rubric, ct_* content rubric).
+    columns:
+      - name: session_id
+        data_tests: [not_null]
+      - name: md_model_fit
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [overpowered, right_sized, underpowered, unclear]
+      - name: ct_outcome
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [fully_achieved, mostly_achieved, partially_achieved, not_achieved, unclear]
+      - name: md_token_efficiency
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 4
+
+  - name: ai_gateway__sessions
+    description: >-
+      One row per session: metrics, the latest confidence-gated ai_decide
+      answers, and transcript facts. The sessions explorer reads this.
+    columns:
+      - name: session_id
+        data_tests: [unique, not_null]
+
+  - name: ai_gateway__recommendations
+    description: >-
+      The ranked improvements: one row per detector x scope with estimated
+      monthly savings, people impacted, severity, evidence, example sessions,
+      and an action. impact_score = log10(1 + savings) + log2(1 + people) +
+      severity. Nothing is suppressed for low reach.
+    columns:
+      - name: recommendation_id
+        data_tests: [unique, not_null]
+      - name: people_impacted
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: impact_score
+        data_tests: [not_null]
+      - name: action
+        data_tests: [not_null]
+
+  - name: ai_gateway__recommendation_history
+    description: One snapshot of the recommendations per run, for trends.
+
+  - name: ai_gateway__measurement_health
+    description: >-
+      Is the measurement trustworthy? Freshness, scoring and payload coverage,
+      low-confidence shares, stability-probe agreement, judge-vs-anchor
+      agreement, and cost reconciliation, one row per metric.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [metric_group, metric]

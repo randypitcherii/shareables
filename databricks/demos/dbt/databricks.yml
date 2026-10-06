@@ -45,6 +45,20 @@ variables:
       SP has a different name: --var="production_service_principal=<application-id>".
     lookup:
       service_principal: dbt_prod_sp
+  ai_gateway_catalog:
+    description: Catalog holding the AI Gateway improvement loop marts (the dashboard reads it).
+    default: ${var.production_catalog}
+  ai_gateway_schema:
+    description: >-
+      Schema holding the AI Gateway improvement loop marts. Production uses the
+      models' +schema; dev overrides it to the developer's dbt sandbox schema.
+    default: ai_gateway_improvement
+  ai_gateway_dashboard_viewers:
+    description: >-
+      Group granted CAN_READ on the AI Gateway improvement dashboard. It shows
+      per-user, account-wide usage through the owner's embedded credentials,
+      so keep this narrow.
+    default: admins
   ci_catalog:
     description: >-
       Unity Catalog catalog that holds the disposable per-PR CI schemas. Owned by
@@ -68,6 +82,8 @@ targets:
       production_catalog: analytics_dev
       production_schema: dbt_${workspace.current_user.short_name}
       production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
+      # dbt development builds land every model in one per-user schema
+      ai_gateway_schema: dbt_${workspace.current_user.short_name}
       ci_catalog: analytics_dev
       # dev runs as the developer; short-circuit the SP lookups so dev deploys
       # don't require the service principals to exist.

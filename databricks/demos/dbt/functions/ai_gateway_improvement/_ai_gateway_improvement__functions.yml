@@ -1,0 +1,26 @@
+functions:
+  - name: ai_gateway_distill_transcript
+    description: >-
+      Distills one logged gateway request/response pair (chat completions,
+      Anthropic messages, or OpenAI responses) into a bounded JSON summary of
+      the conversation: first user request, recent user turns, tool calls and
+      tool errors, and the final assistant reply. Emails and common secret
+      formats are redacted. ai_decide scores the summary, never the raw
+      payload.
+    config:
+      volatility: deterministic
+    arguments:
+      - name: request
+        data_type: string
+        description: Raw JSON request body from the inference table.
+      - name: response
+        data_type: string
+        description: Raw JSON response body from the inference table.
+      - name: api_type
+        data_type: string
+        description: The gateway api_type, recorded in the summary.
+      - name: max_chars
+        data_type: int
+        description: Upper bound on the summary's JSON length.
+    returns:
+      data_type: string
