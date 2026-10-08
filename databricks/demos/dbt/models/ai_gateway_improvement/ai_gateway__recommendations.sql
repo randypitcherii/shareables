@@ -288,30 +288,44 @@ pat_usage as (
     having count(*) > 0
 ),
 
--- 8. Unattributed spend: no team tag on the request or the service
-untagged_spend as (
+-- 8. Unattributed spend: no team tag on the request or the service.
+--    One account-level finding; the worst workspaces are in the evidence.
+--    (Per-workspace rows swamp the list on accounts with hundreds of them.)
+untagged_by_workspace as (
     select
-        'untagged_spend' as detector,
-        'governance' as category,
-        'Spend with no team tag in workspace ' || workspace_id as title,
-        'workspace' as scope_type,
-        workspace_id as scope_value,
-        case when sum(case when team is null then est_cost_usd else 0 end) / nullif(sum(est_cost_usd), 0) > 0.5 then 2 else 1 end as severity,
-        count(distinct request_id) as affected_sessions,
-        count(distinct case when team is null then requester end) as affected_users,
-        cast(0 as decimal(38, 4)) as est_monthly_savings_usd,
-        to_json(named_struct(
-            'untagged_cost_usd', round(sum(case when team is null then est_cost_usd else 0 end), 2),
-            'untagged_share', round(sum(case when team is null then est_cost_usd else 0 end) / nullif(sum(est_cost_usd), 0), 3),
-            'team_tag_keys', array({% for k in var('ai_gateway_team_tag_keys') %}'{{ k }}'{% if not loop.last %}, {% endif %}{% endfor %})
-        )) as evidence,
-        cast(array() as array<string>) as example_session_ids,
-        'Tag model services with a team or cost-center tag, or send the Databricks-Ai-Gateway-Request-Tags '
-        || 'header from clients, so spend can be attributed and charged back.' as action
+        workspace_id,
+        sum(case when team is null then est_cost_usd else 0 end) as untagged_cost,
+        sum(est_cost_usd) as total_cost
     from events
     where service_type != 'MCP_SERVICE'
     group by workspace_id
     having sum(case when team is null then est_cost_usd else 0 end) > 0
+),
+
+untagged_spend as (
+    select
+        'untagged_spend' as detector,
+        'governance' as category,
+        'Spend with no team tag in ' || cast(count(*) as string) || ' workspaces' as title,
+        'account' as scope_type,
+        'account' as scope_value,
+        case when sum(w.untagged_cost) / nullif(sum(w.total_cost), 0) > 0.5 then 2 else 1 end as severity,
+        (select count(distinct request_id) from events where team is null and service_type != 'MCP_SERVICE') as affected_sessions,
+        (select count(distinct requester) from events where team is null and service_type != 'MCP_SERVICE') as affected_users,
+        cast(0 as decimal(38, 4)) as est_monthly_savings_usd,
+        to_json(named_struct(
+            'untagged_cost_usd', round(sum(w.untagged_cost), 2),
+            'untagged_share', round(sum(w.untagged_cost) / nullif(sum(w.total_cost), 0), 3),
+            'top_workspaces_by_untagged_cost', transform(
+                slice(sort_array(collect_list(named_struct('c', w.untagged_cost, 'ws', w.workspace_id)), false), 1, 10),
+                x -> x.ws),
+            'team_tag_keys', array({% for k in var('ai_gateway_team_tag_keys') %}'{{ k }}'{% if not loop.last %}, {% endif %}{% endfor %})
+        )) as evidence,
+        cast(array() as array<string>) as example_session_ids,
+        'Tag model services with a team or cost-center tag, or send the Databricks-Ai-Gateway-Request-Tags '
+        || 'header from clients, so spend can be attributed and charged back. Start with the workspaces in the evidence.' as action
+    from untagged_by_workspace w
+    having count(*) > 0
 ),
 
 -- 9. Reasoning effort higher than the task needs
@@ -340,29 +354,44 @@ reasoning_mismatch as (
     group by client_family
 ),
 
--- 10. Guardrail overhead
-guardrail_overhead as (
+-- 10. Guardrail overhead: workspaces where guardrail judge calls are a
+--     large share of cost, rolled into one account-level finding.
+guardrail_by_workspace as (
     select
-        'guardrail_overhead' as detector,
-        'cost' as category,
-        'Guardrail checks are a large share of cost' as title,
-        'workspace' as scope_type,
-        workspace_id as scope_value,
-        1 as severity,
-        count(distinct request_id) as affected_sessions,
-        count(distinct requester) as affected_users,
-        cast(sum(case when invocation_source = 'GUARDRAIL' then est_cost_usd else 0 end) * 0.5 * {{ monthly }} as decimal(38, 4)) as est_monthly_savings_usd,
-        to_json(named_struct(
-            'guardrail_cost_usd', round(sum(case when invocation_source = 'GUARDRAIL' then est_cost_usd else 0 end), 2),
-            'guardrail_share', round(sum(case when invocation_source = 'GUARDRAIL' then est_cost_usd else 0 end) / nullif(sum(est_cost_usd), 0), 3)
-        )) as evidence,
-        cast(array() as array<string>) as example_session_ids,
-        'Guardrails add a judge call per request. Scope them to the services that need them, or point '
-        || 'them at a smaller evaluator model.' as action
+        workspace_id,
+        sum(case when invocation_source = 'GUARDRAIL' then est_cost_usd else 0 end) as guardrail_cost,
+        sum(est_cost_usd) as total_cost
     from events
     group by workspace_id
     having sum(case when invocation_source = 'GUARDRAIL' then est_cost_usd else 0 end)
          / nullif(sum(est_cost_usd), 0) >= {{ var('ai_gateway_guardrail_share', 0.1) }}
+),
+
+guardrail_overhead as (
+    select
+        'guardrail_overhead' as detector,
+        'cost' as category,
+        'Guardrail checks are a large share of cost in ' || cast(count(*) as string) || ' workspaces' as title,
+        'account' as scope_type,
+        'account' as scope_value,
+        1 as severity,
+        (select count(distinct e.request_id) from events e join guardrail_by_workspace g using (workspace_id)
+          where e.invocation_source = 'GUARDRAIL') as affected_sessions,
+        (select count(distinct e.requester) from events e join guardrail_by_workspace g using (workspace_id)) as affected_users,
+        cast(sum(w.guardrail_cost) * 0.5 * {{ monthly }} as decimal(38, 4)) as est_monthly_savings_usd,
+        to_json(named_struct(
+            'guardrail_cost_usd', round(sum(w.guardrail_cost), 2),
+            'guardrail_share_in_flagged_workspaces', round(sum(w.guardrail_cost) / nullif(sum(w.total_cost), 0), 3),
+            'top_workspaces_by_guardrail_cost', transform(
+                slice(sort_array(collect_list(named_struct('c', w.guardrail_cost, 'ws', w.workspace_id)), false), 1, 10),
+                x -> x.ws),
+            'assumed_reduction', 0.5
+        )) as evidence,
+        cast(array() as array<string>) as example_session_ids,
+        'Guardrails add a judge call per request. Scope them to the services that need them, or point '
+        || 'them at a smaller evaluator model.' as action
+    from guardrail_by_workspace w
+    having count(*) > 0
 ),
 
 -- 11. Friction hotspots (content rubric)

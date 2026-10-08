@@ -149,7 +149,7 @@ expensive habit. Every row carries a `people_impacted_band` (👤 1 · 👥 2-9 
 
 | Detector | Signal |
 |---|---|
-| `payload_coverage_gap` | Model services with no inference table, by spend |
+| `payload_coverage_gap` | Model services with no inference table. One account-level row; the biggest services by spend are in its evidence |
 | `model_overkill` | Judged overpowered, or low complexity, on a premium or standard model. Savings = one tier down |
 | `missed_prompt_caching` | Long multi-turn sessions with a cache-hit ratio below 0.3 |
 | `context_bloat` | High context pressure, or a max input of 150k+ tokens |
@@ -157,14 +157,17 @@ expensive habit. Every row carries a `people_impacted_band` (👤 1 · 👥 2-9 
 | `error_hotspot` | Endpoint × client version error rate ≥ 5% |
 | `stale_agent_version` | People behind the newest version of their coding agent |
 | `pat_usage` | Requests authenticated with personal access tokens |
-| `untagged_spend` | Spend with no team / cost-center tag |
+| `untagged_spend` | Spend with no team / cost-center tag. One account-level row; the worst workspaces are in its evidence |
 | `reasoning_effort_mismatch` | High reasoning effort on simple work |
-| `guardrail_overhead` | Guardrail judge calls ≥ 10% of a workspace's cost |
+| `guardrail_overhead` | Guardrail judge calls ≥ 10% of a workspace's cost. One account-level row listing those workspaces |
 | `friction_hotspot` | Recurring primary friction per client, with a friction-specific fix |
 | `codify_repeated_instructions` | Users restating standing rules: move them to AGENTS.md / CLAUDE.md |
 | `low_outcome_task_area` | Task categories that often end not or partially achieved |
 | `automation_candidate` | Repetitive workflows worth a skill or script |
 | `novel_friction` | Friction the rubric cannot label: time to extend the taxonomy |
+
+Account-wide detectors roll up to one row on purpose. On an account with hundreds of
+workspaces, a row per workspace (436 untagged-spend rows in testing) buries every other finding.
 
 Thresholds are dbt vars with inline defaults, such as
 `ai_gateway_low_cache_hit_ratio`. Override them in `dbt_project.yml`.
