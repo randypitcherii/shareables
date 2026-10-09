@@ -6,6 +6,8 @@ usage dashboard tells you **how much, by whom, on what**. This loop tells you
 scores them with `ai_decide`. It then publishes a ranked list of fixes, each
 with estimated dollars and the number of people affected.
 
+![Top 10 recommendations from a dev build, model names redacted](../../docs/diagrams/ai-gateway-top-recommendations.png)
+
 ```
 system.ai_gateway.usage ──► stg_ai_gateway__usage        streaming table (each row read once)
                               │

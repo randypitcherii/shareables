@@ -195,7 +195,7 @@ error_hotspots as (
     select
         'error_hotspot' as detector,
         'reliability' as category,
-        client_family || ' ' || coalesce(client_version, '?') || ' fails often on ' || endpoint_name as title,
+        client_family || coalesce(' ' || client_version, '') || ' fails often on ' || endpoint_name as title,
         'endpoint_client_version' as scope_type,
         endpoint_name || ' / ' || client_family || ' ' || coalesce(client_version, '?') as scope_value,
         case when avg(case when is_error then 1.0 else 0 end) >= 0.25 then 3 else 2 end as severity,

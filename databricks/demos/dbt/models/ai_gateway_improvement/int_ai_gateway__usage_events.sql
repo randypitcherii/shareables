@@ -52,7 +52,13 @@ normalized as (
 
         -- client
         {{ ai_gateway_client_family('usage.session_metadata.coding_agent', 'usage.user_agent') }} as client_family,
-        coalesce(usage.session_metadata.agent_version, regexp_extract(usage.user_agent, '^[^/]+/([^ ]+)', 1)) as client_version,
+        -- the user-agent token is a version only for named tools: `Mozilla/5.0`
+        -- is the browser convention, not a release anyone can upgrade
+        coalesce(
+            usage.session_metadata.agent_version,
+            case when usage.user_agent not rlike '(?i)^Mozilla/'
+                 then nullif(regexp_extract(usage.user_agent, '^[^/]+/([^ ]+)', 1), '') end
+        ) as client_version,
         usage.session_metadata.surface as client_surface,
         usage.user_agent,
         nullif(usage.session_metadata.client_session_id, '') as native_session_id,
