@@ -3,14 +3,14 @@
 # adds `+tags: [hourly]` starts building here with ZERO job-definition changes
 # -- the job surface is static, the repo's contents decide what runs.
 #
-# The schedule ships PAUSED because a no-op hourly serverless run still costs
-# real spin-up minutes 24x/day. Unpausing when the first tag:hourly model lands
-# is a one-line change here, deployed automatically by dbt CD.
+# The first tag:hourly models are the AI Gateway improvement loop
+# (models/ai_gateway_improvement/), so the schedule is now UNPAUSED. dev and
+# test deploys stay paused anyway: bundle development mode pauses schedules.
 resources:
   jobs:
     dbt_hourly:
       name: dbt Hourly
-      description: Builds the hourly-tagged models. Paused until the first tag:hourly model exists.
+      description: Builds the hourly-tagged models (the AI Gateway improvement loop).
       permissions:
         - group_name: users
           level: CAN_VIEW
@@ -19,7 +19,7 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 * * * ?"
         timezone_id: UTC
-        pause_status: PAUSED
+        pause_status: UNPAUSED
       tasks:
         - task_key: dbt_build_hourly
           spark_python_task:
@@ -33,7 +33,10 @@ resources:
               - "--catalog=${var.production_catalog}"
               - "--schema=${var.production_schema}"
           environment_key: dbt_via_uv
-          timeout_seconds: 2400
+          # ai_decide scoring is the long pole (~2-6 s per session on a small
+          # warehouse); ai_gateway_max_sessions_per_run (100) keeps it well
+          # inside the hour.
+          timeout_seconds: 3000
       environments:
         - environment_key: dbt_via_uv
           spec:

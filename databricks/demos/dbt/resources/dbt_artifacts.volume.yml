@@ -1,8 +1,10 @@
 resources:
   volumes:
     dbt_artifacts_volume:
-      catalog_name: ${var.production_catalog}
-      schema_name: ${var.production_artifact_schema}
+      # resource references, not vars: development mode prefixes the schema
+      # name (dev_<user>_...), and the reference also orders creation
+      catalog_name: ${resources.schemas.dbt_artifacts.catalog_name}
+      schema_name: ${resources.schemas.dbt_artifacts.name}
       name: ${var.production_artifact_volume}
       volume_type: MANAGED
       comment: Managed volume for production dbt state capture and docs hosting.

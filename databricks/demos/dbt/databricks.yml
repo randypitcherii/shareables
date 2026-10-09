@@ -45,6 +45,20 @@ variables:
       SP has a different name: --var="production_service_principal=<application-id>".
     lookup:
       service_principal: dbt_prod_sp
+  ai_gateway_catalog:
+    description: Catalog holding the AI Gateway improvement loop marts (the dashboard reads it).
+    default: ${var.production_catalog}
+  ai_gateway_schema:
+    description: >-
+      Schema holding the AI Gateway improvement loop marts. Production uses the
+      models' +schema; dev overrides it to the developer's dbt sandbox schema.
+    default: ai_gateway_improvement
+  ai_gateway_dashboard_viewers:
+    description: >-
+      Group granted CAN_READ on the AI Gateway improvement dashboard. It shows
+      per-user, account-wide usage through the owner's embedded credentials,
+      so keep this narrow.
+    default: admins
   ci_catalog:
     description: >-
       Unity Catalog catalog that holds the disposable per-PR CI schemas. Owned by
@@ -60,15 +74,25 @@ variables:
     lookup:
       service_principal: dbt_ci_sp
 
+  dev_catalog:
+    description: >-
+      Catalog for everything the dev target deploys (artifacts schema + volume,
+      dashboard datasets). Must match where your dbt dev builds land, which is
+      DBT_DEFAULT_CATALOG (same rpw_dev default); `make deploy` passes
+      DBT_DEFAULT_CATALOG through, so set only that, in .env.
+    default: rpw_dev
+
 targets:
   dev:
     default: true
     mode: development
     variables:
-      production_catalog: analytics_dev
+      production_catalog: ${var.dev_catalog}
       production_schema: dbt_${workspace.current_user.short_name}
       production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
-      ci_catalog: analytics_dev
+      # dbt development builds land every model in one per-user schema
+      ai_gateway_schema: dbt_${workspace.current_user.short_name}
+      ci_catalog: ${var.dev_catalog}
       # dev runs as the developer; short-circuit the SP lookups so dev deploys
       # don't require the service principals to exist.
       production_service_principal: unused-in-dev

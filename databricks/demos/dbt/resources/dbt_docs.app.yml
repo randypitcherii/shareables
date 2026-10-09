@@ -9,7 +9,8 @@ resources:
           description: Read access to generated dbt docs in the production artifacts volume.
           uc_securable:
             securable_type: VOLUME
-            securable_full_name: ${var.production_catalog}.${var.production_artifact_schema}.${var.production_artifact_volume}
+            # the volume RESOURCE's names: dev mode prefixes the schema (dev_<user>_...)
+            securable_full_name: ${resources.volumes.dbt_artifacts_volume.catalog_name}.${resources.volumes.dbt_artifacts_volume.schema_name}.${resources.volumes.dbt_artifacts_volume.name}
             permission: READ_VOLUME
         - name: dbt-production-job
           description: Read access to the production dbt workflow run status.
@@ -26,10 +27,10 @@ resources:
           - name: DBT_ARTIFACT_VOLUME_FULL_NAME
             value_from: dbt-docs-volume
           - name: DBT_ARTIFACT_CATALOG
-            value: ${var.production_catalog}
+            value: ${resources.volumes.dbt_artifacts_volume.catalog_name}
           - name: DBT_ARTIFACT_SCHEMA
-            value: ${var.production_artifact_schema}
+            value: ${resources.volumes.dbt_artifacts_volume.schema_name}
           - name: DBT_ARTIFACT_VOLUME
-            value: ${var.production_artifact_volume}
+            value: ${resources.volumes.dbt_artifacts_volume.name}
           - name: DBT_PRODUCTION_JOB_ID
             value_from: dbt-production-job

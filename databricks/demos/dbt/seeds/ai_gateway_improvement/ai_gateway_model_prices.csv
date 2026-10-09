@@ -1,0 +1,16 @@
+priority,model_pattern,model_family,model_tier,usd_per_mtok_input,usd_per_mtok_output,usd_per_mtok_cache_read,usd_per_mtok_cache_write,is_tier_reference
+10,(?i)(embed|gte_|bge_|e5-),embedding,embedding,0.10,0.00,0.00,0.00,true
+20,(?i)opus|fable,claude-opus,premium,5.00,25.00,0.50,6.25,true
+30,(?i)sonnet,claude-sonnet,standard,3.00,15.00,0.30,3.75,true
+40,(?i)haiku,claude-haiku,economy,1.00,5.00,0.10,1.25,true
+50,(?i)gpt-oss,gpt-oss,open,0.15,0.60,0.15,0.15,true
+60,(?i)gpt.*nano,gpt-nano,economy,0.05,0.40,0.005,0.05,false
+70,(?i)gpt.*mini,gpt-mini,economy,0.25,2.00,0.025,0.25,false
+80,(?i)gpt,gpt,standard,1.25,10.00,0.125,1.25,false
+90,(?i)gemini.*flash-lite,gemini-flash-lite,economy,0.10,0.40,0.01,0.10,false
+100,(?i)gemini.*flash,gemini-flash,economy,0.30,2.50,0.03,0.30,false
+110,(?i)gemini,gemini-pro,standard,1.25,10.00,0.125,1.25,false
+120,(?i)grok,grok,standard,3.00,15.00,0.75,3.00,false
+130,(?i)deepseek.*flash|glm.*flash,open-flash,open,0.10,0.40,0.01,0.10,false
+140,(?i)deepseek|kimi|glm|qwen|llama|gemma|mistral|mixtral|jev,open-weights,open,0.60,2.50,0.06,0.60,false
+1000,.*,unknown,standard,1.00,5.00,0.10,1.25,false

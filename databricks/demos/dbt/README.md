@@ -189,6 +189,34 @@ for how each path runs and how to choose.
 
 ---
 
+# AI Gateway improvement loop: what to change in your AI usage
+
+`models/ai_gateway_improvement/` turns Unity AI Gateway logs into a ranked
+list of fixes. It runs hourly as the first `tag:hourly` models, so
+`dbt Hourly` now runs on schedule. Each run does four things:
+
+- **Sessions.** It rebuilds sessions from `system.ai_gateway.usage`. The data
+  lands in a streaming table, then flows through incrementally refreshed
+  materialized views.
+- **Transcripts.** It distills message content from every inference table it
+  can read.
+- **Scoring.** It scores each finished session once with `ai_decide`,
+  including quality, complexity, token efficiency, friction, and outcome.
+- **Recommendations.** It publishes about 15 detectors, each with estimated
+  monthly dollars and the number of people impacted, plus an AI/BI dashboard
+  to dig in.
+
+```bash
+make ai-gateway        # = uv run dbt build -s tag:ai_gateway_improvement
+make ai-gateway-eval   # golden-set accuracy check for the ai_decide rubrics
+```
+
+See **[models/ai_gateway_improvement/README.md](models/ai_gateway_improvement/README.md)**.
+It covers where message content comes from (the system tables have none),
+how sessions are rebuilt, and how the scores stay reliable.
+
+---
+
 # Environments & schema routing — the "no `dbt init`" pattern
 
 This project is configured so a brand-new contributor can clone it and run `dbt build` with
@@ -199,11 +227,15 @@ This project is configured so a brand-new contributor can clone it and run `dbt 
 | var | env var | dev fallback |
 |-----|---------|--------------|
 | `deployment_environment` | `DBT_DEPLOYMENT_ENVIRONMENT` | `development` |
-| `default_catalog` | `DBT_DEFAULT_CATALOG` | `analytics_dev` |
+| `default_catalog` | `DBT_DEFAULT_CATALOG` | `rpw_dev` |
 | `default_schema` | `DBT_DEFAULT_SCHEMA` | `dbt` |
 
 The dev fallbacks live in source control (publicly visible) — in exchange, dev "just works".
 Non-dev deployments inject the real values via environment variables.
+
+`DBT_DEFAULT_CATALOG` also decides where the dev **bundle** deploys: `make deploy` passes it
+as the bundle's `dev_catalog` variable (default `rpw_dev`). One setting in `.env` moves dbt
+dev builds, the artifacts volume, the docs app, and the dashboards together.
 
 **2. A committed `profiles.yml`** (yes, in the repo):
 - `dev` target → **SSO OAuth (U2M)**. Stores **no secret**, so it is safe to commit. First run

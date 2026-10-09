@@ -20,9 +20,14 @@
 #     to the production SP or CD stays broken.
 
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
+
+# The dev bundle deploys into the same catalog dbt dev builds use:
+# DBT_DEFAULT_CATALOG from the environment or .env (dbt reads .env itself; the
+# databricks CLI does not, so make passes it through), else the rpw_dev default.
+DEV_CATALOG := $(or $(DBT_DEFAULT_CATALOG),$(shell sed -n 's/^DBT_DEFAULT_CATALOG=//p' .env 2>/dev/null | tail -1),rpw_dev)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint deploy deploy-dev deploy-prod deploy-prod-local
+.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint ai-gateway ai-gateway-eval ai-gateway-dashboard deploy deploy-dev deploy-prod deploy-prod-local
 
 # ---- uv venv management ----------------------------------------------------
 
@@ -96,13 +101,30 @@ ai-ml-inference-endpoint:
 	done
 	@echo "ready. add to .env:  DBT_AI_ML_INFERENCE_SERVING_ENDPOINT=$(AI_ML_INFERENCE_ENDPOINT)"
 
+# ---- AI Gateway improvement loop (models/ai_gateway_improvement/README.md) ---
+
+# build + test the loop into your dev schema (what dbt Hourly runs in prod).
+# Defaults are production-sized; for a quick first look try:
+#   DBT_AI_GATEWAY_HISTORY_DAYS=3 DBT_AI_GATEWAY_MAX_SESSIONS_PER_RUN=25 make ai-gateway
+ai-gateway: deps
+	uv run dbt build -s tag:ai_gateway_improvement
+
+# score the hand-labelled golden set with the live rubrics; fails below the
+# accuracy floors. Run it after every rubric edit.
+ai-gateway-eval: deps
+	uv run dbt build -s tag:ai_gateway_eval
+
+# regenerate the dashboard JSON from scripts/build_ai_gateway_dashboard.py
+ai-gateway-dashboard:
+	uv run --no-project python scripts/build_ai_gateway_dashboard.py
+
 # ---- DABs deploys -----------------------------------------------------------
 
 # `make deploy` is the everyday deploy: your isolated dev copy of the bundle
 deploy: deploy-dev
 
 deploy-dev:
-	databricks bundle deploy -t dev --var="deployed_at=$(DEPLOY_DATE)"
+	databricks bundle deploy -t dev --var="deployed_at=$(DEPLOY_DATE)" --var="dev_catalog=$(DEV_CATALOG)"
 
 deploy-prod:
 	@echo "Triggering dbt CD at $(GIT_SHA) (commit must be pushed)"
