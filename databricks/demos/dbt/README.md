@@ -143,6 +143,86 @@ watches two failure classes:
   it to `MEASURE(`Usage Records`)` over the same window: if ANY join starts fanning out,
   the numbers stop matching.
 
+## S3 storage analytics: what your buckets cost, and what to delete
+
+`tag:s3_inventory` turns [AWS S3 Inventory](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html)
+reports into storage answers: size by bucket, by table, and by whether anyone still uses
+the table; which buckets have versioning on; and a ranked list of savings opportunities
+with an estimated monthly $ figure.
+
+```
+sources   S3 Inventory   system.information_schema.tables   system.access.table_lineage
+   │      (or the sample seeds in seeds/s3_inventory/ when no inventory is configured)
+   ▼
+staging   stg_s3_inventory__objects   __uc_tables   __table_access_events        (views)
+   ▼
+modeled   int_s3_inventory__objects          latest snapshot per bucket, priced per version
+          int_s3_inventory__table_paths      UC table roots + unregistered Delta roots, active/inactive
+          int_s3_inventory__objects_classified   owner table + at most ONE savings opportunity
+   ▼
+marts     s3_storage_by_bucket   s3_storage_by_versioning_status   s3_storage_by_table_path
+          s3_storage_by_table_activity   s3_storage_savings_opportunities
+```
+
+| Question | Mart |
+|---|---|
+| How big is each bucket, and what does it cost? | `s3_storage_by_bucket` |
+| Which buckets have versioning enabled, and what do noncurrent versions cost? | `s3_storage_by_versioning_status` (+ `versioning_status` on every bucket) |
+| How big is each table, including unregistered Delta tables and untracked prefixes? | `s3_storage_by_table_path` |
+| How much storage sits under tables nobody reads or writes? | `s3_storage_by_table_activity` |
+| Where can we save, and how much? | `s3_storage_savings_opportunities` |
+
+**Key modeling choices**
+- **Table attribution by longest prefix.** Each object's directory maps to the innermost
+  table root that contains it, so `.../orders` never claims `.../orders_v2`. Roots come from
+  UC `storage_path`s, plus any `_delta_log/` prefix no UC table owns — an unregistered Delta
+  table, which is usually scratch output or a dropped table whose data was never deleted.
+- **Active = touched recently.** A table is `active` when table lineage shows a read or
+  write (by name, or by direct `s3://` path) within `DBT_S3_INVENTORY_ACTIVE_DAYS` (90) of
+  the snapshot.
+- **Versioning is inferred.** S3 Inventory doesn't report the bucket setting, so the status
+  comes from version fields: `enabled`, `suspended`, `disabled`, or `unknown` when the report
+  lists current versions only. Configure inventories with **Include all versions**.
+- **One opportunity per byte.** Priority order: expire noncurrent versions → remove expired
+  delete markers → archive/drop inactive tables → review unregistered data → fix sub-128 KB
+  objects in IA / Glacier IR → tier cold Standard data to Intelligent-Tiering. Savings add
+  up without double counting. Noncurrent age uses the time the *next* version landed, the
+  same way lifecycle `NoncurrentDays` counts.
+- **Delta on a versioned bucket.** VACUUM "deletes" files, but versioning keeps every one as
+  a noncurrent version. `noncurrent_bytes` per table shows that hidden cost.
+- **Prices are a seed.** `seeds/s3_inventory/s3_storage_class_pricing.csv` holds us-east-1
+  list storage prices. Edit it for your region or contract. Request, transition, and
+  early-deletion charges are not modeled.
+
+**Zero config by default.** With `DBT_S3_INVENTORY_TABLE` unset, the pipeline builds from
+sample seeds: four buckets, one per versioning state, that cover every opportunity. Singular
+tests in `tests/s3_inventory/` assert the exact expected sizes, attribution, and savings.
+That's what CI runs. A reconciliation test runs in every mode and checks that every byte
+lands in exactly one bucket row and one table row.
+
+**Point it at real inventory**
+1. Turn on S3 Inventory for each bucket: daily, **Parquet**, **Include all versions**, and
+   the size, last-modified, storage-class, Intelligent-Tiering-access-tier, and multipart
+   fields.
+2. Register the reports as one table with the standard field names plus a `dt` column for
+   the snapshot. Each delivery is a full listing; staging keeps every snapshot, and the
+   modeled layer picks the latest per bucket. One way to do it, from the Hive-compatible
+   `hive/dt=.../symlink.txt` manifests:
+   ```sql
+   CREATE OR REPLACE TABLE main.s3_inventory.inventory AS
+   WITH symlinks AS (
+     SELECT regexp_extract(_metadata.file_path, 'dt=([^/]+)/', 1) AS dt, value AS data_file
+     FROM read_files('s3://<inventory-dest>/<source-bucket>/<config-id>/hive/', format => 'text')
+   )
+   SELECT inv.*, symlinks.dt
+   FROM read_files('s3://<inventory-dest>/<source-bucket>/<config-id>/data/', format => 'parquet') AS inv
+   JOIN symlinks ON inv._metadata.file_path = symlinks.data_file;
+   ```
+3. Set `DBT_S3_INVENTORY_CATALOG`, `DBT_S3_INVENTORY_SCHEMA`, and `DBT_S3_INVENTORY_TABLE`
+   (see `template.env`), then run `uv run dbt build -s tag:s3_inventory`. CSV inventories
+   also need `DBT_S3_INVENTORY_KEYS_URL_ENCODED=true`. Run as a principal that can see
+   every table in the metastore. Tables it can't see show up as unregistered data.
+
 ---
 
 # Migration patterns: Python, UDFs, dynamic SQL, validation

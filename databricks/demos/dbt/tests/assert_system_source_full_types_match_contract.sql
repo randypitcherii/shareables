@@ -30,6 +30,9 @@ actual as (
         regexp_extract(lower(full_data_type), '^[a-z]+', 0) as actual_base_type,
         lower(full_data_type)                                as actual_full_type
     from {{ source('system_information_schema', 'columns') }}
+    -- the view also lists every OTHER catalog's information_schema; the contract
+    -- pins the system catalog only
+    where table_catalog = 'system'
 )
 
 select

@@ -1,0 +1,93 @@
+version: 2
+
+models:
+  - name: int_s3_inventory__objects
+    description: >
+      Latest inventory snapshot per bucket, one row per object version, enriched with
+      version state, prefix, object kind, age, noncurrent duration, and priced monthly
+      storage cost. Ages are measured from the snapshot date (`as_of_date`).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            # version_id is NULL for current-version-only reports -> coalesce in the key
+            combination_of_columns: [bucket, key, "coalesce(version_id, '<none>')"]
+    columns:
+      - name: version_state
+        description: "current | noncurrent | delete_marker"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['current', 'noncurrent', 'delete_marker']
+      - name: noncurrent_days
+        description: "Days since the next-newer version of the key was written (how S3 lifecycle NoncurrentDays counts). NULL unless noncurrent."
+      - name: is_expired_delete_marker
+        description: "Delete marker that is the ONLY version left for its key -- it protects nothing."
+      - name: object_kind
+        description: "delta_log | data_file | other"
+      - name: pricing_tier
+        description: "Join key into s3_storage_class_pricing."
+        data_tests:
+          # an unpriced storage class silently zeroes cost: make it loud
+          - relationships:
+              arguments:
+                to: ref('s3_storage_class_pricing')
+                field: pricing_tier
+              config:
+                where: "not is_delete_marker"
+      - name: billable_bytes
+        description: "Size billed: max(size, the class's minimum billable object size); 0 for delete markers."
+      - name: monthly_cost_usd
+        description: "Storage list price per month (USD) for this version, from s3_storage_class_pricing."
+
+  - name: int_s3_inventory__table_paths
+    description: >
+      Every S3 table root in an inventoried bucket: Unity Catalog storage paths plus
+      unregistered Delta tables inferred from `_delta_log/` prefixes, with last
+      read / write from table lineage and an active / inactive status.
+    columns:
+      - name: table_uri
+        description: "Normalized s3:// table root."
+        data_tests:
+          - not_null
+          - unique
+      - name: path_source
+        description: "unity_catalog | inferred_delta_log"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['unity_catalog', 'inferred_delta_log']
+      - name: registered_table_count
+        description: "How many UC tables point at this exact location (0 for inferred roots). Above 1 means duplicate registrations."
+      - name: activity_status
+        description: "active when read or written within s3_inventory_active_days of the bucket's snapshot date, else inactive."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['active', 'inactive']
+
+  - name: int_s3_inventory__objects_classified
+    description: >
+      int_s3_inventory__objects attributed to the innermost owning table root and
+      assigned at most one savings opportunity (priority-ordered, so savings never
+      double count), with an estimated monthly saving.
+    columns:
+      - name: path_source
+        description: "unity_catalog | inferred_delta_log | untracked"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['unity_catalog', 'inferred_delta_log', 'untracked']
+      - name: opportunity
+        description: "The single savings opportunity this version counts toward, or NULL."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - expire_noncurrent_versions
+                  - remove_expired_delete_markers
+                  - archive_or_drop_inactive_tables
+                  - review_unregistered_data
+                  - fix_small_objects_in_min_size_classes
+                  - tier_cold_standard_data
+      - name: estimated_monthly_savings_usd
+        description: "Estimated monthly storage saving (USD, list price) if the opportunity is acted on."

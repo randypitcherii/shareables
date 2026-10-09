@@ -75,6 +75,21 @@ vars:
   # request_tags / service_tags keys that name the owning team, in priority order
   ai_gateway_team_tag_keys: [team, cost_center, project]
 
+  # ---- S3 Inventory storage pipeline (models/*/s3_inventory, models/marts/storage) ----
+  # Point the pipeline at a real S3 Inventory table by setting DBT_S3_INVENTORY_TABLE
+  # (plus _CATALOG / _SCHEMA, see models/staging/s3_inventory/_s3_inventory__sources.yml).
+  # Left unset, the whole pipeline builds from the committed sample seeds in
+  # seeds/s3_inventory/ -- zero config, deterministic, and what CI tests against.
+  s3_inventory_table: "{{ env_var('DBT_S3_INVENTORY_TABLE', '') }}"
+  # CSV-format inventories URL-encode object keys; Parquet / ORC do not.
+  s3_inventory_keys_url_encoded: "{{ env_var('DBT_S3_INVENTORY_KEYS_URL_ENCODED', 'false') }}"
+  # a table with no read or write in this many days (as of the snapshot) is inactive
+  s3_inventory_active_days: "{{ env_var('DBT_S3_INVENTORY_ACTIVE_DAYS', 90) }}"
+  # S3 Standard objects at least this old are flagged as tiering candidates
+  s3_inventory_cold_days: "{{ env_var('DBT_S3_INVENTORY_COLD_DAYS', 90) }}"
+  # noncurrent versions older than this are flagged for lifecycle expiration
+  s3_inventory_noncurrent_retention_days: "{{ env_var('DBT_S3_INVENTORY_NONCURRENT_RETENTION_DAYS', 30) }}"
+
 flags:
   use_managed_iceberg: true
 
@@ -94,18 +109,25 @@ models:
       +tags: [staging, daily]
       +schema: staging
       +materialized: view
+      # selector tag for the S3 Inventory storage pipeline: dbt build -s tag:s3_inventory
+      s3_inventory:
+        +tags: [s3_inventory]
 
     modeled:
       +tags: [modeled, daily]
       +schema: modeled
       +materialized: table
       +auto_liquid_cluster: true
+      s3_inventory:
+        +tags: [s3_inventory]
 
     marts:
       +tags: [mart, daily]
       +schema: mart
       +materialized: table
       +auto_liquid_cluster: true
+      storage:
+        +tags: [s3_inventory]
       # Grants-as-code: in production, consumers get read access to the marts as part
       # of every run -- no manual GRANTs. Empty list otherwise, which tells dbt to
       # actively revoke stray grants on dev/CI sandboxes. The condition checks the CLI
@@ -192,6 +214,11 @@ models:
 
 seeds:
   rpw_dbt_databricks_reference:
+    # S3 Inventory pipeline: S3 list prices (an assumption table -- edit for your
+    # region / contract) plus the sample data the pipeline builds from when no real
+    # inventory is configured. Column types are pinned in seeds/s3_inventory/_s3_inventory__seeds.yml.
+    s3_inventory:
+      +tags: [s3_inventory, daily]
     # The schema contract for every system.* column the metric views depend on.
     # tests/assert_system_source_*_match_contract.sql compare it against
     # system.information_schema to catch structure drift in the system catalog.
