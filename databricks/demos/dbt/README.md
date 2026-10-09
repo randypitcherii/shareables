@@ -227,11 +227,15 @@ This project is configured so a brand-new contributor can clone it and run `dbt 
 | var | env var | dev fallback |
 |-----|---------|--------------|
 | `deployment_environment` | `DBT_DEPLOYMENT_ENVIRONMENT` | `development` |
-| `default_catalog` | `DBT_DEFAULT_CATALOG` | `analytics_dev` |
+| `default_catalog` | `DBT_DEFAULT_CATALOG` | `rpw_dev` |
 | `default_schema` | `DBT_DEFAULT_SCHEMA` | `dbt` |
 
 The dev fallbacks live in source control (publicly visible) — in exchange, dev "just works".
 Non-dev deployments inject the real values via environment variables.
+
+`DBT_DEFAULT_CATALOG` also decides where the dev **bundle** deploys: `make deploy` passes it
+as the bundle's `dev_catalog` variable (default `rpw_dev`). One setting in `.env` moves dbt
+dev builds, the artifacts volume, the docs app, and the dashboards together.
 
 **2. A committed `profiles.yml`** (yes, in the repo):
 - `dev` target → **SSO OAuth (U2M)**. Stores **no secret**, so it is safe to commit. First run

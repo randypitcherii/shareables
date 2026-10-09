@@ -41,11 +41,19 @@ probe_pairs as (
     where p.is_stability_probe
 ),
 
+-- Read billing from the system tables directly, NOT from int_usage_priced:
+-- that model is tag:daily, and this one builds hourly. A fresh deploy whose
+-- first hourly run beats the first daily run would otherwise fail every hour.
 billing as (
-    select sum(list_cost) as billed_list_cost
-    from {{ ref('int_usage_priced') }}
-    where usage_type = 'TOKEN'
-      and usage_date >= current_date() - {{ window_days }}
+    select sum(u.usage_quantity * p.pricing.effective_list.default) as billed_list_cost
+    from {{ source('system_billing', 'usage') }} u
+    join {{ source('system_billing', 'list_prices') }} p
+      on  u.sku_name = p.sku_name
+      and u.cloud = p.cloud
+      and u.usage_end_time >= p.price_start_time
+      and (p.price_end_time is null or u.usage_end_time < p.price_end_time)
+    where u.usage_type = 'TOKEN'
+      and u.usage_date >= current_date() - {{ window_days }}
 ),
 
 metrics as (

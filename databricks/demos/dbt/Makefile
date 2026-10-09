@@ -20,6 +20,11 @@
 #     to the production SP or CD stays broken.
 
 DEPLOY_DATE := $(shell date +%Y-%m-%d)
+
+# The dev bundle deploys into the same catalog dbt dev builds use:
+# DBT_DEFAULT_CATALOG from the environment or .env (dbt reads .env itself; the
+# databricks CLI does not, so make passes it through), else the rpw_dev default.
+DEV_CATALOG := $(or $(DBT_DEFAULT_CATALOG),$(shell sed -n 's/^DBT_DEFAULT_CATALOG=//p' .env 2>/dev/null | tail -1),rpw_dev)
 GIT_SHA := $(shell git rev-parse HEAD)
 
 .PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint ai-gateway ai-gateway-eval ai-gateway-dashboard deploy deploy-dev deploy-prod deploy-prod-local
@@ -119,7 +124,7 @@ ai-gateway-dashboard:
 deploy: deploy-dev
 
 deploy-dev:
-	databricks bundle deploy -t dev --var="deployed_at=$(DEPLOY_DATE)"
+	databricks bundle deploy -t dev --var="deployed_at=$(DEPLOY_DATE)" --var="dev_catalog=$(DEV_CATALOG)"
 
 deploy-prod:
 	@echo "Triggering dbt CD at $(GIT_SHA) (commit must be pushed)"

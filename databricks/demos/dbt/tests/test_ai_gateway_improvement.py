@@ -193,3 +193,22 @@ def test_hourly_schedule_builds_the_loop_but_never_the_eval() -> None:
         assert name in hourly, f"{name} must run on the hourly schedule"
     assert "ai_gateway__golden_eval" not in hourly
     assert "ai_gateway__golden_eval" not in dbt_ls("-s", "tag:ai_gateway_eval", environment="production")
+
+
+def test_hourly_models_depend_only_on_hourly_models_or_sources() -> None:
+    """dbt Hourly selects tag:hourly alone. A ref() to a daily-only model works
+    once dbt Daily has built it, and fails every hour on a fresh deploy until
+    then. (This happened: the health mart read int_usage_priced.)"""
+    def models(selector: str) -> set[str]:
+        env = {**os.environ, "DBT_HOST": "parse-only.invalid", "DBT_HTTP_PATH": "/sql/1.0/warehouses/parse-only",
+               "DBT_DEPLOYMENT_ENVIRONMENT": "production"}
+        out = subprocess.run(
+            ["dbt", "ls", "--resource-type", "model", "--resource-type", "seed", "--resource-type", "function",
+             "--output", "name", "--quiet", "--no-partial-parse", "-s", selector],
+            cwd=ROOT, env=env, capture_output=True, text=True, check=True,
+        ).stdout
+        return {line.strip() for line in out.splitlines() if line.strip()}
+
+    hourly = models("tag:hourly")
+    upstream = models("+tag:hourly")
+    assert upstream <= hourly, f"hourly models ref non-hourly models: {sorted(upstream - hourly)}"
