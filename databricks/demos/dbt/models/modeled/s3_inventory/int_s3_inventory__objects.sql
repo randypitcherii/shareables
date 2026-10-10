@@ -46,6 +46,8 @@ versioned as (
         intelligent_tiering_access_tier,
         is_multipart_uploaded,
         inventory_snapshot,
+        inventory_snapshot_at,
+        ingested_at,
         inventory_source,
         coalesce(inventory_snapshot_date, current_date()) as as_of_date,
 

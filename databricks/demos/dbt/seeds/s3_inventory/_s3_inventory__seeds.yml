@@ -39,7 +39,12 @@ seeds:
       SAMPLE S3 Inventory rows (all-versions report, Parquet field names) used when
       DBT_S3_INVENTORY_TABLE is unset. Four buckets covering every versioning state
       and savings opportunity, plus one row from an older snapshot that the pipeline
-      must ignore. tests/s3_inventory/ asserts the exact expected results.
+      must ignore. tests/s3_inventory/ asserts the exact expected results. Older
+      snapshots exist for three buckets so the pipeline-health views have history:
+      a 5-day delivery gap (acme-archive), a late ingest (acme-scratch-current-only,
+      ingested ~32 h after its snapshot), and a volume swing (acme-lakehouse-prod).
+      `ingested_at` is when the row landed in the lakehouse -- the house standard
+      for every raw table.
     config:
       column_types:
         bucket: string
@@ -53,6 +58,7 @@ seeds:
         intelligent_tiering_access_tier: string
         is_multipart_uploaded: boolean
         dt: string
+        ingested_at: timestamp
 
   - name: s3_inventory_sample__tables
     description: "SAMPLE stand-in for system.information_schema.tables (sample mode only)."

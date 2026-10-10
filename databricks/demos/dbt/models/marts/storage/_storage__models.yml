@@ -17,6 +17,8 @@ models:
         data_tests:
           - not_null
           - unique
+      - name: inventory_ingested_at
+        description: "When the bucket's latest snapshot landed in the lakehouse (max ingested_at)."
       - name: versioning_status
         description: "Inferred from inventory version fields: enabled | suspended | disabled | unknown (report lists current versions only)."
         data_tests:
@@ -110,3 +112,42 @@ models:
           - dbt_expectations.expect_column_values_to_be_between:
               arguments:
                 min_value: 0
+
+  - name: s3_inventory_snapshot_health
+    description: >
+      Pipeline health of the S3 Inventory feed across ALL retained snapshots: row and
+      byte counts, ingest lag, delivery gaps, volume swings, missing ingested_at and
+      unpriced rows, plus the first failing check as health_status. Grain: one row
+      per bucket + inventory_snapshot. Backs s3_inventory_pipeline_health_metrics.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, inventory_snapshot]
+    columns:
+      - name: inventory_snapshot
+        description: "The inventory delivery (`dt`, 'YYYY-MM-DD-HH-MM')."
+        data_tests:
+          - not_null
+      - name: is_latest_snapshot
+        description: "The bucket's newest snapshot -- the one every storage mart reads."
+      - name: last_ingested_at
+        description: "When the snapshot's last row landed in the lakehouse."
+      - name: ingest_lag_hours
+        description: "Hours from the snapshot being taken to its last row being ingested."
+      - name: hours_since_previous_snapshot
+        description: "Hours since the bucket's previous snapshot; > s3_inventory_max_snapshot_gap_hours means a missed delivery."
+      - name: bytes_change_pct
+        description: "Total bytes vs the previous snapshot, as a fraction (0.1 = +10%)."
+      - name: rows_missing_ingested_at
+        description: "Rows without ingested_at. Must be 0 (house standard); assert_s3_inventory_rows_have_ingested_at fails the build otherwise."
+      - name: unpriced_rows
+        description: "Rows whose storage class is missing from s3_storage_class_pricing -- their cost reads as NULL."
+      - name: health_status
+        description: "First failing check: missing_ingested_at | malformed_rows | late_ingest | delivery_gap | volume_shift | unpriced_storage | healthy."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [missing_ingested_at, malformed_rows, late_ingest, delivery_gap, volume_shift, unpriced_storage, healthy]
+      - name: built_at
+        description: "When dbt last rebuilt this table -- the freshness of the dbt side of the pipeline."

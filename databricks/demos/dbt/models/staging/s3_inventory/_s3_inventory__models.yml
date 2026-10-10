@@ -23,6 +23,10 @@ models:
         description: "S3 storage class (STANDARD when the field is missing)."
       - name: inventory_snapshot
         description: "The inventory delivery (`dt` partition, 'YYYY-MM-DD-HH-MM') the row came from."
+      - name: inventory_snapshot_at
+        description: "The snapshot's timestamp, parsed from `dt` (UTC)."
+      - name: ingested_at
+        description: "When the row landed in the lakehouse (stamped by the ingestion, UTC). Use for incremental loads and ingest-latency monitoring. NULL means the ingestion isn't stamping it -- which fails assert_s3_inventory_rows_have_ingested_at."
       - name: inventory_source
         description: "'sample' when built from the committed sample seed, 's3_inventory' for real data."
 

@@ -53,6 +53,13 @@ select
     -- sorts lexically, so max(dt) is the latest snapshot.
     {{ s3_inventory_column('dt', 'string', available_columns) }}                            as inventory_snapshot,
     to_date(substr({{ s3_inventory_column('dt', 'string', available_columns) }}, 1, 10))    as inventory_snapshot_date,
+    try_to_timestamp({{ s3_inventory_column('dt', 'string', available_columns) }}, 'yyyy-MM-dd-HH-mm') as inventory_snapshot_at,
+
+    -- when the row landed in the lakehouse (house standard on every raw table). The
+    -- ingestion stamps it -- see the README's "Point it at real inventory". A table
+    -- without it still builds, but assert_s3_inventory_rows_have_ingested_at fails
+    -- the run, and the pipeline-health views can't measure ingest latency.
+    {{ s3_inventory_column('ingested_at', 'timestamp', available_columns) }}               as ingested_at,
 
     '{{ "sample" if use_sample else "s3_inventory" }}' as inventory_source
 

@@ -23,6 +23,7 @@ rollup as (
         bucket,
         max(as_of_date)        as as_of_date,
         max(inventory_snapshot) as inventory_snapshot,
+        max(ingested_at)        as inventory_ingested_at,
         max(inventory_source)  as inventory_source,
         bool_or(is_table_bucket) as is_table_bucket,
 
@@ -59,6 +60,7 @@ select
     bucket,
     as_of_date,
     inventory_snapshot,
+    inventory_ingested_at,
     inventory_source,
     case
         when not has_version_fields   then 'unknown'

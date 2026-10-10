@@ -89,6 +89,13 @@ vars:
   s3_inventory_cold_days: "{{ env_var('DBT_S3_INVENTORY_COLD_DAYS', 90) }}"
   # noncurrent versions older than this are flagged for lifecycle expiration
   s3_inventory_noncurrent_retention_days: "{{ env_var('DBT_S3_INVENTORY_NONCURRENT_RETENTION_DAYS', 30) }}"
+  # pipeline health (s3_inventory_snapshot_health): a snapshot is unhealthy when it
+  # landed more than this many hours after it was taken...
+  s3_inventory_max_ingest_lag_hours: "{{ env_var('DBT_S3_INVENTORY_MAX_INGEST_LAG_HOURS', 24) }}"
+  # ...arrived more than this many hours after the bucket's previous snapshot (daily
+  # inventories + slack), or its bytes moved more than this share vs the previous one
+  s3_inventory_max_snapshot_gap_hours: "{{ env_var('DBT_S3_INVENTORY_MAX_SNAPSHOT_GAP_HOURS', 36) }}"
+  s3_inventory_max_volume_change: "{{ env_var('DBT_S3_INVENTORY_MAX_VOLUME_CHANGE', 0.5) }}"
 
 flags:
   use_managed_iceberg: true
@@ -211,6 +218,11 @@ models:
       # (Genie, AI/BI dashboards), so production grants read access on every run.
       +grants:
         select: "{{ ['account users'] if var('deployment_environment', env_var('DBT_DEPLOYMENT_ENVIRONMENT', 'development')) == 'production' else [] }}"
+      # S3 storage + inventory pipeline health. Unlike the system-table views above
+      # these read this project's own models (int_s3_inventory__*, storage marts),
+      # and they back the S3 Storage dashboard (resources/s3_storage.dashboard.yml).
+      storage:
+        +tags: [s3_inventory]
 
 seeds:
   rpw_dbt_databricks_reference:

@@ -162,6 +162,11 @@ modeled   int_s3_inventory__objects          latest snapshot per bucket, priced 
    ▼
 marts     s3_storage_by_bucket   s3_storage_by_versioning_status   s3_storage_by_table_path
           s3_storage_by_table_activity   s3_storage_savings_opportunities
+          s3_inventory_snapshot_health   (every snapshot: lag, gaps, volume, ingested_at)
+   ▼
+metric    s3_storage_metrics   s3_inventory_pipeline_health_metrics   (UC metric views)
+views        ▼
+          S3 Storage dashboard (resources/s3_storage.dashboard.yml) -- reads the metric views directly
 ```
 
 | Question | Mart |
@@ -171,6 +176,8 @@ marts     s3_storage_by_bucket   s3_storage_by_versioning_status   s3_storage_by
 | How big is each table, including unregistered Delta tables and untracked prefixes? | `s3_storage_by_table_path` |
 | How much storage sits under tables nobody reads or writes? | `s3_storage_by_table_activity` |
 | Where can we save, and how much? | `s3_storage_savings_opportunities` |
+| Anything else, sliced any way | `s3_storage_metrics` (metric view) |
+| Can I trust today's numbers? | `s3_inventory_pipeline_health_metrics` (metric view) / `s3_inventory_snapshot_health` |
 
 **Key modeling choices**
 - **Table attribution by longest prefix.** Each object's directory maps to the innermost
@@ -194,9 +201,48 @@ marts     s3_storage_by_bucket   s3_storage_by_versioning_status   s3_storage_by
   list storage prices. Edit it for your region or contract. Request, transition, and
   early-deletion charges are not modeled.
 
+**Metric views and the dashboard.** Two UC metric views put a governed semantic layer on
+top. Every dimension and measure has a display name, a comment that explains how to use it,
+synonyms ("size", "spend", "waste", "unused"), and a format (bytes, USD, %). That way Genie,
+an agent, or a person writing `MEASURE()` SQL can explore without reading the dbt code:
+
+```sql
+SELECT `Bucket`, `Table Activity`,
+       MEASURE(`Total Storage`), MEASURE(`Estimated Monthly Savings`)
+FROM <catalog>.<schema>.s3_storage_metrics
+GROUP BY ALL ORDER BY 4 DESC;
+```
+
+The **S3 Storage** AI/BI dashboard (`make s3-storage-dashboard` regenerates it from
+`scripts/build_s3_storage_dashboard.py`) has no SQL of its own. Every dataset is one of the
+metric views, so the dashboard, Genie, and ad-hoc queries can't disagree. Tabs: Overview,
+Versioning, Tables, Savings, Explore, and **Pipeline health**. Tests pin it down:
+`tests/test_s3_storage_dashboard.py` checks that every dashboard field exists in the views and
+that every field carries its metadata, and two dbt tests check that the views' totals match
+the marts per bucket.
+
+**Pipeline health.** `s3_inventory_snapshot_health` checks every retained snapshot, not
+just the latest. Each snapshot gets a `health_status` that names the first check it fails:
+
+- `missing_ingested_at`: rows without an ingest timestamp
+- `malformed_rows`: rows with no key or size
+- `late_ingest`: landed more than `DBT_S3_INVENTORY_MAX_INGEST_LAG_HOURS` (24) after the snapshot
+- `delivery_gap`: more than `DBT_S3_INVENTORY_MAX_SNAPSHOT_GAP_HOURS` (36) since the previous snapshot
+- `volume_shift`: bytes moved more than `DBT_S3_INVENTORY_MAX_VOLUME_CHANGE` (50%)
+- `unpriced_storage`: a storage class missing from the pricing seed
+
+The health metric view adds checks that depend on the clock: stale buckets, hours since the
+latest snapshot, since the last ingest, and since the last dbt build.
+
+**`ingested_at` on every raw row.** House standard: raw tables record when each row
+landed. The inventory ingestion below stamps it, staging carries it through, and
+`assert_s3_inventory_rows_have_ingested_at` fails the build if any row is missing it.
+Ingest lag (`ingested_at` minus the snapshot time) is the core health signal.
+
 **Zero config by default.** With `DBT_S3_INVENTORY_TABLE` unset, the pipeline builds from
-sample seeds: four buckets, one per versioning state, that cover every opportunity. Singular
-tests in `tests/s3_inventory/` assert the exact expected sizes, attribution, and savings.
+sample seeds: four buckets, one per versioning state, that cover every opportunity, plus
+older snapshots that trip each health check. Singular tests in `tests/s3_inventory/` assert
+the exact expected sizes, attribution, savings, and health statuses.
 That's what CI runs. A reconciliation test runs in every mode and checks that every byte
 lands in exactly one bucket row and one table row.
 
@@ -204,24 +250,40 @@ lands in exactly one bucket row and one table row.
 1. Turn on S3 Inventory for each bucket: daily, **Parquet**, **Include all versions**, and
    the size, last-modified, storage-class, Intelligent-Tiering-access-tier, and multipart
    fields.
-2. Register the reports as one table with the standard field names plus a `dt` column for
-   the snapshot. Each delivery is a full listing; staging keeps every snapshot, and the
-   modeled layer picks the latest per bucket. One way to do it, from the Hive-compatible
-   `hive/dt=.../symlink.txt` manifests:
+2. Land the reports in one table with the standard field names, plus a `dt` column for
+   the snapshot and an `ingested_at` timestamp. Each delivery is a full listing, so append
+   each new `dt` once. Staging keeps every snapshot, and the modeled layer picks the latest
+   per bucket. One way to do it, from the Hive-compatible `hive/dt=.../symlink.txt`
+   manifests. Run it daily, once per source bucket; it is idempotent:
    ```sql
-   CREATE OR REPLACE TABLE main.s3_inventory.inventory AS
+   -- first run creates the table; later runs append only snapshots not yet loaded
+   CREATE TABLE IF NOT EXISTS main.s3_inventory.inventory AS
+   SELECT *, CAST(NULL AS STRING) AS dt, CAST(NULL AS TIMESTAMP) AS ingested_at
+   FROM read_files('s3://<inventory-dest>/<source-bucket>/<config-id>/data/', format => 'parquet')
+   LIMIT 0;
+
+   INSERT INTO main.s3_inventory.inventory
    WITH symlinks AS (
      SELECT regexp_extract(_metadata.file_path, 'dt=([^/]+)/', 1) AS dt, value AS data_file
      FROM read_files('s3://<inventory-dest>/<source-bucket>/<config-id>/hive/', format => 'text')
    )
-   SELECT inv.*, symlinks.dt
+   SELECT inv.*, symlinks.dt, current_timestamp() AS ingested_at
    FROM read_files('s3://<inventory-dest>/<source-bucket>/<config-id>/data/', format => 'parquet') AS inv
-   JOIN symlinks ON inv._metadata.file_path = symlinks.data_file;
+   JOIN symlinks ON inv._metadata.file_path = symlinks.data_file
+   WHERE symlinks.dt NOT IN (
+     SELECT DISTINCT dt FROM main.s3_inventory.inventory WHERE bucket = '<source-bucket>'
+   );
+
+   -- bound history: the health mart scans every retained snapshot
+   DELETE FROM main.s3_inventory.inventory
+   WHERE dt < date_format(current_date() - INTERVAL 90 DAYS, 'yyyy-MM-dd');
    ```
 3. Set `DBT_S3_INVENTORY_CATALOG`, `DBT_S3_INVENTORY_SCHEMA`, and `DBT_S3_INVENTORY_TABLE`
    (see `template.env`), then run `uv run dbt build -s tag:s3_inventory`. CSV inventories
    also need `DBT_S3_INVENTORY_KEYS_URL_ENCODED=true`. Run as a principal that can see
    every table in the metastore. Tables it can't see show up as unregistered data.
+4. `make deploy` ships the S3 Storage dashboard with the rest of the bundle. It reads the
+   metric views in your dev schema (dev) or `metric_views` (prod, via `s3_storage_schema`).
 
 ---
 

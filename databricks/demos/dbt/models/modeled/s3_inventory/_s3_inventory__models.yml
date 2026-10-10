@@ -12,6 +12,8 @@ models:
             # version_id is NULL for current-version-only reports -> coalesce in the key
             combination_of_columns: [bucket, key, "coalesce(version_id, '<none>')"]
     columns:
+      - name: ingested_at
+        description: "When this inventory row landed in the lakehouse (from the raw inventory table)."
       - name: version_state
         description: "current | noncurrent | delete_marker"
         data_tests:
