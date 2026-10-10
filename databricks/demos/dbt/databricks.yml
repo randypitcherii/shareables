@@ -59,6 +59,14 @@ variables:
       per-user, account-wide usage through the owner's embedded credentials,
       so keep this narrow.
     default: admins
+  s3_storage_catalog:
+    description: Catalog holding the S3 storage metric views (the S3 Storage dashboard reads them).
+    default: ${var.production_catalog}
+  s3_storage_schema:
+    description: >-
+      Schema holding the S3 storage metric views. Production uses the metric_views
+      layer's +schema; dev overrides it to the developer's dbt sandbox schema.
+    default: metric_views
   ci_catalog:
     description: >-
       Unity Catalog catalog that holds the disposable per-PR CI schemas. Owned by
@@ -92,6 +100,7 @@ targets:
       production_artifact_schema: dbt_artifacts_${workspace.current_user.short_name}
       # dbt development builds land every model in one per-user schema
       ai_gateway_schema: dbt_${workspace.current_user.short_name}
+      s3_storage_schema: dbt_${workspace.current_user.short_name}
       ci_catalog: ${var.dev_catalog}
       # dev runs as the developer; short-circuit the SP lookups so dev deploys
       # don't require the service principals to exist.

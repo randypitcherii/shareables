@@ -1,0 +1,24 @@
+# The S3 Storage dashboard (models/metric_views/storage/, models/marts/storage/).
+#
+# Generated JSON: edit scripts/build_s3_storage_dashboard.py, not the file.
+# Every dataset IS a UC metric view (s3_storage_metrics,
+# s3_inventory_pipeline_health_metrics), referenced unqualified;
+# dataset_catalog / dataset_schema point them at this target's dbt output, so one
+# JSON serves dev and prod.
+#
+# NOT embedded credentials: viewers query the metric views as themselves, so UC
+# grants decide what they see (production grants SELECT on metric views to
+# `account users`, see dbt_project.yml). That makes CAN_READ for all workspace
+# users safe -- the dashboard grants no data access of its own.
+resources:
+  dashboards:
+    s3_storage:
+      display_name: S3 Storage
+      file_path: ../dashboards/s3_storage.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.s3_storage_catalog}
+      dataset_schema: ${var.s3_storage_schema}
+      embed_credentials: false
+      permissions:
+        - group_name: users
+          level: CAN_READ

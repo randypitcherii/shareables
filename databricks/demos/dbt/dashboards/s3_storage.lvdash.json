@@ -1,0 +1,2916 @@
+{
+  "datasets": [
+    {
+      "name": "storage",
+      "displayName": "S3 storage (metric view)",
+      "config": {
+        "version": "1.1",
+        "source": "s3_storage_metrics",
+        "fields": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "expr": "source.*"
+          }
+        ]
+      }
+    },
+    {
+      "name": "health",
+      "displayName": "Inventory pipeline health (metric view)",
+      "config": {
+        "version": "1.1",
+        "source": "s3_inventory_pipeline_health_metrics",
+        "fields": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "expr": "source.*"
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Overview",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "intro",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## S3 storage at a glance\nSize, monthly storage cost and estimated savings from each bucket's **latest S3 Inventory snapshot**. Costs are S3 storage **list prices** (the `s3_storage_class_pricing` seed), not invoiced spend. Every number comes from the `s3_storage_metrics` metric view. Query it directly or ask Genie for anything not shown here. Check **Pipeline health** before acting on a number."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_total",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Total storage",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_total_storage",
+                  "displayName": "Total storage"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_cost",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Monthly storage cost",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_monthly_storage_cost",
+                  "displayName": "Monthly storage cost"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_savings",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Est. monthly savings",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_estimated_monthly_savings",
+                  "displayName": "Est. monthly savings"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_noncurrent",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_noncurrent_share",
+                      "expression": "MEASURE(`Noncurrent Share`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Noncurrent share",
+                "showTitle": true,
+                "description": "Bytes kept only by bucket versioning",
+                "showDescription": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_noncurrent_share",
+                  "displayName": "Noncurrent share"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_buckets",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_buckets",
+                      "expression": "MEASURE(`Buckets`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Buckets",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_buckets",
+                  "displayName": "Buckets"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_tables",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_tables",
+                      "expression": "MEASURE(`Tables`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Tables",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_tables",
+                  "displayName": "Tables"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "b_bucket",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "version_state",
+                      "expression": "`Version State`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Storage by bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_total_storage",
+                  "displayName": "Total Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "version_state",
+                  "displayName": "Version State",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "b_cost_class",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "storage_class",
+                      "expression": "`Storage Class`"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Monthly cost by storage class",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_monthly_storage_cost",
+                  "displayName": "Monthly Storage Cost",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "storage_class",
+                  "displayName": "Storage Class",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t_buckets",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "versioning_status",
+                      "expression": "`Versioning Status`"
+                    },
+                    {
+                      "name": "is_table_bucket",
+                      "expression": "`Is Table Bucket`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "m_noncurrent_storage",
+                      "expression": "MEASURE(`Noncurrent Storage`)"
+                    },
+                    {
+                      "name": "m_current_objects",
+                      "expression": "MEASURE(`Current Objects`)"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Buckets",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "title": "Bucket"
+                  },
+                  {
+                    "fieldName": "versioning_status",
+                    "displayName": "Versioning Status",
+                    "title": "Versioning Status"
+                  },
+                  {
+                    "fieldName": "is_table_bucket",
+                    "displayName": "Is Table Bucket",
+                    "title": "Is Table Bucket"
+                  },
+                  {
+                    "fieldName": "m_total_storage",
+                    "displayName": "Total Storage",
+                    "title": "Total Storage"
+                  },
+                  {
+                    "fieldName": "m_noncurrent_storage",
+                    "displayName": "Noncurrent Storage",
+                    "title": "Noncurrent Storage"
+                  },
+                  {
+                    "fieldName": "m_current_objects",
+                    "displayName": "Current Objects",
+                    "title": "Current Objects"
+                  },
+                  {
+                    "fieldName": "m_monthly_storage_cost",
+                    "displayName": "Monthly Storage Cost",
+                    "title": "Monthly Storage Cost"
+                  },
+                  {
+                    "fieldName": "m_estimated_monthly_savings",
+                    "displayName": "Estimated Monthly Savings",
+                    "title": "Estimated Monthly Savings"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "versioning",
+      "displayName": "Versioning",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "v_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Versioning status is **inferred** from the inventory's version fields. `unknown` means the inventory lists current versions only; turn on *Include all versions* to classify it. On a versioned bucket, every object Delta VACUUM or OPTIMIZE deletes stays as a **noncurrent version** until a lifecycle rule expires it."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "v_noncurrent",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_noncurrent_storage",
+                      "expression": "MEASURE(`Noncurrent Storage`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Noncurrent storage",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_noncurrent_storage",
+                  "displayName": "Noncurrent storage"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "v_noncurrent_cost",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_noncurrent_monthly_cost",
+                      "expression": "MEASURE(`Noncurrent Monthly Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Noncurrent monthly cost",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_noncurrent_monthly_cost",
+                  "displayName": "Noncurrent monthly cost"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "v_markers",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_delete_markers",
+                      "expression": "MEASURE(`Delete Markers`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Delete markers",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_delete_markers",
+                  "displayName": "Delete markers"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "v_by_status",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "versioning_status",
+                      "expression": "`Versioning Status`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "version_state",
+                      "expression": "`Version State`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Storage by versioning status",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_total_storage",
+                  "displayName": "Total Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "versioning_status",
+                  "displayName": "Versioning Status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "version_state",
+                  "displayName": "Version State",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "v_share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_noncurrent_share",
+                      "expression": "MEASURE(`Noncurrent Share`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Noncurrent share by bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_noncurrent_share",
+                  "displayName": "Noncurrent Share",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "v_buckets",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "versioning_status",
+                      "expression": "`Versioning Status`"
+                    },
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_current_storage",
+                      "expression": "MEASURE(`Current Storage`)"
+                    },
+                    {
+                      "name": "m_noncurrent_storage",
+                      "expression": "MEASURE(`Noncurrent Storage`)"
+                    },
+                    {
+                      "name": "m_noncurrent_share",
+                      "expression": "MEASURE(`Noncurrent Share`)"
+                    },
+                    {
+                      "name": "m_delete_markers",
+                      "expression": "MEASURE(`Delete Markers`)"
+                    },
+                    {
+                      "name": "m_noncurrent_monthly_cost",
+                      "expression": "MEASURE(`Noncurrent Monthly Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Buckets by versioning status",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "versioning_status",
+                    "displayName": "Versioning Status",
+                    "title": "Versioning Status"
+                  },
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "title": "Bucket"
+                  },
+                  {
+                    "fieldName": "m_current_storage",
+                    "displayName": "Current Storage",
+                    "title": "Current Storage"
+                  },
+                  {
+                    "fieldName": "m_noncurrent_storage",
+                    "displayName": "Noncurrent Storage",
+                    "title": "Noncurrent Storage"
+                  },
+                  {
+                    "fieldName": "m_noncurrent_share",
+                    "displayName": "Noncurrent Share",
+                    "title": "Noncurrent Share"
+                  },
+                  {
+                    "fieldName": "m_delete_markers",
+                    "displayName": "Delete Markers",
+                    "title": "Delete Markers"
+                  },
+                  {
+                    "fieldName": "m_noncurrent_monthly_cost",
+                    "displayName": "Noncurrent Monthly Cost",
+                    "title": "Noncurrent Monthly Cost"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "tables",
+      "displayName": "Tables",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "f_t_bucket",
+            "queries": [
+              {
+                "name": "filter_f_t_bucket",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "queryName": "filter_f_t_bucket"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_t_owner",
+            "queries": [
+              {
+                "name": "filter_f_t_owner",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "path_source",
+                      "expression": "`Path Source`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Ownership",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "path_source",
+                    "displayName": "Ownership",
+                    "queryName": "filter_f_t_owner"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_t_activity",
+            "queries": [
+              {
+                "name": "filter_f_t_activity",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "table_activity",
+                      "expression": "`Table Activity`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Table activity",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "table_activity",
+                    "displayName": "Table activity",
+                    "queryName": "filter_f_t_activity"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "t_activity",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "table_activity",
+                      "expression": "`Table Activity`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "path_source",
+                      "expression": "`Path Source`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Storage by table activity",
+                "showTitle": true,
+                "description": "inactive = no read or write in table lineage within the activity window",
+                "showDescription": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_total_storage",
+                  "displayName": "Total Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "table_activity",
+                  "displayName": "Table Activity",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "path_source",
+                  "displayName": "Path Source",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t_owner",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "path_source",
+                      "expression": "`Path Source`"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Monthly cost by ownership",
+                "showTitle": true,
+                "description": "unity_catalog = a UC table owns it; inferred_delta_log = an unregistered Delta table; untracked = no table",
+                "showDescription": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_monthly_storage_cost",
+                  "displayName": "Monthly Storage Cost",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "path_source",
+                  "displayName": "Path Source",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 1,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t_paths",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "table_path",
+                      "expression": "`Table Path`"
+                    },
+                    {
+                      "name": "table_name",
+                      "expression": "`Table Name`"
+                    },
+                    {
+                      "name": "path_source",
+                      "expression": "`Path Source`"
+                    },
+                    {
+                      "name": "table_activity",
+                      "expression": "`Table Activity`"
+                    },
+                    {
+                      "name": "m_current_storage",
+                      "expression": "MEASURE(`Current Storage`)"
+                    },
+                    {
+                      "name": "m_noncurrent_storage",
+                      "expression": "MEASURE(`Noncurrent Storage`)"
+                    },
+                    {
+                      "name": "m_current_objects",
+                      "expression": "MEASURE(`Current Objects`)"
+                    },
+                    {
+                      "name": "m_average_object_size",
+                      "expression": "MEASURE(`Average Object Size`)"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Storage by table path",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "table_path",
+                    "displayName": "Table Path",
+                    "title": "Table Path"
+                  },
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "Table Name",
+                    "title": "Table Name"
+                  },
+                  {
+                    "fieldName": "path_source",
+                    "displayName": "Path Source",
+                    "title": "Path Source"
+                  },
+                  {
+                    "fieldName": "table_activity",
+                    "displayName": "Table Activity",
+                    "title": "Table Activity"
+                  },
+                  {
+                    "fieldName": "m_current_storage",
+                    "displayName": "Current Storage",
+                    "title": "Current Storage"
+                  },
+                  {
+                    "fieldName": "m_noncurrent_storage",
+                    "displayName": "Noncurrent Storage",
+                    "title": "Noncurrent Storage"
+                  },
+                  {
+                    "fieldName": "m_current_objects",
+                    "displayName": "Current Objects",
+                    "title": "Current Objects"
+                  },
+                  {
+                    "fieldName": "m_average_object_size",
+                    "displayName": "Average Object Size",
+                    "title": "Average Object Size"
+                  },
+                  {
+                    "fieldName": "m_monthly_storage_cost",
+                    "displayName": "Monthly Storage Cost",
+                    "title": "Monthly Storage Cost"
+                  },
+                  {
+                    "fieldName": "m_estimated_monthly_savings",
+                    "displayName": "Estimated Monthly Savings",
+                    "title": "Estimated Monthly Savings"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "savings",
+      "displayName": "Savings",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "s_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Each byte counts toward **at most one** opportunity, so savings add up across rows. Estimates cover storage list price only; they exclude request, transition and early-deletion charges."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "s_monthly",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Est. monthly savings",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_estimated_monthly_savings",
+                  "displayName": "Est. monthly savings"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_annual",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_estimated_annual_savings",
+                      "expression": "MEASURE(`Estimated Annual Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Est. annual savings",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_estimated_annual_savings",
+                  "displayName": "Est. annual savings"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_savings_share",
+                      "expression": "MEASURE(`Savings Share`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Savings share of cost",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_savings_share",
+                  "displayName": "Savings share of cost"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_by_opp",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "savings_opportunity",
+                      "expression": "`Savings Opportunity`"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Est. monthly savings by opportunity",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_estimated_monthly_savings",
+                  "displayName": "Estimated Monthly Savings",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "savings_opportunity",
+                  "displayName": "Savings Opportunity",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "s_by_bucket",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    },
+                    {
+                      "name": "savings_opportunity",
+                      "expression": "`Savings Opportunity`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Est. monthly savings by bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_estimated_monthly_savings",
+                  "displayName": "Estimated Monthly Savings",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "savings_opportunity",
+                  "displayName": "Savings Opportunity",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 4,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "f_s_opp",
+            "queries": [
+              {
+                "name": "filter_f_s_opp",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "savings_opportunity",
+                      "expression": "`Savings Opportunity`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Opportunity",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "savings_opportunity",
+                    "displayName": "Opportunity",
+                    "queryName": "filter_f_s_opp"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_s_bucket",
+            "queries": [
+              {
+                "name": "filter_f_s_bucket",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "queryName": "filter_f_s_bucket"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 10,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "s_detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "savings_opportunity",
+                      "expression": "`Savings Opportunity`"
+                    },
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "table_path",
+                      "expression": "`Table Path`"
+                    },
+                    {
+                      "name": "table_name",
+                      "expression": "`Table Name`"
+                    },
+                    {
+                      "name": "m_storage_with_savings",
+                      "expression": "MEASURE(`Storage With Savings`)"
+                    },
+                    {
+                      "name": "m_object_versions",
+                      "expression": "MEASURE(`Object Versions`)"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    },
+                    {
+                      "name": "m_estimated_annual_savings",
+                      "expression": "MEASURE(`Estimated Annual Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Where to act (filter Opportunity above; \"none\" = nothing to do)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "savings_opportunity",
+                    "displayName": "Savings Opportunity",
+                    "title": "Savings Opportunity"
+                  },
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "title": "Bucket"
+                  },
+                  {
+                    "fieldName": "table_path",
+                    "displayName": "Table Path",
+                    "title": "Table Path"
+                  },
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "Table Name",
+                    "title": "Table Name"
+                  },
+                  {
+                    "fieldName": "m_storage_with_savings",
+                    "displayName": "Storage With Savings",
+                    "title": "Storage With Savings"
+                  },
+                  {
+                    "fieldName": "m_object_versions",
+                    "displayName": "Object Versions",
+                    "title": "Object Versions"
+                  },
+                  {
+                    "fieldName": "m_monthly_storage_cost",
+                    "displayName": "Monthly Storage Cost",
+                    "title": "Monthly Storage Cost"
+                  },
+                  {
+                    "fieldName": "m_estimated_monthly_savings",
+                    "displayName": "Estimated Monthly Savings",
+                    "title": "Estimated Monthly Savings"
+                  },
+                  {
+                    "fieldName": "m_estimated_annual_savings",
+                    "displayName": "Estimated Annual Savings",
+                    "title": "Estimated Annual Savings"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 9
+          }
+        }
+      ]
+    },
+    {
+      "name": "explore",
+      "displayName": "Explore",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "e_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Slice by any dimension in `s3_storage_metrics`: top-level prefix, storage class, object age, or object size."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_e_bucket",
+            "queries": [
+              {
+                "name": "filter_f_e_bucket",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "queryName": "filter_f_e_bucket"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_e_class",
+            "queries": [
+              {
+                "name": "filter_f_e_class",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "storage_class",
+                      "expression": "`Storage Class`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Storage class",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "storage_class",
+                    "displayName": "Storage class",
+                    "queryName": "filter_f_e_class"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_e_kind",
+            "queries": [
+              {
+                "name": "filter_f_e_kind",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "object_kind",
+                      "expression": "`Object Kind`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Object kind",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "object_kind",
+                    "displayName": "Object kind",
+                    "queryName": "filter_f_e_kind"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "e_age",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "object_age_band",
+                      "expression": "`Object Age Band`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "storage_class",
+                      "expression": "`Storage Class`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Storage by object age",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "object_age_band",
+                  "displayName": "Object Age Band",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "m_total_storage",
+                  "displayName": "Total Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "storage_class",
+                  "displayName": "Storage Class",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "e_size",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "size_band",
+                      "expression": "`Size Band`"
+                    },
+                    {
+                      "name": "m_current_objects",
+                      "expression": "MEASURE(`Current Objects`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Objects by size band",
+                "showTitle": true,
+                "description": "Many objects under 128 KB means small files: slow scans and minimum-size billing",
+                "showDescription": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "size_band",
+                  "displayName": "Size Band",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "m_current_objects",
+                  "displayName": "Current Objects",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "e_prefix",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "top_level_prefix",
+                      "expression": "`Top-Level Prefix`"
+                    },
+                    {
+                      "name": "m_total_storage",
+                      "expression": "MEASURE(`Total Storage`)"
+                    },
+                    {
+                      "name": "m_current_objects",
+                      "expression": "MEASURE(`Current Objects`)"
+                    },
+                    {
+                      "name": "m_small_objects",
+                      "expression": "MEASURE(`Small Objects`)"
+                    },
+                    {
+                      "name": "m_average_object_size",
+                      "expression": "MEASURE(`Average Object Size`)"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    },
+                    {
+                      "name": "m_estimated_monthly_savings",
+                      "expression": "MEASURE(`Estimated Monthly Savings`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Top-level prefixes",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "title": "Bucket"
+                  },
+                  {
+                    "fieldName": "top_level_prefix",
+                    "displayName": "Top-Level Prefix",
+                    "title": "Top-Level Prefix"
+                  },
+                  {
+                    "fieldName": "m_total_storage",
+                    "displayName": "Total Storage",
+                    "title": "Total Storage"
+                  },
+                  {
+                    "fieldName": "m_current_objects",
+                    "displayName": "Current Objects",
+                    "title": "Current Objects"
+                  },
+                  {
+                    "fieldName": "m_small_objects",
+                    "displayName": "Small Objects",
+                    "title": "Small Objects"
+                  },
+                  {
+                    "fieldName": "m_average_object_size",
+                    "displayName": "Average Object Size",
+                    "title": "Average Object Size"
+                  },
+                  {
+                    "fieldName": "m_monthly_storage_cost",
+                    "displayName": "Monthly Storage Cost",
+                    "title": "Monthly Storage Cost"
+                  },
+                  {
+                    "fieldName": "m_estimated_monthly_savings",
+                    "displayName": "Estimated Monthly Savings",
+                    "title": "Estimated Monthly Savings"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "health",
+      "displayName": "Pipeline health",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "h_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Is the inventory feed healthy?\nFrom the `s3_inventory_pipeline_health_metrics` metric view, with one row per bucket per inventory snapshot. **Stale buckets** and the *hours since* tiles use the current clock. Everything else is checked per snapshot. Health status shows the first failing check: `missing_ingested_at`, `malformed_rows`, `late_ingest`, `delivery_gap`, `volume_shift`, `unpriced_storage`. Sample data (`inventory_source = sample`) is always stale."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "h_stale",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_stale_buckets",
+                      "expression": "MEASURE(`Stale Buckets`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Stale buckets",
+                "showTitle": true,
+                "description": "Latest snapshot older than the gap threshold",
+                "showDescription": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_stale_buckets",
+                  "displayName": "Stale buckets"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_unhealthy",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_unhealthy_snapshots",
+                      "expression": "MEASURE(`Unhealthy Snapshots`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Unhealthy snapshots",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_unhealthy_snapshots",
+                  "displayName": "Unhealthy snapshots"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_since_snap",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_hours_since_latest_snapshot",
+                      "expression": "MEASURE(`Hours Since Latest Snapshot`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Hours since latest snapshot",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_hours_since_latest_snapshot",
+                  "displayName": "Hours since latest snapshot"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_since_ingest",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_hours_since_last_ingest",
+                      "expression": "MEASURE(`Hours Since Last Ingest`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Hours since last ingest",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_hours_since_last_ingest",
+                  "displayName": "Hours since last ingest"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_since_build",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_hours_since_dbt_build",
+                      "expression": "MEASURE(`Hours Since dbt Build`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Hours since dbt build",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_hours_since_dbt_build",
+                  "displayName": "Hours since dbt build"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_missing",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "m_rows_missing_ingested_at",
+                      "expression": "MEASURE(`Rows Missing ingested_at`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Rows missing ingested_at",
+                "showTitle": true,
+                "description": "Must be 0: the build fails otherwise",
+                "showDescription": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_rows_missing_ingested_at",
+                  "displayName": "Rows missing ingested_at"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "h_status",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_snapshots",
+                      "expression": "MEASURE(`Snapshots`)"
+                    },
+                    {
+                      "name": "health_status",
+                      "expression": "`Health Status`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Snapshots by health status",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_snapshots",
+                  "displayName": "Snapshots",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "health_status",
+                  "displayName": "Health Status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "h_lag",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "m_max_ingest_lag_hours",
+                      "expression": "MEASURE(`Max Ingest Lag Hours`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Max ingest lag by bucket (hours)",
+                "showTitle": true,
+                "description": "Snapshot taken to row ingested (ingested_at)",
+                "showDescription": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_max_ingest_lag_hours",
+                  "displayName": "Max Ingest Lag Hours",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "h_rows",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "snapshot_date",
+                      "expression": "`Snapshot Date`"
+                    },
+                    {
+                      "name": "m_rows_ingested",
+                      "expression": "MEASURE(`Rows Ingested`)"
+                    },
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "frame": {
+                "title": "Rows ingested per snapshot",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "snapshot_date",
+                  "displayName": "Snapshot Date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "m_rows_ingested",
+                  "displayName": "Rows Ingested",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "h_bytes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "snapshot_date",
+                      "expression": "`Snapshot Date`"
+                    },
+                    {
+                      "name": "m_inventoried_storage",
+                      "expression": "MEASURE(`Inventoried Storage`)"
+                    },
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "frame": {
+                "title": "Inventoried storage per snapshot",
+                "showTitle": true,
+                "description": "Sudden swings trip the volume_shift check",
+                "showDescription": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "snapshot_date",
+                  "displayName": "Snapshot Date",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "m_inventoried_storage",
+                  "displayName": "Inventoried Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "bucket",
+                  "displayName": "Bucket",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 11,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "f_h_bucket",
+            "queries": [
+              {
+                "name": "filter_f_h_bucket",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Bucket",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "queryName": "filter_f_h_bucket"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_h_status",
+            "queries": [
+              {
+                "name": "filter_f_h_status",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "health_status",
+                      "expression": "`Health Status`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Health status",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "health_status",
+                    "displayName": "Health status",
+                    "queryName": "filter_f_h_status"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 17,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_h_latest",
+            "queries": [
+              {
+                "name": "filter_f_h_latest",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "is_latest_snapshot",
+                      "expression": "`Is Latest Snapshot`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Latest snapshot only",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "is_latest_snapshot",
+                    "displayName": "Latest snapshot only",
+                    "queryName": "filter_f_h_latest"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 17,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "h_detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "health",
+                  "fields": [
+                    {
+                      "name": "bucket",
+                      "expression": "`Bucket`"
+                    },
+                    {
+                      "name": "snapshot",
+                      "expression": "`Snapshot`"
+                    },
+                    {
+                      "name": "health_status",
+                      "expression": "`Health Status`"
+                    },
+                    {
+                      "name": "m_rows_ingested",
+                      "expression": "MEASURE(`Rows Ingested`)"
+                    },
+                    {
+                      "name": "m_inventoried_storage",
+                      "expression": "MEASURE(`Inventoried Storage`)"
+                    },
+                    {
+                      "name": "m_max_ingest_lag_hours",
+                      "expression": "MEASURE(`Max Ingest Lag Hours`)"
+                    },
+                    {
+                      "name": "m_max_snapshot_gap_hours",
+                      "expression": "MEASURE(`Max Snapshot Gap Hours`)"
+                    },
+                    {
+                      "name": "m_max_volume_change",
+                      "expression": "MEASURE(`Max Volume Change`)"
+                    },
+                    {
+                      "name": "m_rows_missing_ingested_at",
+                      "expression": "MEASURE(`Rows Missing ingested_at`)"
+                    },
+                    {
+                      "name": "m_unpriced_rows",
+                      "expression": "MEASURE(`Unpriced Rows`)"
+                    },
+                    {
+                      "name": "m_last_ingested_at",
+                      "expression": "MEASURE(`Last Ingested At`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Snapshot checks",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "bucket",
+                    "displayName": "Bucket",
+                    "title": "Bucket"
+                  },
+                  {
+                    "fieldName": "snapshot",
+                    "displayName": "Snapshot",
+                    "title": "Snapshot"
+                  },
+                  {
+                    "fieldName": "health_status",
+                    "displayName": "Health Status",
+                    "title": "Health Status"
+                  },
+                  {
+                    "fieldName": "m_rows_ingested",
+                    "displayName": "Rows Ingested",
+                    "title": "Rows Ingested"
+                  },
+                  {
+                    "fieldName": "m_inventoried_storage",
+                    "displayName": "Inventoried Storage",
+                    "title": "Inventoried Storage"
+                  },
+                  {
+                    "fieldName": "m_max_ingest_lag_hours",
+                    "displayName": "Max Ingest Lag Hours",
+                    "title": "Max Ingest Lag Hours"
+                  },
+                  {
+                    "fieldName": "m_max_snapshot_gap_hours",
+                    "displayName": "Max Snapshot Gap Hours",
+                    "title": "Max Snapshot Gap Hours"
+                  },
+                  {
+                    "fieldName": "m_max_volume_change",
+                    "displayName": "Max Volume Change",
+                    "title": "Max Volume Change"
+                  },
+                  {
+                    "fieldName": "m_rows_missing_ingested_at",
+                    "displayName": "Rows Missing ingested_at",
+                    "title": "Rows Missing ingested_at"
+                  },
+                  {
+                    "fieldName": "m_unpriced_rows",
+                    "displayName": "Unpriced Rows",
+                    "title": "Unpriced Rows"
+                  },
+                  {
+                    "fieldName": "m_last_ingested_at",
+                    "displayName": "Last Ingested At",
+                    "title": "Last Ingested At"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 6,
+            "height": 9
+          }
+        }
+      ]
+    }
+  ]
+}

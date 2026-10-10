@@ -1,0 +1,153 @@
+version: 2
+
+# S3 storage analytics from S3 Inventory. Every cost is S3 STORAGE list price per
+# month from seeds/s3_inventory/s3_storage_class_pricing.csv -- not invoiced spend.
+models:
+  - name: s3_storage_by_bucket
+    description: "Size, inferred versioning status, cost, and savings headroom per bucket as of its latest inventory snapshot. Grain: one row per bucket."
+    data_tests:
+      # you cannot save more than you spend
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          arguments:
+            column_A: monthly_cost_usd
+            column_B: estimated_monthly_savings_usd
+            or_equal: true
+    columns:
+      - name: bucket
+        data_tests:
+          - not_null
+          - unique
+      - name: inventory_ingested_at
+        description: "When the bucket's latest snapshot landed in the lakehouse (max ingested_at)."
+      - name: versioning_status
+        description: "Inferred from inventory version fields: enabled | suspended | disabled | unknown (report lists current versions only)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['enabled', 'suspended', 'disabled', 'unknown']
+      - name: versioning_enabled
+        description: "True only when versioning_status = 'enabled'; NULL when unknown."
+      - name: is_table_bucket
+        description: "Bucket hosts at least one Unity Catalog table."
+      - name: noncurrent_bytes
+        description: "Bytes held by noncurrent versions -- billed, invisible to every table and listing."
+      - name: total_bytes
+        description: "current_bytes + noncurrent_bytes (delete markers are zero bytes)."
+      - name: monthly_cost_usd
+        description: "Storage list price per month (USD)."
+      - name: estimated_monthly_savings_usd
+        description: "Sum of every savings opportunity in the bucket (see s3_storage_savings_opportunities)."
+
+  - name: s3_storage_by_versioning_status
+    description: "Buckets grouped by inferred versioning status, with current vs noncurrent bytes and cost. Grain: one row per versioning_status."
+    columns:
+      - name: versioning_status
+        data_tests:
+          - not_null
+          - unique
+      - name: buckets
+        description: "Sorted list of the buckets in this status."
+
+  - name: s3_storage_by_table_path
+    description: "Storage per table root (UC tables + unregistered Delta tables) plus one '(untracked)' row per bucket. Grain: one row per bucket + table_path."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, table_path]
+    columns:
+      - name: table_path
+        description: "Normalized s3:// table root, or '(untracked)' for bytes no table owns."
+        data_tests:
+          - not_null
+      - name: path_source
+        description: "unity_catalog | inferred_delta_log | untracked"
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['unity_catalog', 'inferred_delta_log', 'untracked']
+      - name: activity_status
+        description: "active | inactive | n/a (untracked)."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['active', 'inactive', 'n/a']
+      - name: delta_log_bytes
+        description: "Current bytes under `_delta_log/` -- large values relative to data point at missing checkpoints / log retention."
+      - name: noncurrent_bytes
+        description: "Noncurrent-version bytes under this table: on versioned buckets, what VACUUM 'deleted' but S3 still bills."
+
+  - name: s3_storage_by_table_activity
+    description: "Storage by owner type and activity. Grain: one row per bucket + path_source + activity_status."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, path_source, activity_status]
+
+  - name: s3_storage_savings_opportunities
+    description: "Ranked storage savings opportunities with a recommended action. Each byte counts toward at most one opportunity, so savings add up. Grain: one row per bucket + opportunity + table_path."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, opportunity, table_path]
+    columns:
+      - name: opportunity
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - expire_noncurrent_versions
+                  - remove_expired_delete_markers
+                  - archive_or_drop_inactive_tables
+                  - review_unregistered_data
+                  - fix_small_objects_in_min_size_classes
+                  - tier_cold_standard_data
+      - name: recommended_action
+        data_tests:
+          - not_null
+      - name: estimated_monthly_savings_usd
+        description: "Monthly storage list-price saving (USD). Removal-type opportunities save the full cost; tiering / small-object fixes save the price gap."
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+
+  - name: s3_inventory_snapshot_health
+    description: >
+      Pipeline health of the S3 Inventory feed across ALL retained snapshots: row and
+      byte counts, ingest lag, delivery gaps, volume swings, missing ingested_at and
+      unpriced rows, plus the first failing check as health_status. Grain: one row
+      per bucket + inventory_snapshot. Backs s3_inventory_pipeline_health_metrics.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, inventory_snapshot]
+    columns:
+      - name: inventory_snapshot
+        description: "The inventory delivery (`dt`, 'YYYY-MM-DD-HH-MM')."
+        data_tests:
+          - not_null
+      - name: is_latest_snapshot
+        description: "The bucket's newest snapshot -- the one every storage mart reads."
+      - name: last_ingested_at
+        description: "When the snapshot's last row landed in the lakehouse."
+      - name: ingest_lag_hours
+        description: "Hours from the snapshot being taken to its last row being ingested."
+      - name: hours_since_previous_snapshot
+        description: "Hours since the bucket's previous snapshot; > s3_inventory_max_snapshot_gap_hours means a missed delivery."
+      - name: bytes_change_pct
+        description: "Total bytes vs the previous snapshot, as a fraction (0.1 = +10%)."
+      - name: rows_missing_ingested_at
+        description: "Rows without ingested_at. Must be 0 (house standard); assert_s3_inventory_rows_have_ingested_at fails the build otherwise."
+      - name: unpriced_rows
+        description: "Rows whose storage class is missing from s3_storage_class_pricing -- their cost reads as NULL."
+      - name: health_status
+        description: "First failing check: missing_ingested_at | malformed_rows | late_ingest | delivery_gap | volume_shift | unpriced_storage | healthy."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [missing_ingested_at, malformed_rows, late_ingest, delivery_gap, volume_shift, unpriced_storage, healthy]
+      - name: built_at
+        description: "When dbt last rebuilt this table -- the freshness of the dbt side of the pipeline."

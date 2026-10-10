@@ -27,7 +27,7 @@ DEPLOY_DATE := $(shell date +%Y-%m-%d)
 DEV_CATALOG := $(or $(DBT_DEFAULT_CATALOG),$(shell sed -n 's/^DBT_DEFAULT_CATALOG=//p' .env 2>/dev/null | tail -1),rpw_dev)
 GIT_SHA := $(shell git rev-parse HEAD)
 
-.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint ai-gateway ai-gateway-eval ai-gateway-dashboard deploy deploy-dev deploy-prod deploy-prod-local
+.PHONY: venv deps build run test pytest patterns patterns-seeds ai-ml-inference ai-ml-inference-endpoint ai-gateway ai-gateway-eval ai-gateway-dashboard s3-storage s3-storage-dashboard deploy deploy-dev deploy-prod deploy-prod-local
 
 # ---- uv venv management ----------------------------------------------------
 
@@ -117,6 +117,16 @@ ai-gateway-eval: deps
 # regenerate the dashboard JSON from scripts/build_ai_gateway_dashboard.py
 ai-gateway-dashboard:
 	uv run --no-project python scripts/build_ai_gateway_dashboard.py
+
+# ---- S3 storage analytics (README: "S3 storage analytics") ------------------
+
+# build + test the S3 Inventory pipeline, metric views included, into your dev schema
+s3-storage: deps
+	uv run dbt build -s tag:s3_inventory
+
+# regenerate the dashboard JSON from scripts/build_s3_storage_dashboard.py
+s3-storage-dashboard:
+	uv run --no-project python scripts/build_s3_storage_dashboard.py
 
 # ---- DABs deploys -----------------------------------------------------------
 

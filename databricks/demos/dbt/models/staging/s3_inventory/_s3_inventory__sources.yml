@@ -1,0 +1,27 @@
+version: 2
+
+# The raw AWS S3 Inventory table. Only used when DBT_S3_INVENTORY_TABLE is set;
+# otherwise the pipeline builds from seeds/s3_inventory/ sample data and this source
+# is disabled (so docs generation / freshness never probe a table that isn't there).
+#
+# Expected shape: the Parquet / ORC / CSV inventory files registered as one table
+# with the standard S3 Inventory field names (bucket, key, version_id, is_latest,
+# is_delete_marker, size, last_modified_date, storage_class, ...) plus the `dt`
+# snapshot partition from the inventory's Hive-compatible `hive/dt=.../` layout.
+# Every daily delivery is a FULL listing, so the table holds many snapshots; staging
+# keeps them all and modeled/s3_inventory picks the latest per bucket. See the
+# README section "S3 storage analytics" for setup.
+sources:
+  - name: s3_inventory
+    database: "{{ env_var('DBT_S3_INVENTORY_CATALOG', 'main') }}"
+    schema: "{{ env_var('DBT_S3_INVENTORY_SCHEMA', 's3_inventory') }}"
+    config:
+      enabled: "{{ env_var('DBT_S3_INVENTORY_TABLE', '') | trim != '' }}"
+    tables:
+      - name: inventory
+        identifier: "{{ env_var('DBT_S3_INVENTORY_TABLE', 'inventory') }}"
+        description: >
+          AWS S3 Inventory report rows: one row per object VERSION per bucket per
+          inventory snapshot (`dt`). Configure the inventory with "Include all
+          versions" so noncurrent versions, delete markers, and bucket versioning
+          status are visible.

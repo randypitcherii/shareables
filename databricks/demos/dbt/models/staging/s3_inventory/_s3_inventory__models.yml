@@ -1,0 +1,51 @@
+version: 2
+
+# Thin typed views. Real inventories hold every daily snapshot (billions of rows), so
+# -- like system_billing staging -- data tests live downstream on the latest-snapshot
+# models, not here.
+models:
+  - name: stg_s3_inventory__objects
+    description: >
+      Typed view over the S3 Inventory (or the sample seed when DBT_S3_INVENTORY_TABLE
+      is unset): one row per object version per bucket per inventory snapshot.
+    columns:
+      - name: key
+        description: "Object key. URL-decoded when DBT_S3_INVENTORY_KEYS_URL_ENCODED=true (CSV inventories)."
+      - name: version_id
+        description: "S3 version id. Objects written while versioning was off or suspended have a null version id (NULL, '' or the string 'null' depending on report format); also NULL throughout current-version-only reports."
+      - name: is_latest
+        description: "True for the current version of a key. NULL for current-version-only reports."
+      - name: is_delete_marker
+        description: "True when this version is a delete marker (zero bytes, but it hides the key)."
+      - name: size_bytes
+        description: "Object size in bytes."
+      - name: storage_class
+        description: "S3 storage class (STANDARD when the field is missing)."
+      - name: inventory_snapshot
+        description: "The inventory delivery (`dt` partition, 'YYYY-MM-DD-HH-MM') the row came from."
+      - name: inventory_snapshot_at
+        description: "The snapshot's timestamp, parsed from `dt` (UTC)."
+      - name: ingested_at
+        description: "When the row landed in the lakehouse (stamped by the ingestion, UTC). Use for incremental loads and ingest-latency monitoring. NULL means the ingestion isn't stamping it -- which fails assert_s3_inventory_rows_have_ingested_at."
+      - name: inventory_source
+        description: "'sample' when built from the committed sample seed, 's3_inventory' for real data."
+
+  - name: stg_s3_inventory__uc_tables
+    description: >
+      Unity Catalog tables stored on S3 (system.information_schema.tables, or the
+      sample seed), with `table_uri` normalized for prefix matching.
+    columns:
+      - name: table_full_name
+        description: "catalog.schema.table"
+      - name: table_uri
+        description: "storage_path with s3a:// / s3n:// rewritten to s3:// and trailing slashes removed."
+
+  - name: stg_s3_inventory__table_access_events
+    description: >
+      Table lineage unpivoted to one row per read (source side) or write (target
+      side), by table name and/or path. Real mode scans only the activity window.
+    columns:
+      - name: access_type
+        description: "read | write"
+      - name: path_uri
+        description: "Normalized s3:// path for direct path access; NULL otherwise."

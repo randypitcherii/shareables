@@ -1,0 +1,18 @@
+version: 2
+
+# Descriptions mirror each view's UC `comment:`. The dashboard contract test
+# (tests/test_s3_storage_dashboard.py) checks every field the S3 Storage dashboard
+# uses exists in these views.
+models:
+  - name: s3_storage_metrics
+    description: >
+      S3 storage semantic layer: object-version grain from each bucket's latest
+      inventory snapshot, with bucket / table / prefix / ownership / activity /
+      storage-class / savings-opportunity dimensions and size, cost and savings
+      measures. Every field has a display name, comment and synonyms for Genie and
+      agents. Backs the S3 Storage dashboard.
+  - name: s3_inventory_pipeline_health_metrics
+    description: >
+      Health of the S3 Inventory pipeline at bucket x snapshot grain: freshness,
+      ingest lag, delivery gaps, volume swings, missing ingested_at, unpriced rows,
+      and dbt build recency. Backs the dashboard's Pipeline health tab.

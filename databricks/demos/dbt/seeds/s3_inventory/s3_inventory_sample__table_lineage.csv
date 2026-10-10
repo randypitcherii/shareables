@@ -1,0 +1,5 @@
+event_time,source_table_full_name,source_path,target_table_full_name,target_path
+2026-01-14 10:00:00,main.sales.orders,,,
+2026-01-10 08:00:00,,,main.sales.orders_v2,
+2025-06-01 12:00:00,main.sales.legacy_orders,,,
+2025-08-01 09:00:00,,s3://acme-lakehouse-prod/scratch/tmp_join,,

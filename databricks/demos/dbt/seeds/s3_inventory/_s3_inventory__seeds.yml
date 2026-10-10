@@ -1,0 +1,84 @@
+version: 2
+
+# Column types are pinned so the sample seeds match the real sources they stand in
+# for (S3 Inventory Parquet field names; system.information_schema.tables;
+# system.access.table_lineage) and empty CSV cells load as typed NULLs.
+seeds:
+  - name: s3_storage_class_pricing
+    description: >
+      ASSUMPTION TABLE: S3 storage list prices per storage class / Intelligent-Tiering
+      access tier, USD per GB-month (us-east-1 public list price, first-50-TB tier).
+      Edit it for your region, volume tier, or negotiated rates -- every cost and
+      savings figure in the storage marts is priced from this seed. Request,
+      retrieval, and transfer charges are out of scope.
+    config:
+      column_types:
+        pricing_tier: string
+        storage_class: string
+        price_per_gb_month_usd: double
+        monthly_fee_per_1000_objects_usd: double
+        min_billable_object_bytes: bigint
+        min_storage_duration_days: int
+    columns:
+      - name: pricing_tier
+        description: "Join key: the storage class, or `INTELLIGENT_TIERING:<access tier>` for Intelligent-Tiering objects."
+        data_tests:
+          - not_null
+          - unique
+      - name: price_per_gb_month_usd
+        description: "Storage price, USD per GB-month (GB = 2^30 bytes, as AWS bills)."
+      - name: monthly_fee_per_1000_objects_usd
+        description: "Intelligent-Tiering monitoring + automation fee per 1,000 objects per month."
+      - name: min_billable_object_bytes
+        description: "Objects smaller than this are billed as this size (128 KB for IA / Glacier IR)."
+      - name: min_storage_duration_days
+        description: "Minimum billed storage duration; deleting or transitioning earlier is charged as if stored this long."
+
+  - name: s3_inventory_sample__objects
+    description: >
+      SAMPLE S3 Inventory rows (all-versions report, Parquet field names) used when
+      DBT_S3_INVENTORY_TABLE is unset. Four buckets covering every versioning state
+      and savings opportunity, plus one row from an older snapshot that the pipeline
+      must ignore. tests/s3_inventory/ asserts the exact expected results. Older
+      snapshots exist for three buckets so the pipeline-health views have history:
+      a 5-day delivery gap (acme-archive), a late ingest (acme-scratch-current-only,
+      ingested ~32 h after its snapshot), and a volume swing (acme-lakehouse-prod).
+      `ingested_at` is when the row landed in the lakehouse -- the house standard
+      for every raw table.
+    config:
+      column_types:
+        bucket: string
+        key: string
+        version_id: string
+        is_latest: boolean
+        is_delete_marker: boolean
+        size: bigint
+        last_modified_date: timestamp
+        storage_class: string
+        intelligent_tiering_access_tier: string
+        is_multipart_uploaded: boolean
+        dt: string
+        ingested_at: timestamp
+
+  - name: s3_inventory_sample__tables
+    description: "SAMPLE stand-in for system.information_schema.tables (sample mode only)."
+    config:
+      column_types:
+        table_catalog: string
+        table_schema: string
+        table_name: string
+        table_type: string
+        data_source_format: string
+        storage_path: string
+        created: timestamp
+        last_altered: timestamp
+
+  - name: s3_inventory_sample__table_lineage
+    description: "SAMPLE stand-in for system.access.table_lineage (sample mode only)."
+    config:
+      column_types:
+        event_time: timestamp
+        source_table_full_name: string
+        source_path: string
+        target_table_full_name: string
+        target_path: string
