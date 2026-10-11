@@ -19,11 +19,11 @@
 {%- set active_days = var('s3_inventory_active_days', 90) | int -%}
 
 with objects as (
-    select bucket, key, as_of_date from {{ ref('int_s3_inventory__objects') }}
+    select bucket, key, as_of_date, inventory_snapshot_at from {{ ref('int_s3_inventory__objects') }}
 ),
 
 bucket_as_of as (
-    select bucket, max(as_of_date) as as_of_date
+    select bucket, max(as_of_date) as as_of_date, max(inventory_snapshot_at) as inventory_snapshot_at
     from objects
     group by bucket
 ),
@@ -109,6 +109,7 @@ activity as (
     select
         roots.*,
         bucket_as_of.as_of_date,
+        bucket_as_of.inventory_snapshot_at,
         greatest(name_activity.last_read_at,  path_activity.last_read_at)  as last_read_at,
         greatest(name_activity.last_write_at, path_activity.last_write_at) as last_write_at
     from roots
@@ -129,6 +130,7 @@ select
     data_source_format,
     path_source,
     as_of_date,
+    inventory_snapshot_at,
     last_read_at,
     last_write_at,
     greatest(last_read_at, last_write_at)                                   as last_access_at,

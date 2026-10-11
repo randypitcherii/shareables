@@ -82,3 +82,28 @@ seeds:
         source_path: string
         target_table_full_name: string
         target_path: string
+
+  - name: s3_inventory_sample__delta_snapshot_files
+    description: >
+      SAMPLE stand-in for the Python model int_s3_inventory__delta_snapshot_files
+      (sample mode only): the files each sample Delta table's snapshot references
+      at the inventory time (`current`) and just before each in-window removing
+      commit (`window`). It covers every delta_file_status:
+        * orders/part-00004 is unreferenced and older than the window (vacuum_eligible)
+        * part-00005 was removed inside the window (retained)
+        * part-00006 left orders, but a shallow clone still uses it (active)
+        * part-00007 is newer than the horizon (retained)
+        * the deletion vector is delta_metadata
+        * tmp_join's first in-window commit removed a file that can't be named,
+          so its leftover file is unreferenced (unproven)
+    config:
+      column_types:
+        table_uri: string
+        table_full_name: string
+        snapshot_kind: string
+        file_uri: string
+        snapshot_at: timestamp
+        horizon_at: timestamp
+        retention_duration: string
+        window_ambiguous_removed_files: int
+        list_status: string

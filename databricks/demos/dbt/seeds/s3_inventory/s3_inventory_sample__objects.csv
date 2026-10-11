@@ -31,3 +31,11 @@ acme-archive,backups/2024.tar,v-a-001,true,false,1099511627776,2024-12-31 00:00:
 acme-archive,backups/manifest.json,,true,false,4096,2025-12-30 00:00:00,GLACIER_IR,,false,2026-01-10-01-00,2026-01-10 06:30:00
 acme-lakehouse-prod,tables/sales/orders/part-00001.parquet,v-o-002,true,false,214748364800,2025-06-01 00:00:00,STANDARD,,true,2026-01-13-01-00,2026-01-13 06:30:00
 acme-lakehouse-prod,tables/sales/legacy_orders/part-00000.parquet,v-l-002,true,false,322122547200,2024-03-01 00:00:00,STANDARD,,true,2026-01-13-01-00,2026-01-13 06:30:00
+acme-lakehouse-prod,tables/sales/orders/part-00004.parquet,v-o-008,true,false,42949672960,2025-12-01 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders/part-00005.parquet,v-o-009,true,false,5368709120,2025-11-20 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders/part-00006.parquet,v-o-010,true,false,10737418240,2025-09-01 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders/part-00007.parquet,v-o-011,true,false,1073741824,2026-01-14 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders/deletion_vector_0a1b2c.bin,v-o-012,true,false,1048576,2026-01-10 00:00:00,STANDARD,,false,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders_clone/_delta_log/00000000000000000000.json,v-c-001,true,false,2048,2025-09-01 00:00:00,STANDARD,,false,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,tables/sales/orders_clone/part-c0001.parquet,v-c-002,true,false,1073741824,2025-09-01 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00
+acme-lakehouse-prod,scratch/tmp_join/part-00001.parquet,v-s-003,true,false,2147483648,2025-08-01 00:00:00,STANDARD,,true,2026-01-15-01-00,2026-01-15 06:30:00

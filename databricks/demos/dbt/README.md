@@ -158,6 +158,8 @@ staging   stg_s3_inventory__objects   __uc_tables   __table_access_events       
    ▼
 modeled   int_s3_inventory__objects          latest snapshot per bucket, priced per version
           int_s3_inventory__table_paths      UC table roots + unregistered Delta roots, active/inactive
+          int_s3_inventory__delta_snapshot_files (PYTHON) files each Delta log references
+          int_s3_inventory__delta_file_status    SQL: should each Delta file be here?
           int_s3_inventory__objects_classified   owner table + at most ONE savings opportunity
    ▼
 marts     s3_storage_by_bucket   s3_storage_by_versioning_status   s3_storage_by_table_path
@@ -201,6 +203,33 @@ views        ▼
   list storage prices. Edit it for your region or contract. Request, transition, and
   early-deletion charges are not modeled.
 
+**Should each Delta file be here?** Under every Delta table root, each current object is
+checked against the transaction logs. The S3 Inventory says what *is* there; the logs say
+what *should* be:
+
+| `delta_file_status` | Meaning |
+|---|---|
+| `active` | Some table's current snapshot references it. Shallow clones count, so a clone keeps its source's files alive (`is_kept_alive_by_other_table`). |
+| `delta_metadata` | `_delta_log/`, checkpoints, deletion vectors, other `_` / `.` paths |
+| `retained` | Removed inside `delta.deletedFileRetentionDuration`, or newer than that. Time travel needs it. |
+| `vacuum_eligible` | **Shouldn't be here.** No table references it, and it was provably not removed inside the window. This becomes the `vacuum_unreferenced_files` opportunity. |
+| `unreferenced` | Not referenced and older than the window, but unproven (see below) |
+| `not_checked` | The table's log couldn't be read |
+
+Python does exactly one thing here: `int_s3_inventory__delta_snapshot_files` asks each table
+for `inputFiles()`, which reads only the log and no data. It asks twice: as of the inventory
+snapshot, and just before each commit inside the retention window that removed files.
+Everything else is SQL. Why not one time-travel read at the retention boundary? Databricks
+refuses to time travel to any version committed before `now − retention`. So the files
+removed by the *first* in-window commit can't be named. The model passes that commit's
+removed-file count to SQL, and when it's nonzero, leftovers stay `unreferenced` rather than
+being called safe to delete. In sample mode a seed stands in for the Python model.
+
+**The versioning surprise.** On a versioned bucket, VACUUM, `DROP ... PURGE`, or any delete
+only turns files into noncurrent versions, and those keep billing. Removal opportunities on
+versioned or suspended buckets say so in `recommended_action`. Noncurrent bytes per table
+show what earlier VACUUMs left behind.
+
 **Metric views and the dashboard.** Two UC metric views put a governed semantic layer on
 top. Every dimension and measure has a display name, a comment that explains how to use it,
 synonyms ("size", "spend", "waste", "unused"), and a format (bytes, USD, %). That way Genie,
@@ -216,7 +245,7 @@ GROUP BY ALL ORDER BY 4 DESC;
 The **S3 Storage** AI/BI dashboard (`make s3-storage-dashboard` regenerates it from
 `scripts/build_s3_storage_dashboard.py`) has no SQL of its own. Every dataset is one of the
 metric views, so the dashboard, Genie, and ad-hoc queries can't disagree. Tabs: Overview,
-Versioning, Tables, Savings, Explore, and **Pipeline health**. Tests pin it down:
+Versioning, Tables, **Delta files**, Savings, Explore, and **Pipeline health**. Tests pin it down:
 `tests/test_s3_storage_dashboard.py` checks that every dashboard field exists in the views and
 that every field carries its metadata, and two dbt tests check that the views' totals match
 the marts per bucket.

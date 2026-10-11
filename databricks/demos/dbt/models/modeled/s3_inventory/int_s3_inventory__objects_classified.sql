@@ -13,13 +13,15 @@
 
     1. expire_noncurrent_versions        noncurrent > s3_inventory_noncurrent_retention_days
     2. remove_expired_delete_markers     delete marker with nothing behind it
-    3. archive_or_drop_inactive_tables   current data under an INACTIVE UC table
-    4. review_unregistered_data          current data in a table bucket that no UC table owns
-    5. fix_small_objects_in_min_size_classes  < 128 KB objects billed as 128 KB (IA / Glacier IR)
-    6. tier_cold_standard_data           STANDARD, >= s3_inventory_cold_days old, >= 128 KB
+    3. vacuum_unreferenced_files         Delta file no table references, past retention
+                                         (int_s3_inventory__delta_file_status)
+    4. archive_or_drop_inactive_tables   current data under an INACTIVE UC table
+    5. review_unregistered_data          current data in a table bucket that no UC table owns
+    6. fix_small_objects_in_min_size_classes  < 128 KB objects billed as 128 KB (IA / Glacier IR)
+    7. tier_cold_standard_data           STANDARD, >= s3_inventory_cold_days old, >= 128 KB
 
   Savings are monthly STORAGE list-price estimates: removal-type opportunities (1, 3,
-  4) save the object's full cost; 5 saves the gap to S3 Standard at true size; 6
+  4, 5) save the object's full cost; 6 saves the gap to S3 Standard at true size; 7
   saves the gap to Intelligent-Tiering's Infrequent tier, net of its monitoring fee.
   Transition and request charges are not modeled.
 -#}
@@ -83,7 +85,11 @@ attributed as (
         table_paths.table_full_name,
         coalesce(table_paths.path_source, 'untracked') as path_source,
         table_paths.activity_status,
-        table_buckets.bucket is not null               as is_table_bucket
+        table_buckets.bucket is not null               as is_table_bucket,
+        -- only when the file's owner IS the Delta root it was checked against (a
+        -- non-Delta table nested inside a Delta root keeps its own attribution)
+        coalesce(delta_files.delta_file_status, 'n/a') as delta_file_status,
+        coalesce(delta_files.is_kept_alive_by_other_table, false) as is_kept_alive_by_other_table
     from objects
     left join prefix_owner
         on  prefix_owner.bucket = objects.bucket
@@ -92,6 +98,11 @@ attributed as (
         on table_paths.table_uri = prefix_owner.table_uri
     left join table_buckets
         on table_buckets.bucket = objects.bucket
+    left join {{ ref('int_s3_inventory__delta_file_status') }} as delta_files
+        on  delta_files.bucket = objects.bucket
+        and delta_files.key    = objects.key
+        and delta_files.version_id <=> objects.version_id
+        and delta_files.table_uri  = table_paths.table_uri
 
 ),
 
@@ -107,6 +118,8 @@ classified as (
                 then 'remove_expired_delete_markers'
             when version_state != 'current'
                 then null
+            when delta_file_status = 'vacuum_eligible'
+                then 'vacuum_unreferenced_files'
             when path_source = 'unity_catalog' and activity_status = 'inactive'
                 then 'archive_or_drop_inactive_tables'
             when is_table_bucket and path_source in ('inferred_delta_log', 'untracked')
@@ -125,7 +138,7 @@ classified as (
 select
     classified.*,
     case
-        when opportunity in ('expire_noncurrent_versions', 'archive_or_drop_inactive_tables', 'review_unregistered_data')
+        when opportunity in ('expire_noncurrent_versions', 'vacuum_unreferenced_files', 'archive_or_drop_inactive_tables', 'review_unregistered_data')
             then monthly_cost_usd
         when opportunity = 'fix_small_objects_in_min_size_classes'
             then greatest(monthly_cost_usd - {{ s3_inventory_bytes_to_gib('size_bytes') }} * targets.standard_price, 0)

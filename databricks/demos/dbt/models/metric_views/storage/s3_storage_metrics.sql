@@ -101,6 +101,29 @@ dimensions:
     comment: active when table lineage shows a read or write within s3_inventory_active_days of the snapshot, inactive otherwise; n/a for untracked data.
     synonyms: [activity, usage, active, inactive, unused, stale table, cold table]
 
+  # ---- should it be here? (Delta tables) -------------------------------------------
+  - name: Delta File Status
+    expr: source.delta_file_status
+    display_name: Delta File Status
+    comment: >-
+      For current objects under a Delta table: active (some table's current
+      snapshot references it), delta_metadata (_delta_log, checkpoints, deletion
+      vectors), retained (unreferenced but inside the retention window -- time
+      travel needs it), vacuum_eligible (no table references it and it is past
+      retention: it should not be here), unreferenced (age unprovable), not_checked
+      (log unreadable). n/a for everything not under a Delta table.
+    synonyms: [file status, should be there, orphan files, unreferenced files, vacuum, dead files, stale files]
+  - name: Delta Object Key
+    expr: case when source.delta_file_status != 'n/a' then source.key end
+    display_name: Delta Object Key
+    comment: Object key for objects under a Delta table, NULL otherwise -- drill-down into Delta files without listing every other object. High cardinality.
+    synonyms: [delta file, data file, parquet file]
+  - name: Kept Alive By Clone
+    expr: source.is_kept_alive_by_other_table
+    display_name: Kept Alive By Another Table
+    comment: True when the file's own table dropped it but another table (usually a shallow clone) still references it. VACUUMing the source would break that clone.
+    synonyms: [shallow clone, clone reference, shared file]
+
   # ---- what it is --------------------------------------------------------------
   - name: Version State
     expr: source.version_state
@@ -176,7 +199,7 @@ dimensions:
     comment: >-
       The single savings action this object version counts toward:
       expire_noncurrent_versions, remove_expired_delete_markers,
-      archive_or_drop_inactive_tables, review_unregistered_data,
+      vacuum_unreferenced_files, archive_or_drop_inactive_tables, review_unregistered_data,
       fix_small_objects_in_min_size_classes, tier_cold_standard_data -- or none.
       Assigned in that priority order, so a byte is never counted twice.
     synonyms: [opportunity, savings, recommendation, action, waste, optimization]
@@ -305,6 +328,47 @@ measures:
       decimal_places:
         type: exact
         places: 0
+
+  - name: Delta Storage
+    expr: COALESCE(SUM(source.size_bytes) FILTER (WHERE source.delta_file_status != 'n/a'), 0)
+    display_name: Delta Storage
+    comment: Current bytes under Delta table roots (every Delta File Status except n/a).
+    synonyms: [delta size, delta table storage]
+    format:
+      type: byte
+      decimal_places:
+        type: max
+        places: 1
+  - name: VACUUM-Eligible Storage
+    expr: COALESCE(SUM(source.size_bytes) FILTER (WHERE source.delta_file_status = 'vacuum_eligible'), 0)
+    display_name: VACUUM-Eligible Storage
+    comment: Bytes under Delta tables that no table's log references and that are past the retention window -- files that should not be there. VACUUM deletes them.
+    synonyms: [orphan files, unreferenced files, dead files, vacuum backlog, should not be there]
+    format:
+      type: byte
+      decimal_places:
+        type: max
+        places: 1
+  - name: Retained Unreferenced Storage
+    expr: COALESCE(SUM(source.size_bytes) FILTER (WHERE source.delta_file_status = 'retained'), 0)
+    display_name: Retained Unreferenced Storage
+    comment: Bytes no longer in the current snapshot that VACUUM must keep for now (inside delta.deletedFileRetentionDuration, or newer). The cost of time travel.
+    synonyms: [time travel storage, retention overhead, retained files]
+    format:
+      type: byte
+      decimal_places:
+        type: max
+        places: 1
+  - name: Active Delta Storage
+    expr: COALESCE(SUM(source.size_bytes) FILTER (WHERE source.delta_file_status = 'active'), 0)
+    display_name: Active Delta Storage
+    comment: Bytes referenced by some table's current snapshot -- the data that should be there.
+    synonyms: [live data, referenced files, table data]
+    format:
+      type: byte
+      decimal_places:
+        type: max
+        places: 1
 
   # ---- money ------------------------------------------------------------------------
   - name: Monthly Storage Cost

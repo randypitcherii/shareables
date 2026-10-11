@@ -9,7 +9,7 @@
 -#}
 with expected (bucket, versioning_status, current_bytes, noncurrent_bytes, delete_marker_count) as (
     values
-        ('acme-lakehouse-prod',       'enabled',   794568956928, 85899345920, 2),
+        ('acme-lakehouse-prod',       'enabled',   857920775168, 85899345920, 2),
         ('acme-logs',                 'disabled', 1743756732416,           0, 0),
         ('acme-archive',              'suspended', 2199023259648,          0, 0),
         ('acme-scratch-current-only', 'unknown',   1649267441664,          0, 0)

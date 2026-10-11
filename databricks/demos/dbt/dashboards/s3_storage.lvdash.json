@@ -1280,6 +1280,391 @@
       ]
     },
     {
+      "name": "delta_files",
+      "displayName": "Delta files",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "d_note",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Should each file be here?\nEvery current object under a Delta table is checked against the transaction logs. The logs are read from metadata only, at the inventory snapshot time and at the retention horizon. **active** means some table's current snapshot uses the file. Shallow clones count, so a clone keeps its source's files alive. **retained** means unreferenced but still needed for time travel. **vacuum_eligible** means no table uses the file and it is past retention, so it **shouldn't be here**. On a versioned bucket, VACUUM only turns these files into noncurrent versions. See **Versioning**."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "d_vacuum",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_vacuum_eligible_storage",
+                      "expression": "MEASURE(`VACUUM-Eligible Storage`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "VACUUM-eligible storage",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_vacuum_eligible_storage",
+                  "displayName": "VACUUM-eligible storage"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_retained",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_retained_unreferenced_storage",
+                      "expression": "MEASURE(`Retained Unreferenced Storage`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Retained (time travel)",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_retained_unreferenced_storage",
+                  "displayName": "Retained (time travel)"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_active",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "m_active_delta_storage",
+                      "expression": "MEASURE(`Active Delta Storage`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "frame": {
+                "title": "Active Delta storage",
+                "showTitle": true
+              },
+              "encodings": {
+                "value": {
+                  "fieldName": "m_active_delta_storage",
+                  "displayName": "Active Delta storage"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_by_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "table_path",
+                      "expression": "`Table Path`"
+                    },
+                    {
+                      "name": "m_delta_storage",
+                      "expression": "MEASURE(`Delta Storage`)"
+                    },
+                    {
+                      "name": "delta_file_status",
+                      "expression": "`Delta File Status`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Delta storage by table and file status",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "m_delta_storage",
+                  "displayName": "Delta Storage",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "table_path",
+                  "displayName": "Table Path",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "delta_file_status",
+                  "displayName": "Delta File Status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "f_d_status",
+            "queries": [
+              {
+                "name": "filter_f_d_status",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "delta_file_status",
+                      "expression": "`Delta File Status`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Delta file status",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "delta_file_status",
+                    "displayName": "Delta file status",
+                    "queryName": "filter_f_d_status"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_d_clone",
+            "queries": [
+              {
+                "name": "filter_f_d_clone",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "kept_alive_by_clone",
+                      "expression": "`Kept Alive By Clone`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "frame": {
+                "title": "Kept alive by another table",
+                "showTitle": true
+              },
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "kept_alive_by_clone",
+                    "displayName": "Kept alive by another table",
+                    "queryName": "filter_f_d_clone"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 12,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "d_detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "storage",
+                  "fields": [
+                    {
+                      "name": "table_name",
+                      "expression": "`Table Name`"
+                    },
+                    {
+                      "name": "delta_file_status",
+                      "expression": "`Delta File Status`"
+                    },
+                    {
+                      "name": "kept_alive_by_clone",
+                      "expression": "`Kept Alive By Clone`"
+                    },
+                    {
+                      "name": "delta_object_key",
+                      "expression": "`Delta Object Key`"
+                    },
+                    {
+                      "name": "m_delta_storage",
+                      "expression": "MEASURE(`Delta Storage`)"
+                    },
+                    {
+                      "name": "m_monthly_storage_cost",
+                      "expression": "MEASURE(`Monthly Storage Cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Files by status (filter to vacuum_eligible to see what shouldn't be here)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "Table Name",
+                    "title": "Table Name"
+                  },
+                  {
+                    "fieldName": "delta_file_status",
+                    "displayName": "Delta File Status",
+                    "title": "Delta File Status"
+                  },
+                  {
+                    "fieldName": "kept_alive_by_clone",
+                    "displayName": "Kept Alive By Clone",
+                    "title": "Kept Alive By Clone"
+                  },
+                  {
+                    "fieldName": "delta_object_key",
+                    "displayName": "Delta Object Key",
+                    "title": "Delta Object Key"
+                  },
+                  {
+                    "fieldName": "m_delta_storage",
+                    "displayName": "Delta Storage",
+                    "title": "Delta Storage"
+                  },
+                  {
+                    "fieldName": "m_monthly_storage_cost",
+                    "displayName": "Monthly Storage Cost",
+                    "title": "Monthly Storage Cost"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 9
+          }
+        }
+      ]
+    },
+    {
       "name": "savings",
       "displayName": "Savings",
       "pageType": "PAGE_TYPE_CANVAS",

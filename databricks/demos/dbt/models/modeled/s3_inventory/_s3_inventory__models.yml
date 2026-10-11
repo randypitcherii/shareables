@@ -87,9 +87,56 @@ models:
                 values:
                   - expire_noncurrent_versions
                   - remove_expired_delete_markers
+                  - vacuum_unreferenced_files
                   - archive_or_drop_inactive_tables
                   - review_unregistered_data
                   - fix_small_objects_in_min_size_classes
                   - tier_cold_standard_data
+      - name: delta_file_status
+        description: "From int_s3_inventory__delta_file_status for objects under a Delta root; 'n/a' otherwise."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [active, delta_metadata, retained, vacuum_eligible, unreferenced, not_checked, n/a]
       - name: estimated_monthly_savings_usd
         description: "Estimated monthly storage saving (USD, list price) if the opportunity is acted on."
+
+  - name: int_s3_inventory__delta_snapshot_files
+    description: >
+      PYTHON, real-inventory mode only (sample mode uses the seed
+      s3_inventory_sample__delta_snapshot_files). The one thing SQL can't do: per
+      Delta table root, the data files its snapshot references at the inventory
+      snapshot time (`current`) and just before each in-window commit that
+      removed files (`window`), read from the transaction log only via
+      inputFiles(). All joins and classification happen in SQL downstream.
+    columns:
+      - name: snapshot_kind
+        description: "current (as of the inventory snapshot) | window (the snapshot before a commit, inside the retention window, that removed files)."
+      - name: window_ambiguous_removed_files
+        description: "Files removed by the FIRST in-window commit. Databricks blocks reading the version before it, so they can't be named; > 0 (or -1 = unknown) makes leftovers 'unreferenced' instead of 'vacuum_eligible'."
+      - name: file_uri
+        description: "A data file the snapshot references. NULL on the placeholder row of a table with no files or a failed listing."
+      - name: list_status
+        description: "ok | ok: current is latest (inventory older than the readable window) | window_truncated | error: <error> (table unreadable)."
+
+  - name: int_s3_inventory__delta_file_status
+    description: >
+      Should this file be here? Every current object under a Delta table root,
+      checked against the table logs: active | delta_metadata | retained |
+      vacuum_eligible | unreferenced | not_checked. "Active" means referenced by ANY
+      table's current snapshot, so shallow clones keep their source's files alive.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bucket, key, "coalesce(version_id, '<none>')"]
+    columns:
+      - name: delta_file_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [active, delta_metadata, retained, vacuum_eligible, unreferenced, not_checked]
+      - name: is_kept_alive_by_other_table
+        description: "Active only because another table (typically a shallow clone) references it."
+      - name: horizon_at
+        description: "When the file lists were taken, minus the table's delta.deletedFileRetentionDuration: files removed before it are fair game for VACUUM."

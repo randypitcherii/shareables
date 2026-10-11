@@ -26,16 +26,23 @@ rollup as (
         sum(estimated_monthly_savings_usd) as estimated_monthly_savings_usd
     from objects
     group by bucket, opportunity, coalesce(table_uri, '(untracked)')
+),
+
+buckets as (
+    select bucket, versioning_status from {{ ref('s3_storage_by_bucket') }}
 )
 
 select
-    bucket,
+    rollup.bucket,
     opportunity,
+    buckets.versioning_status,
     case opportunity
         when 'expire_noncurrent_versions'
             then 'Add a lifecycle rule with NoncurrentVersionExpiration (and keep VACUUM retention aligned) so deleted/overwritten versions stop accruing.'
         when 'remove_expired_delete_markers'
             then 'Add a lifecycle rule with ExpiredObjectDeleteMarker: true to clean up delete markers that protect no versions.'
+        when 'vacuum_unreferenced_files'
+            then 'Run VACUUM on the table (or enable predictive optimization): no table references these files and they are past the retention window.'
         when 'archive_or_drop_inactive_tables'
             then 'Confirm with the table owner, then DROP (and purge) the table or move its data to an archive storage class.'
         when 'review_unregistered_data'
@@ -44,6 +51,14 @@ select
             then 'Objects under 128 KB are billed as 128 KB in IA / Glacier IR: keep them in Standard (lifecycle ObjectSizeGreaterThan filter) or compact them.'
         when 'tier_cold_standard_data'
             then 'Transition to Intelligent-Tiering so cold objects move to cheaper access tiers automatically without retrieval fees.'
+    end
+    -- the versioning surprise: on a versioned bucket a delete only creates a
+    -- noncurrent version, which keeps billing until a lifecycle rule expires it
+    || case
+        when opportunity in ('vacuum_unreferenced_files', 'archive_or_drop_inactive_tables', 'review_unregistered_data')
+             and buckets.versioning_status in ('enabled', 'suspended')
+        then ' VERSIONED BUCKET: deleting only turns these into noncurrent versions. Savings need a NoncurrentVersionExpiration lifecycle rule.'
+        else ''
     end as recommended_action,
     table_path,
     table_full_name,
@@ -56,3 +71,5 @@ select
     estimated_monthly_savings_usd * 12      as estimated_annual_savings_usd,
     dense_rank() over (order by estimated_monthly_savings_usd desc) as savings_rank
 from rollup
+left join buckets
+    on buckets.bucket = rollup.bucket
