@@ -7,13 +7,15 @@
     * scratch/tmp_join has a _delta_log/ but no UC table -> inferred_delta_log,
       judged inactive from a PATH read
     * the VIEW and the ADLS table in the sample tables seed must be ignored
+    * orders_clone is its own root -- 'orders_clone' must not nest under 'orders'
 -#}
 with expected (bucket, table_path, path_source, activity_status, current_bytes) as (
     values
-        ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/tables/sales/orders',        'unity_catalog',      'active',   354334806016),
+        ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/tables/sales/orders',        'unity_catalog',      'active',   414465396736),
+        ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/tables/sales/orders_clone',  'unity_catalog',      'inactive',   1073743872),
         ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/tables/sales/legacy_orders', 'unity_catalog',      'inactive', 322122549248),
         ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/tables/sales/orders_v2',     'unity_catalog',      'active',    10737418240),
-        ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/scratch/tmp_join',           'inferred_delta_log', 'inactive',  85899346944),
+        ('acme-lakehouse-prod', 's3://acme-lakehouse-prod/scratch/tmp_join',           'inferred_delta_log', 'inactive',  88046830592),
         ('acme-lakehouse-prod', '(untracked)',                                         'untracked',          'n/a',       21474836480),
         ('acme-logs',           '(untracked)',                                         'untracked',          'n/a',     1743756732416),
         ('acme-archive',        '(untracked)',                                         'untracked',          'n/a',     2199023259648),

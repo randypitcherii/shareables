@@ -205,6 +205,25 @@ PAGES = [
             M("Estimated Monthly Savings"),
         ], 0, 7, 6, 10),
     ]),
+    ("delta_files", "Delta files", [
+        text("d_note", "## Should each file be here?\n"
+             "Every current object under a Delta table is checked against the transaction logs. The logs are read from metadata only, "
+             "at the inventory snapshot time and at the retention horizon. **active** means some table's current snapshot uses the file. "
+             "Shallow clones count, so a clone keeps its source's files alive. **retained** means unreferenced but still needed for time travel. "
+             "**vacuum_eligible** means no table uses the file and it is past retention, so it **shouldn't be here**. "
+             "On a versioned bucket, VACUUM only turns these files into noncurrent versions. See **Versioning**.", 0, 0, 6, 2),
+        counter("d_vacuum", "VACUUM-eligible storage", S, M("VACUUM-Eligible Storage"), 0, 2, 2),
+        counter("d_retained", "Retained (time travel)", S, M("Retained Unreferenced Storage"), 2, 2, 2),
+        counter("d_active", "Active Delta storage", S, M("Active Delta Storage"), 4, 2, 2),
+        bar("d_by_table", "Delta storage by table and file status", S, D("Table Path"), M("Delta Storage"), 0, 5, 6, 7,
+            color=D("Delta File Status")),
+        multi_filter("f_d_status", "Delta file status", S, D("Delta File Status"), 0, 12),
+        multi_filter("f_d_clone", "Kept alive by another table", S, D("Kept Alive By Clone"), 2, 12),
+        table("d_detail", "Files by status (filter to vacuum_eligible to see what shouldn't be here)", S, [
+            D("Table Name"), D("Delta File Status"), D("Kept Alive By Clone"), D("Delta Object Key"),
+            M("Delta Storage"), M("Monthly Storage Cost"),
+        ], 0, 13, 6, 9),
+    ]),
     ("savings", "Savings", [
         text("s_note", "Each byte counts toward **at most one** opportunity, so savings add up across rows. "
              "Estimates cover storage list price only; they exclude request, transition and early-deletion charges.", 0, 0, 6, 1),

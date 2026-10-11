@@ -12,7 +12,7 @@ with expected (bucket, inventory_snapshot, row_count, ingest_lag_hours, health_s
     values
         ('acme-lakehouse-prod',       '2026-01-13-01-00',  2,  5.5, 'healthy'),
         ('acme-lakehouse-prod',       '2026-01-14-01-00',  1,  5.5, 'volume_shift'),
-        ('acme-lakehouse-prod',       '2026-01-15-01-00', 14,  5.5, 'volume_shift'),
+        ('acme-lakehouse-prod',       '2026-01-15-01-00', 22,  5.5, 'volume_shift'),
         ('acme-logs',                 '2026-01-13-01-00',  2,  5.5, 'healthy'),
         ('acme-logs',                 '2026-01-14-01-00',  2,  5.5, 'healthy'),
         ('acme-logs',                 '2026-01-15-01-00',  4,  5.5, 'healthy'),

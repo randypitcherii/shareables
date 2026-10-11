@@ -1,0 +1,14 @@
+table_uri,table_full_name,snapshot_kind,file_uri,snapshot_at,horizon_at,retention_duration,window_ambiguous_removed_files,list_status
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,current,s3://acme-lakehouse-prod/tables/sales/orders/part-00001.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,current,s3://acme-lakehouse-prod/tables/sales/orders/part-00002.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,current,s3://acme-lakehouse-prod/tables/sales/orders/part-00003.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,window,s3://acme-lakehouse-prod/tables/sales/orders/part-00001.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,window,s3://acme-lakehouse-prod/tables/sales/orders/part-00002.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,window,s3://acme-lakehouse-prod/tables/sales/orders/part-00003.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders,main.sales.orders,window,s3://acme-lakehouse-prod/tables/sales/orders/part-00005.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/legacy_orders,main.sales.legacy_orders,current,s3://acme-lakehouse-prod/tables/sales/legacy_orders/part-00000.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders_v2,main.sales.orders_v2,current,s3a://acme-lakehouse-prod/tables/sales/orders_v2/part-00000.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/scratch/tmp_join,,current,s3://acme-lakehouse-prod/scratch/tmp_join/part-00000.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,1,ok
+s3://acme-lakehouse-prod/tables/sales/orders_clone,main.sales.orders_clone,current,s3://acme-lakehouse-prod/tables/sales/orders/part-00001.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders_clone,main.sales.orders_clone,current,s3://acme-lakehouse-prod/tables/sales/orders/part-00006.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok
+s3://acme-lakehouse-prod/tables/sales/orders_clone,main.sales.orders_clone,current,s3://acme-lakehouse-prod/tables/sales/orders_clone/part-c0001.parquet,2026-01-15 01:00:00,2026-01-08 01:00:00,interval 7 days,0,ok

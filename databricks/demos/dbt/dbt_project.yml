@@ -127,6 +127,12 @@ models:
       +auto_liquid_cluster: true
       s3_inventory:
         +tags: [s3_inventory]
+        # The pipeline's only Python model: it asks each Delta table which files its
+        # snapshot references (log-only). Real-inventory mode only -- in sample mode
+        # the seed s3_inventory_sample__delta_snapshot_files stands in for it.
+        int_s3_inventory__delta_snapshot_files:
+          +enabled: "{{ env_var('DBT_S3_INVENTORY_TABLE', '') | trim != '' }}"
+          +submission_method: serverless_cluster
 
     marts:
       +tags: [mart, daily]

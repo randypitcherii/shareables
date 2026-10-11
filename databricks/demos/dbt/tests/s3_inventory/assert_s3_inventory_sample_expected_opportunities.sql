@@ -8,16 +8,20 @@
     * that delete marker still protects a version -> NOT an expired delete marker
     * the 4 KB Delta log JSON is STANDARD and old, but under 128 KB -> NOT tiered
     * the Intelligent-Tiering object is already tiered -> no opportunity
+    * orders/part-00006 left orders' snapshot long ago but the shallow clone still
+      references it -> NOT vacuum_unreferenced_files (it is tiered instead)
   Savings compare with a tolerance; bytes and counts compare exactly.
 -#}
 with expected (bucket, opportunity, table_path, object_count, bytes, estimated_monthly_savings_usd) as (
     values
         ('acme-lakehouse-prod', 'expire_noncurrent_versions',            's3://acme-lakehouse-prod/tables/sales/orders',        1,  32212254720, 0.69),
         ('acme-lakehouse-prod', 'remove_expired_delete_markers',         '(untracked)',                                         1,            0, 0.0),
+        ('acme-lakehouse-prod', 'vacuum_unreferenced_files',             's3://acme-lakehouse-prod/tables/sales/orders',        1,  42949672960, 0.92),
         ('acme-lakehouse-prod', 'archive_or_drop_inactive_tables',       's3://acme-lakehouse-prod/tables/sales/legacy_orders', 2, 322122549248, 6.900000044),
-        ('acme-lakehouse-prod', 'review_unregistered_data',              's3://acme-lakehouse-prod/scratch/tmp_join',           2,  85899346944, 1.840000022),
+        ('acme-lakehouse-prod', 'archive_or_drop_inactive_tables',       's3://acme-lakehouse-prod/tables/sales/orders_clone',  2,   1073743872, 0.023000044),
+        ('acme-lakehouse-prod', 'review_unregistered_data',              's3://acme-lakehouse-prod/scratch/tmp_join',           3,  88046830592, 1.886000022),
         ('acme-lakehouse-prod', 'review_unregistered_data',              '(untracked)',                                         1,  21474836480, 0.46),
-        ('acme-lakehouse-prod', 'tier_cold_standard_data',               's3://acme-lakehouse-prod/tables/sales/orders',        2, 246960619520, 2.414995),
+        ('acme-lakehouse-prod', 'tier_cold_standard_data',               's3://acme-lakehouse-prod/tables/sales/orders',        3, 257698037760, 2.5199925),
         ('acme-logs',           'fix_small_objects_in_min_size_classes', '(untracked)',                                         1,        10240, 0.000001307),
         ('acme-logs',           'tier_cold_standard_data',               '(untracked)',                                         1, 536870912000, 5.2499975),
         ('acme-archive',        'fix_small_objects_in_min_size_classes', '(untracked)',                                         1,         4096, 0.000000401),

@@ -4,3 +4,4 @@ main,sales,legacy_orders,EXTERNAL,DELTA,s3://acme-lakehouse-prod/tables/sales/le
 main,sales,orders_v2,EXTERNAL,DELTA,s3a://acme-lakehouse-prod/tables/sales/orders_v2,2026-01-12 00:00:00,2026-01-12 00:00:00
 main,sales,orders_summary,VIEW,,,2025-06-01 00:00:00,2025-06-01 00:00:00
 main,other,adls_table,EXTERNAL,DELTA,abfss://container@account.dfs.core.windows.net/other/adls_table,2025-06-01 00:00:00,2025-06-01 00:00:00
+main,sales,orders_clone,EXTERNAL,DELTA,s3://acme-lakehouse-prod/tables/sales/orders_clone,2025-09-01 00:00:00,2025-09-01 00:00:00

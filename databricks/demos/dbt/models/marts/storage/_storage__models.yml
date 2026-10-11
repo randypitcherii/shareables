@@ -76,6 +76,13 @@ models:
         description: "Current bytes under `_delta_log/` -- large values relative to data point at missing checkpoints / log retention."
       - name: noncurrent_bytes
         description: "Noncurrent-version bytes under this table: on versioned buckets, what VACUUM 'deleted' but S3 still bills."
+      - name: delta_vacuum_eligible_bytes
+        description: "Current bytes no table's log references, past the retention window: VACUUM would delete them."
+      - name: delta_retained_bytes
+        description: "Unreferenced bytes VACUUM must still keep (inside the retention window, or newer than it)."
+      - name: delta_kept_alive_by_clone_bytes
+        description: "Bytes this table dropped that another table (a shallow clone) still references."
+
 
   - name: s3_storage_by_table_activity
     description: "Storage by owner type and activity. Grain: one row per bucket + path_source + activity_status."
@@ -99,11 +106,15 @@ models:
                 values:
                   - expire_noncurrent_versions
                   - remove_expired_delete_markers
+                  - vacuum_unreferenced_files
                   - archive_or_drop_inactive_tables
                   - review_unregistered_data
                   - fix_small_objects_in_min_size_classes
                   - tier_cold_standard_data
+      - name: versioning_status
+        description: "The bucket's versioning status. Enabled / suspended means removals only become noncurrent versions."
       - name: recommended_action
+        description: "What to do. On versioned buckets, removal actions also carry a lifecycle-rule warning."
         data_tests:
           - not_null
       - name: estimated_monthly_savings_usd
