@@ -1,443 +1,426 @@
 """
-Tests for simple_dispatcher_agent.
+Tests for the simple model dispatcher.
 
-All tests run without a live Databricks workspace. The Genie space, the
-web_search Unity Catalog function, and the chat model are mocked at the seams
-defined in agent.py / serving_agent.py.
+Everything runs offline: the only external seam is agent.GatewayClient, which
+these tests replace with FakeGateway (a scripted JEV answer + canned chat
+responses, recording every call).
 """
+
+from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import mlflow
 import pytest
 
-
-# ---------------------------------------------------------------------------
-# A fake chat model that create_agent can drive.
-#
-# GenericFakeChatModel.bind_tools() raises NotImplementedError, but
-# langchain.agents.create_agent() calls bind_tools() on the model. So we
-# subclass it and make bind_tools return self. The model emits the AIMessages
-# in `messages` in order, one per LLM turn.
-# ---------------------------------------------------------------------------
-
-from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+import agent
 
 
-class ToolCallingFakeChatModel(GenericFakeChatModel):
-    """GenericFakeChatModel that tolerates bind_tools (returns self)."""
+def jev_answer(choice: str, confidence: float, probs: dict | None = None) -> dict:
+    probs = probs or {k: (0.9 if k == choice else 0.05) for k in agent.ROUTES}
+    return {
+        "model": "databricks-openjev-qwen35-4b",
+        "answers": {
+            "model": {
+                "type": "choice",
+                "choice": choice,
+                "confidence": confidence,
+                "probabilities": probs,
+            }
+        },
+        "usage": {"input_tokens": 80, "output_tokens": 0},
+    }
 
-    def bind_tools(self, tools, **kwargs):  # noqa: ANN001, ANN003
-        return self
+
+def chat_response(text, model="m") -> dict:
+    return {
+        "model": model,
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+    }
 
 
-# ---------------------------------------------------------------------------
-# Config validation
-# ---------------------------------------------------------------------------
+class FakeGateway:
+    """Stands in for agent.GatewayClient."""
 
+    def __init__(self, jev=None, jev_error=None, failing_models=()):
+        self.jev = jev or jev_answer("luna", 0.95)
+        self.jev_error = jev_error
+        self.failing_models = set(failing_models)
+        self.systemone_calls: list[dict] = []
+        self.chat_calls: list[dict] = []
 
-class TestConfigValidation:
-    def test_missing_genie_space_id_named(self, monkeypatch):
-        monkeypatch.delenv("GENIE_SPACE_ID", raising=False)
-        monkeypatch.setenv("LLM_ENDPOINT", "databricks-claude-sonnet-4-6")
-        monkeypatch.setenv("BASE_CATALOG", "main")
-        monkeypatch.setenv("BASE_SCHEMA", "simple_dispatcher")
-
-        from agent import load_config
-
-        with pytest.raises(ValueError, match="GENIE_SPACE_ID"):
-            load_config()
-
-    def test_missing_base_catalog_named(self, monkeypatch):
-        monkeypatch.setenv("GENIE_SPACE_ID", "space-abc")
-        monkeypatch.setenv("LLM_ENDPOINT", "databricks-claude-sonnet-4-6")
-        monkeypatch.delenv("BASE_CATALOG", raising=False)
-        monkeypatch.setenv("BASE_SCHEMA", "simple_dispatcher")
-
-        from agent import load_config
-
-        with pytest.raises(ValueError, match="BASE_CATALOG"):
-            load_config()
-
-    def test_all_missing_required_are_named(self, monkeypatch):
-        for var in ("GENIE_SPACE_ID", "BASE_CATALOG", "BASE_SCHEMA"):
-            monkeypatch.delenv(var, raising=False)
-        # LLM_ENDPOINT has a default, so it is never "missing".
-        monkeypatch.delenv("LLM_ENDPOINT", raising=False)
-
-        from agent import load_config
-
-        with pytest.raises(ValueError) as exc:
-            load_config()
-        msg = str(exc.value)
-        assert "GENIE_SPACE_ID" in msg
-        assert "BASE_CATALOG" in msg
-        assert "BASE_SCHEMA" in msg
-
-    def test_valid_config_returns_dict_with_defaults(self, monkeypatch):
-        monkeypatch.setenv("GENIE_SPACE_ID", "space-xyz")
-        monkeypatch.setenv("BASE_CATALOG", "main")
-        monkeypatch.setenv("BASE_SCHEMA", "simple_dispatcher")
-        monkeypatch.delenv("LLM_ENDPOINT", raising=False)
-
-        from agent import DEFAULT_LLM_ENDPOINT, load_config
-
-        cfg = load_config()
-        assert cfg["genie_space_id"] == "space-xyz"
-        assert cfg["base_catalog"] == "main"
-        assert cfg["base_schema"] == "simple_dispatcher"
-        # LLM_ENDPOINT falls back to the documented default.
-        assert cfg["llm_endpoint"] == DEFAULT_LLM_ENDPOINT
-
-    def test_dotenv_file_is_loaded(self, tmp_path, monkeypatch):
-        """load_config picks up values from a .env file in the working dir."""
-        for var in ("GENIE_SPACE_ID", "BASE_CATALOG", "BASE_SCHEMA", "LLM_ENDPOINT"):
-            monkeypatch.delenv(var, raising=False)
-        env_file = tmp_path / ".env"
-        env_file.write_text(
-            "GENIE_SPACE_ID=from-dotenv\n"
-            "BASE_CATALOG=cat_from_dotenv\n"
-            "BASE_SCHEMA=schema_from_dotenv\n"
+    def systemone(self, model, state, questions, tags):
+        self.systemone_calls.append(
+            {"model": model, "state": state, "questions": questions, "tags": tags}
         )
-        monkeypatch.chdir(tmp_path)
+        if self.jev_error:
+            raise self.jev_error
+        return self.jev
 
-        from agent import load_config
-
-        cfg = load_config()
-        assert cfg["genie_space_id"] == "from-dotenv"
-        assert cfg["base_catalog"] == "cat_from_dotenv"
-        assert cfg["base_schema"] == "schema_from_dotenv"
-
-
-# ---------------------------------------------------------------------------
-# Genie tool seam
-# ---------------------------------------------------------------------------
+    def chat(self, model, messages, tags, **params):
+        self.chat_calls.append({"model": model, "messages": messages, "tags": tags, **params})
+        if model in self.failing_models:
+            raise agent.GatewayError(404, '{"error_code":"ENDPOINT_NOT_FOUND"}')
+        return chat_response(f"answer from {model}", model)
 
 
-class TestGenieTool:
-    def test_genie_tool_wraps_ask_question_and_routes_to_structured_data(self, monkeypatch):
-        """make_genie_tool returns a @tool wrapping Genie.ask_question, with a
-        description that mentions structured data so the router can pick it."""
-        fake_genie = MagicMock()
-        fake_response = MagicMock()
-        fake_response.result = "Sales were $1.2M last quarter."
-        fake_genie.ask_question.return_value = fake_response
+@pytest.fixture
+def cfg(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)  # no stray .env
+    for r in agent.ROUTES.values():
+        monkeypatch.delenv(r.env_var, raising=False)
+    for v in ("JEV_MODEL", "ROUTER_MIN_CONFIDENCE"):
+        monkeypatch.delenv(v, raising=False)
+    return agent.load_config()
 
-        # Patch the Genie class the seam constructs.
-        genie_class = MagicMock(return_value=fake_genie)
-        monkeypatch.setattr("agent.Genie", genie_class)
 
-        from agent import make_genie_tool
-
-        tool = make_genie_tool("space-123")
-        genie_class.assert_called_once_with("space-123")
-
-        # Tool is invokable and routes the question through ask_question.
-        out = tool.invoke({"question": "What were total sales last quarter?"})
-        fake_genie.ask_question.assert_called_once()
-        assert "1.2M" in out
-
-        # Description is non-empty and routing-sharp.
-        assert tool.description.strip()
-        assert "structured data" in tool.description.lower()
+USER = [{"role": "user", "content": "hello"}]
 
 
 # ---------------------------------------------------------------------------
-# Web search tool seam
+# Config
 # ---------------------------------------------------------------------------
 
 
-class TestWebSearchTool:
-    def test_web_search_tool_executes_uc_function(self, monkeypatch):
-        """make_web_search_tool returns a @tool that executes the UC function
-        {catalog}.{schema}.web_search via the function client, with a
-        description that mentions fresh public/internet info."""
-        fake_client = MagicMock()
-        fake_result = MagicMock()
-        fake_result.value = "Top web results for the query..."
-        fake_result.error = None
-        fake_client.execute_function.return_value = fake_result
+class TestConfig:
+    def test_defaults_are_latest_uc_models(self, cfg):
+        assert cfg["models"] == {
+            "luna": "system.ai.gpt-6-luna",
+            "opus": "system.ai.claude-opus-5-5",
+            "argon": "system.ai.gemini-4-argon",
+        }
+        assert cfg["jev_model"] == "system.ai.openjev-qwen35-4b"
+        assert cfg["min_confidence"] == 0.5
 
-        client_class = MagicMock(return_value=fake_client)
-        monkeypatch.setattr("agent.DatabricksFunctionClient", client_class)
+    def test_env_overrides(self, cfg, monkeypatch):
+        monkeypatch.setenv("OPUS_MODEL", "main.models.my-opus")
+        monkeypatch.setenv("ROUTER_MIN_CONFIDENCE", "0.8")
+        c = agent.load_config()
+        assert c["models"]["opus"] == "main.models.my-opus"
+        assert c["min_confidence"] == 0.8
 
-        from agent import make_web_search_tool
+    def test_legacy_endpoint_names_are_refused(self, cfg, monkeypatch):
+        monkeypatch.setenv("LUNA_MODEL", "databricks-gpt-6-luna")
+        with pytest.raises(ValueError, match="three-part"):
+            agent.load_config()
 
-        tool = make_web_search_tool("main", "simple_dispatcher")
-
-        out = tool.invoke({"query": "latest news on Databricks"})
-
-        fake_client.execute_function.assert_called_once()
-        call_args, call_kwargs = fake_client.execute_function.call_args
-        # First positional arg is the fully-qualified function name.
-        fq_name = call_args[0] if call_args else call_kwargs.get("function_name")
-        assert fq_name == "main.simple_dispatcher.web_search"
-        # The query is forwarded as the `query` parameter.
-        params = call_args[1] if len(call_args) > 1 else call_kwargs.get("parameters")
-        assert params == {"query": "latest news on Databricks"}
-        assert "Top web results" in out
-
-        assert tool.description.strip()
-        desc = tool.description.lower()
-        assert "internet" in desc or "public" in desc
+    def test_dotenv_file_is_loaded(self, cfg, monkeypatch, tmp_path):
+        (tmp_path / ".env").write_text("ARGON_MODEL=cat.sch.argon\n")
+        assert agent.load_config()["models"]["argon"] == "cat.sch.argon"
+        monkeypatch.delenv("ARGON_MODEL")
 
 
 # ---------------------------------------------------------------------------
-# Dispatcher wiring + full-path routing
+# JEV routing
 # ---------------------------------------------------------------------------
 
 
-class TestDispatcher:
-    def test_build_dispatcher_returns_invokable(self):
-        from langchain_core.messages import AIMessage
+class TestRouting:
+    @pytest.mark.parametrize("route", ["luna", "opus", "argon"])
+    def test_confident_jev_choice_wins(self, cfg, route):
+        gw = FakeGateway(jev=jev_answer(route, 0.9))
+        d = agent.route_request(gw, USER, cfg)
+        assert (d.route, d.model, d.decided_by) == (route, cfg["models"][route], "jev")
+        assert d.confidence == 0.9
+        assert set(d.probabilities) == set(agent.ROUTES)
+        # the reason names the choice and the criterion that matched
+        assert route in d.reason and agent.ROUTES[route].criterion in d.reason
 
-        from agent import build_dispatcher
+    def test_low_confidence_goes_to_luna(self, cfg):
+        gw = FakeGateway(jev=jev_answer("opus", 0.3))
+        d = agent.route_request(gw, USER, cfg)
+        assert d.route == "luna"
+        assert d.decided_by == "low_confidence_default"
+        assert d.jev_choice == "opus"
+        assert "below" in d.reason
 
-        fake = ToolCallingFakeChatModel(messages=iter([AIMessage(content="hi")]))
-        dispatcher = build_dispatcher(llm=fake, tools=[])
-        assert callable(getattr(dispatcher, "invoke", None))
+    def test_unsure_luna_pick_is_still_jevs_decision(self, cfg):
+        d = agent.route_request(FakeGateway(jev=jev_answer("luna", 0.3)), USER, cfg)
+        assert (d.route, d.decided_by) == ("luna", "jev")
 
-    def test_full_path_routes_to_genie_tool_then_final_answer(self, monkeypatch):
-        """Fake model emits a tool_call to the genie tool, then a final answer.
-        Assert the genie seam executed and the final answer is in the state."""
-        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    def test_jev_failure_goes_to_luna(self, cfg):
+        gw = FakeGateway(jev_error=agent.GatewayError(503, "busy"))
+        d = agent.route_request(gw, USER, cfg)
+        assert (d.route, d.decided_by) == ("luna", "jev_error_default")
 
-        # Mock the Genie seam.
-        fake_genie = MagicMock()
-        fake_response = MagicMock()
-        fake_response.result = "Sales were $1.2M last quarter."
-        fake_genie.ask_question.return_value = fake_response
-        monkeypatch.setattr("agent.Genie", MagicMock(return_value=fake_genie))
+    def test_caller_can_force_a_route_without_asking_jev(self, cfg):
+        gw = FakeGateway()
+        d = agent.route_request(gw, USER, cfg, forced_route="opus")
+        assert (d.route, d.decided_by) == ("opus", "caller")
+        assert gw.systemone_calls == []
 
-        from agent import make_genie_tool
+    def test_unknown_forced_route_is_rejected(self, cfg):
+        with pytest.raises(ValueError, match="Unknown route"):
+            agent.route_request(FakeGateway(), USER, cfg, forced_route="gpt-9")
 
-        genie_tool = make_genie_tool("space-123")
+    def test_jev_gets_choice_question_over_all_three_routes(self, cfg):
+        gw = FakeGateway()
+        agent.route_request(gw, USER, cfg)
+        call = gw.systemone_calls[0]
+        assert call["model"] == "system.ai.openjev-qwen35-4b"
+        q = call["questions"]["model"]
+        assert q["type"] == "choice"
+        assert list(q["criteria"]) == ["luna", "opus", "argon"]
 
-        final_answer = "Based on Genie data, sales were $1.2M last quarter."
-        first = AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": genie_tool.name,
-                    "args": {"question": "What were total sales last quarter?"},
-                    "id": "call-001",
-                    "type": "tool_call",
-                }
-            ],
-        )
-        second = AIMessage(content=final_answer)
-        fake = ToolCallingFakeChatModel(messages=iter([first, second]))
+    def test_router_state_carries_size_signals_but_truncates(self):
+        big = "x" * (agent.ROUTER_MAX_REQUEST_CHARS + 10)
+        msgs = [
+            {"role": "system", "content": "be brief"},
+            {"role": "user", "content": big},
+        ]
+        s = agent.router_state(msgs)
+        assert len(s["request"]) == agent.ROUTER_MAX_REQUEST_CHARS
+        assert s["request_truncated"] is True
+        assert s["conversation_turns"] == 2
+        assert s["conversation_chars"] == len(big) + len("be brief")
+        assert s["includes_images"] is False
 
-        from agent import build_dispatcher
-
-        dispatcher = build_dispatcher(llm=fake, tools=[genie_tool])
-        result = dispatcher.invoke(
-            {"messages": [HumanMessage(content="What were total sales last quarter?")]}
-        )
-
-        # The Genie seam executed.
-        fake_genie.ask_question.assert_called_once()
-        # A ToolMessage carried the Genie result back.
-        tool_msgs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
-        assert tool_msgs
-        assert "1.2M" in tool_msgs[0].content
-        # Final answer present in the last message.
-        assert final_answer in result["messages"][-1].content
+    def test_router_state_flags_images(self):
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "critique this layout"},
+                    {"type": "image_url", "image_url": {"url": "https://x/y.png"}},
+                ],
+            }
+        ]
+        s = agent.router_state(msgs)
+        assert s["request"] == "critique this layout"
+        assert s["includes_images"] is True
 
 
 # ---------------------------------------------------------------------------
-# Serving wrapper
+# Dispatch end to end (fake gateway)
+# ---------------------------------------------------------------------------
+
+
+class TestDispatch:
+    def test_dispatch_calls_chosen_model_and_tags_request(self, cfg):
+        gw = FakeGateway(jev=jev_answer("opus", 0.9))
+        out = agent.dispatch(USER, cfg, client=gw, params={"max_tokens": 50})
+        assert out["text"] == "answer from system.ai.claude-opus-5-5"
+        assert out["routing"]["route"] == "opus"
+        call = gw.chat_calls[0]
+        assert call["model"] == "system.ai.claude-opus-5-5"
+        assert call["messages"] == USER
+        assert call["max_tokens"] == 50
+        # gateway request tags record the route in system.ai_gateway.usage
+        assert call["tags"] == {"app": "simple_dispatcher_agent", "route": "opus"}
+
+    def test_unavailable_model_falls_back_to_luna_and_says_why(self, cfg):
+        gw = FakeGateway(jev=jev_answer("argon", 0.99), failing_models={"system.ai.gemini-4-argon"})
+        out = agent.dispatch(USER, cfg, client=gw)
+        r = out["routing"]
+        assert (r["route"], r["fallback_from"]) == ("luna", "argon")
+        assert "404" in r["fallback_reason"]
+        assert [c["model"] for c in gw.chat_calls] == [
+            "system.ai.gemini-4-argon",
+            "system.ai.gpt-6-luna",
+        ]
+
+    def test_default_model_failure_is_raised(self, cfg):
+        gw = FakeGateway(failing_models={"system.ai.gpt-6-luna"})
+        with pytest.raises(agent.GatewayError):
+            agent.dispatch(USER, cfg, client=gw)
+
+    def test_list_content_is_flattened(self, cfg):
+        class ListGateway(FakeGateway):
+            def chat(self, model, messages, tags, **params):
+                return {"choices": [{"message": {"content": [{"type": "text", "text": "hi"}]}}]}
+
+        assert agent.dispatch(USER, cfg, client=ListGateway())["text"] == "hi"
+
+
+# ---------------------------------------------------------------------------
+# MLflow: the trace shows which model ran and why
+# ---------------------------------------------------------------------------
+
+
+class TestTrace:
+    def test_trace_has_routing_tags_and_spans(self, cfg, tmp_path):
+        mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+        mlflow.set_experiment("dispatcher-test")
+        gw = FakeGateway(jev=jev_answer("argon", 0.97), failing_models={"system.ai.gemini-4-argon"})
+
+        agent.dispatch(USER, cfg, client=gw)
+        mlflow.flush_trace_async_logging()
+        trace = mlflow.get_trace(mlflow.get_last_active_trace_id())
+
+        tags = trace.info.tags
+        assert tags["dispatcher.route"] == "luna"
+        assert tags["dispatcher.fallback_from"] == "argon"
+        assert tags["dispatcher.decided_by"] == "jev"
+        assert tags["dispatcher.jev_confidence"] == "0.970"
+
+        spans = {s.name: s for s in trace.data.spans}
+        assert {"dispatch", "jev_router", "call_model"} <= set(spans)
+        router = spans["jev_router"]
+        assert router.attributes["routing.jev_choice"] == "argon"
+        assert router.attributes["routing.probabilities"]["argon"] == 0.9
+
+
+class TestTracingSetup:
+    def test_setup_tracing_links_uc_trace_location(self, monkeypatch):
+        fake = MagicMock()
+        monkeypatch.setattr(agent, "mlflow", fake)
+        agent.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
+        args, kwargs = fake.set_experiment.call_args
+        assert args[0] == "/Users/x/exp"
+        assert kwargs["trace_location"].catalog_name == "cat"
+
+    def test_setup_tracing_without_experiment_is_a_noop(self, monkeypatch):
+        fake = MagicMock()
+        monkeypatch.setattr(agent, "mlflow", fake)
+        agent.setup_tracing(None, catalog="cat", schema="sch")
+        fake.set_experiment.assert_not_called()
+
+    def test_falls_back_when_experiment_has_traces(self, monkeypatch, capsys):
+        fake = MagicMock()
+        fake.set_experiment.side_effect = [Exception("Experiment 1 already contains traces"), None]
+        monkeypatch.setattr(agent, "mlflow", fake)
+        agent.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
+        assert fake.set_experiment.call_count == 2
+        assert "trace_location" not in fake.set_experiment.call_args.kwargs
+        assert "already contains traces" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Serving wrapper (ResponsesAgent)
 # ---------------------------------------------------------------------------
 
 
 class TestServingWrapper:
-    def test_predict_returns_responses_shape(self, monkeypatch):
-        """DispatcherResponsesAgent.predict returns a ResponsesAgentResponse whose
-        output carries the dispatcher's final answer text."""
-        from langchain_core.messages import AIMessage
+    def test_predict_returns_text_and_routing(self, cfg):
         from mlflow.types.responses import ResponsesAgentRequest
 
         import serving_agent
 
-        # Mock the dispatcher graph so no LLM / workspace is touched.
-        fake_dispatcher = MagicMock()
-        fake_dispatcher.invoke.return_value = {
-            "messages": [AIMessage(content="the dispatched answer")]
-        }
-        monkeypatch.setattr(
-            serving_agent, "_build_dispatcher_from_env", lambda: fake_dispatcher
+        gw = FakeGateway(jev=jev_answer("opus", 0.9))
+        model = serving_agent.DispatcherResponsesAgent(client=gw)
+        req = ResponsesAgentRequest(
+            input=[{"role": "user", "content": "design a db schema"}],
+            custom_inputs={"temperature": 0.2},
         )
+        resp = model.predict(req)
+        assert serving_agent.response_text(resp) == "answer from system.ai.claude-opus-5-5"
+        assert resp.custom_outputs["routing"]["route"] == "opus"
+        assert gw.chat_calls[0]["temperature"] == 0.2
 
-        agent = serving_agent.DispatcherResponsesAgent()
-        request = ResponsesAgentRequest(input=[{"role": "user", "content": "hello"}])
-        response = agent.predict(request)
+    def test_custom_inputs_route_pins_the_model(self, cfg):
+        from mlflow.types.responses import ResponsesAgentRequest
 
-        # Response carries the answer somewhere in its output items.
-        text_blob = serving_agent._response_text(response)
-        assert "the dispatched answer" in text_blob
+        import serving_agent
+
+        gw = FakeGateway()
+        model = serving_agent.DispatcherResponsesAgent(client=gw)
+        req = ResponsesAgentRequest(
+            input=[{"role": "user", "content": "hi"}], custom_inputs={"route": "argon"}
+        )
+        assert model.predict(req).custom_outputs["routing"]["decided_by"] == "caller"
+        assert gw.chat_calls[0]["model"] == "system.ai.gemini-4-argon"
+
+    def test_responses_input_converts_to_chat_messages(self):
+        from mlflow.types.responses import ResponsesAgentRequest
+
+        import serving_agent
+
+        req = ResponsesAgentRequest(
+            input=[
+                {"role": "user", "content": [{"type": "input_text", "text": "a"}]},
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "id": "1",
+                    "content": [{"type": "output_text", "text": "b", "annotations": []}],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "look"},
+                        {"type": "input_image", "image_url": "https://x/y.png"},
+                    ],
+                },
+            ]
+        )
+        msgs = serving_agent.to_chat_messages(req)
+        assert msgs[0] == {"role": "user", "content": "a"}
+        assert msgs[1] == {"role": "assistant", "content": "b"}
+        assert msgs[2]["content"][1] == {"type": "image_url", "image_url": {"url": "https://x/y.png"}}
 
 
 # ---------------------------------------------------------------------------
-# Model packaging (the deployed-serving path)
+# Packaging + declared resources (the deployed-serving path)
 # ---------------------------------------------------------------------------
 
 
 class TestModelPackaging:
-    def test_logged_model_loads_outside_repo(self, tmp_path, monkeypatch):
-        """Log the model exactly as driver.py does, then load it from a clean
-        subprocess cwd'd outside the repo.
+    def test_logged_model_loads_outside_repo(self, cfg, tmp_path, monkeypatch):
+        """Log exactly as driver.py does, then load from a clean cwd.
 
-        serving_agent.py imports `agent`, so the logged artifact must bundle
-        agent.py (code_paths) — otherwise the model only loads when the repo
-        happens to be on sys.path, and the deployed serving container crashes
-        with ModuleNotFoundError.
-
-        mlflow validates ResponsesAgent models at log time by running predict
-        on an input example; the env vars + patched dispatcher below let that
-        validation run offline (the code file executed by log_model resolves
-        `agent` from sys.modules, so the patch reaches it).
+        serving_agent.py imports `agent`, so the artifact must bundle agent.py
+        (code_paths); otherwise the serving container dies with
+        ModuleNotFoundError. mlflow validates by running predict on the input
+        example, so GatewayClient is swapped for the fake during logging.
         """
         import os
         import subprocess
         import sys
 
-        from langchain_core.messages import AIMessage
-        import mlflow
+        from pathlib import Path
 
-        import agent as agent_module
         import driver
 
-        monkeypatch.setenv("GENIE_SPACE_ID", "space-test")
-        monkeypatch.setenv("BASE_CATALOG", "cat")
-        monkeypatch.setenv("BASE_SCHEMA", "sch")
-        fake_dispatcher = MagicMock()
-        fake_dispatcher.invoke.return_value = {
-            "messages": [AIMessage(content="validation answer")]
-        }
-        monkeypatch.setattr(
-            agent_module, "build_dispatcher_from_config", lambda cfg: fake_dispatcher
-        )
-
+        monkeypatch.chdir(Path(driver.__file__).parent)  # log_model paths are cwd-relative
+        monkeypatch.setattr(agent, "GatewayClient", lambda: FakeGateway())
         mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+        mlflow.set_experiment("packaging-test")
         with mlflow.start_run():
             logged = mlflow.pyfunc.log_model(**driver.log_model_kwargs())
 
-        probe = (
-            "import mlflow; "
-            f"mlflow.pyfunc.load_model({logged.model_uri!r}); "
-            "print('LOADED')"
-        )
+        probe = f"import mlflow; mlflow.pyfunc.load_model({logged.model_uri!r}); print('LOADED')"
         result = subprocess.run(
             [sys.executable, "-c", probe],
-            cwd=tmp_path,  # outside the repo: no accidental `import agent`
+            cwd=tmp_path,
             env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
             capture_output=True,
             text=True,
             timeout=300,
         )
-        assert "LOADED" in result.stdout, (
-            f"model failed to load in a clean cwd:\n{result.stderr[-2000:]}"
-        )
+        assert "LOADED" in result.stdout, result.stderr[-2000:]
 
 
-# ---------------------------------------------------------------------------
-# Tracing setup
-# ---------------------------------------------------------------------------
+class TestDriver:
+    def test_resources_are_the_four_model_services(self):
+        import driver
 
-
-class TestTracing:
-    def test_setup_tracing_links_uc_trace_location(self, monkeypatch):
-        """When an experiment and a UC namespace are configured, traces are
-        stored UC-backed: set_experiment gets a UnityCatalog trace_location."""
-        import agent as agent_module
-
-        fake_mlflow = MagicMock()
-        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
-
-        agent_module.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
-
-        fake_mlflow.langchain.autolog.assert_called_once()
-        args, kwargs = fake_mlflow.set_experiment.call_args
-        assert args[0] == "/Users/x/exp"
-        loc = kwargs["trace_location"]
-        assert loc.catalog_name == "cat"
-        assert loc.schema_name == "sch"
-
-    def test_setup_tracing_without_experiment_only_autologs(self, monkeypatch):
-        import agent as agent_module
-
-        fake_mlflow = MagicMock()
-        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
-
-        agent_module.setup_tracing(None, catalog="cat", schema="sch")
-
-        fake_mlflow.langchain.autolog.assert_called_once()
-        fake_mlflow.set_experiment.assert_not_called()
-
-    def test_setup_tracing_falls_back_when_experiment_has_traces(self, monkeypatch, capsys):
-        """A UC trace destination can only link to a trace-free experiment.
-        If the link is rejected, fall back to the plain experiment instead of
-        crashing the run."""
-        import agent as agent_module
-
-        fake_mlflow = MagicMock()
-        fake_mlflow.set_experiment.side_effect = [
-            Exception(
-                "BAD_REQUEST: Experiment 123 already contains traces. A UC Trace "
-                "Destination can only be linked to an Experiment that does not "
-                "already contain any traces."
-            ),
-            None,
+        args = driver._parse_args(
+            [
+                "--catalog", "c", "--schema", "s",
+                "--luna-model", "system.ai.gpt-6-luna",
+                "--opus-model", "system.ai.claude-opus-5-5",
+                "--argon-model", "system.ai.gemini-4-argon",
+                "--jev-model", "system.ai.openjev-qwen35-4b",
+                "--experiment", "/Users/x/e",
+            ]
+        )  # fmt: skip
+        env = driver.agent_environment(args)
+        res = driver.model_resources(env.values())
+        assert [r.name for r in res] == [
+            "system.ai.gpt-6-luna",
+            "system.ai.claude-opus-5-5",
+            "system.ai.gemini-4-argon",
+            "system.ai.openjev-qwen35-4b",
         ]
-        monkeypatch.setattr(agent_module, "mlflow", fake_mlflow)
+        assert all(r.type.value == "uc_model_service" for r in res)
 
-        agent_module.setup_tracing("/Users/x/exp", catalog="cat", schema="sch")
-
-        # Second call retried without the UC trace_location.
-        assert fake_mlflow.set_experiment.call_count == 2
-        retry_args, retry_kwargs = fake_mlflow.set_experiment.call_args
-        assert retry_args[0] == "/Users/x/exp"
-        assert "trace_location" not in retry_kwargs
-        # And the user was told why.
-        assert "already contains traces" in capsys.readouterr().out
-
-
-# ---------------------------------------------------------------------------
-# Declared model resources (auth passthrough for the serving endpoint)
-# ---------------------------------------------------------------------------
-
-
-class TestModelResources:
-    def test_resources_include_genie_warehouse(self):
-        """The Genie space resource alone does not grant the serving identity
-        access to the SQL warehouse Genie executes on — the warehouse must be
-        declared too (live prod query failed without it)."""
-        from mlflow.models.resources import DatabricksSQLWarehouse
-
+    def test_serving_credentials_come_from_the_secret_scope(self):
         import driver
 
-        resources = driver.model_resources(
-            genie_space_id="space-1",
-            web_search_fqn="cat.sch.web_search",
-            llm_endpoint="databricks-claude-sonnet-4-6",
-            warehouse_id="wh-123",
-        )
-        warehouses = [r for r in resources if isinstance(r, DatabricksSQLWarehouse)]
-        assert warehouses, "DatabricksSQLWarehouse missing from declared resources"
-
-    def test_resources_include_genie_tables(self):
-        """The serving credential is scoped to declared resources only, so the
-        tables the Genie space queries must be declared too (live prod query
-        failed with table-level PermissionDenied without them)."""
-        from mlflow.models.resources import DatabricksTable
-
-        import driver
-
-        resources = driver.model_resources(
-            genie_space_id="space-1",
-            web_search_fqn="cat.sch.web_search",
-            llm_endpoint="databricks-claude-sonnet-4-6",
-            warehouse_id="wh-123",
-            genie_tables=["cat.data.spend", "cat.data.usage"],
-        )
-        tables = [r for r in resources if isinstance(r, DatabricksTable)]
-        assert len(tables) == 2
+        env = driver.serving_credentials_env("https://h", "scope")
+        assert env == {
+            "DATABRICKS_HOST": "https://h",
+            "DATABRICKS_CLIENT_ID": "{{secrets/scope/client_id}}",
+            "DATABRICKS_CLIENT_SECRET": "{{secrets/scope/client_secret}}",
+        }

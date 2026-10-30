@@ -1,26 +1,32 @@
 """
-Bundle job entry point: deploy the dispatcher agent.
+Bundle job entry point: deploy the model dispatcher.
 
 Run by the `deploy_dispatcher` job in databricks.yml (a serverless
 spark_python_task). It:
-  1. registers/refreshes the web_search UC function into {catalog}.{schema}
-  2. logs the agent via code-based logging from serving_agent.py, declaring the
-     resources it needs for auth passthrough (Genie space, the web_search
-     function, and the LLM serving endpoint)
+  1. creates the target schema if needed and points the MLflow experiment's
+     traces at it (UC-backed tracing)
+  2. logs serving_agent.py with code-based logging, declaring the four Unity AI
+     Gateway model services it calls (luna, opus, argon, and JEV) as resources
   3. registers the model to UC as {catalog}.{schema}.simple_dispatcher_agent
   4. if deploy_endpoint == "true", deploys it with databricks.agents.deploy(...)
+     and gives the endpoint a service-principal identity (see below)
 
-Parameters arrive as command-line args (the bundle substitutes job parameters
-into the task `parameters` list):
-    --catalog        UC catalog
-    --schema         UC schema
-    --genie-space-id Genie space ID
-    --llm-endpoint   chat model serving endpoint
-    --experiment     MLflow experiment path
+Why the endpoint needs its own service principal: agents on Model Serving
+"can't use automatic authentication passthrough to query model services"
+(Databricks docs, "Migrate to Unity Gateway"). Declared resources still record
+what the agent calls, but the credential that reaches /ai-gateway/* must be a
+real principal with EXECUTE on the model services. So the endpoint gets
+DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET from a secret scope, and the
+agent code stays the same: the SDK picks OAuth M2M ahead of the
+model-serving credential. That principal also writes the endpoint's MLflow
+traces, so this job grants it access to the experiment and the trace schema.
+
+Parameters arrive as command-line args (the bundle substitutes job variables):
+    --catalog / --schema               UC home for the model and traces
+    --luna-model / --opus-model / --argon-model / --jev-model   UC model ids
+    --experiment                       MLflow experiment path
     --deploy-endpoint "true" | "false"
-
-This file runs as plain Python (no notebook magics) so it works as a
-spark_python_task and is also importable/readable as a normal module.
+    --secret-scope                     scope holding the endpoint SP's client_id / client_secret
 """
 
 from __future__ import annotations
@@ -29,17 +35,11 @@ import argparse
 import os
 
 import mlflow
-from mlflow.models.resources import (
-    DatabricksFunction,
-    DatabricksGenieSpace,
-    DatabricksServingEndpoint,
-    DatabricksSQLWarehouse,
-    DatabricksTable,
-)
-
-from register_web_search import FUNCTION_NAME, register_web_search
+from mlflow.models.resources import DatabricksUCModelService
 
 MODEL_NAME = "simple_dispatcher_agent"
+
+INPUT_EXAMPLE = {"input": [{"role": "user", "content": "Reply with the single word: ok"}]}
 
 
 def log_model_kwargs(resources: list | None = None) -> dict:
@@ -54,138 +54,150 @@ def log_model_kwargs(resources: list | None = None) -> dict:
         "python_model": "serving_agent.py",
         "code_paths": ["agent.py"],
         "resources": resources or [],
-        "pip_requirements": [
-            "databricks-langchain",
-            "langchain>=1.3",
-            "mlflow>=3.0",
-            "databricks-agents",
-        ],
+        "input_example": INPUT_EXAMPLE,
+        "pip_requirements": ["mlflow>=3.0", "databricks-sdk", "requests"],
     }
 
 
 def _parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Deploy the simple dispatcher agent.")
-    parser.add_argument("--catalog", required=True)
-    parser.add_argument("--schema", required=True)
-    parser.add_argument("--genie-space-id", required=True, dest="genie_space_id")
-    parser.add_argument("--llm-endpoint", required=True, dest="llm_endpoint")
-    parser.add_argument("--experiment", required=True)
-    parser.add_argument("--deploy-endpoint", default="false", dest="deploy_endpoint")
-    parser.add_argument(
-        "--genie-tables",
-        default="",
-        dest="genie_tables",
-        help="Comma-separated fully-qualified tables the Genie space queries "
-        "(declared as serving resources for auth passthrough).",
-    )
-    return parser.parse_args(argv)
+    p = argparse.ArgumentParser(description="Deploy the simple model dispatcher.")
+    p.add_argument("--catalog", required=True)
+    p.add_argument("--schema", required=True)
+    p.add_argument("--luna-model", required=True, dest="luna_model")
+    p.add_argument("--opus-model", required=True, dest="opus_model")
+    p.add_argument("--argon-model", required=True, dest="argon_model")
+    p.add_argument("--jev-model", required=True, dest="jev_model")
+    p.add_argument("--experiment", required=True)
+    p.add_argument("--deploy-endpoint", default="false", dest="deploy_endpoint")
+    p.add_argument("--secret-scope", default="", dest="secret_scope")
+    return p.parse_args(argv)
 
 
-def model_resources(
-    genie_space_id, web_search_fqn, llm_endpoint, warehouse_id, genie_tables=()
-):
-    """Everything the serving endpoint's identity needs access to.
-
-    Declared at log time so agents.deploy can set up auth passthrough. The
-    serving credential is scoped to exactly these resources — UC grants to the
-    serving principal are not a substitute — so the tables the Genie space
-    queries must be declared alongside the space and its warehouse.
-    """
-    return [
-        DatabricksGenieSpace(genie_space_id=genie_space_id),
-        DatabricksSQLWarehouse(warehouse_id=warehouse_id),
-        DatabricksFunction(function_name=web_search_fqn),
-        DatabricksServingEndpoint(endpoint_name=llm_endpoint),
-        *[DatabricksTable(table_name=t) for t in genie_tables],
-    ]
-
-
-def _agent_environment(args) -> dict[str, str]:
-    """The env vars the dispatcher needs, derived from job parameters.
+def agent_environment(args) -> dict[str, str]:
+    """The env vars the dispatcher reads, derived from job parameters.
 
     Set locally before log_model (mlflow validates ResponsesAgent models by
-    running predict on an input example, which builds the dispatcher) and
-    passed to agents.deploy so the serving container can build it too.
+    running predict on the input example, which makes one real routed call)
+    and passed to agents.deploy so the serving container reads the same config.
     """
     return {
-        "GENIE_SPACE_ID": args.genie_space_id,
-        "BASE_CATALOG": args.catalog,
-        "BASE_SCHEMA": args.schema,
-        "LLM_ENDPOINT": args.llm_endpoint,
+        "LUNA_MODEL": args.luna_model,
+        "OPUS_MODEL": args.opus_model,
+        "ARGON_MODEL": args.argon_model,
+        "JEV_MODEL": args.jev_model,
     }
+
+
+def serving_credentials_env(host: str, secret_scope: str) -> dict[str, str]:
+    """OAuth M2M env vars for the endpoint, resolved by Model Serving from secrets."""
+    return {
+        "DATABRICKS_HOST": host,
+        "DATABRICKS_CLIENT_ID": "{{secrets/" + secret_scope + "/client_id}}",
+        "DATABRICKS_CLIENT_SECRET": "{{secrets/" + secret_scope + "/client_secret}}",
+    }
+
+
+def grant_trace_access(w, app_id: str, catalog: str, schema: str, experiment_id: str) -> None:
+    """Let the endpoint's SP write traces: the experiment plus its UC trace tables."""
+    from databricks.sdk.service.catalog import PermissionsChange, Privilege
+    from databricks.sdk.service.ml import ExperimentAccessControlRequest, ExperimentPermissionLevel
+
+    w.grants.update(
+        "catalog", catalog, changes=[PermissionsChange(principal=app_id, add=[Privilege.USE_CATALOG])]
+    )
+    w.grants.update(
+        "schema",
+        f"{catalog}.{schema}",
+        changes=[
+            PermissionsChange(
+                principal=app_id,
+                add=[Privilege.USE_SCHEMA, Privilege.SELECT, Privilege.MODIFY],
+            )
+        ],
+    )
+    w.experiments.update_permissions(
+        experiment_id,
+        access_control_list=[
+            ExperimentAccessControlRequest(
+                service_principal_name=app_id,
+                permission_level=ExperimentPermissionLevel.CAN_EDIT,
+            )
+        ],
+    )
+
+
+def model_resources(model_ids) -> list:
+    """The Unity AI Gateway model services the serving identity may call.
+
+    The deployed endpoint's credential is scoped to declared resources, so
+    every model the dispatcher can route to (plus the router) is listed here.
+    """
+    return [DatabricksUCModelService(model_service_name=m) for m in dict.fromkeys(model_ids)]
 
 
 def run(args) -> str:
     """Execute the full deploy flow. Returns the UC model name."""
     catalog, schema = args.catalog, args.schema
+    ensure_schema(catalog, schema)  # dev/test schemas are per-user/per-PR
 
-    # 1. Register / refresh the web_search UDF in the target schema.
-    register_web_search(catalog=catalog, schema=schema)
+    env = agent_environment(args)
+    os.environ.update(env)
 
-    # mlflow's log_model runs a validation predict on ResponsesAgent models,
-    # which builds the dispatcher from these env vars — and makes one real
-    # agent invocation, so a broken config fails the deploy job here instead
-    # of at first user request.
-    os.environ.update(_agent_environment(args))
-
-    # serving_agent.py reads its config from the environment at load/serve time,
-    # so the deployed model resolves GENIE_SPACE_ID / BASE_CATALOG / BASE_SCHEMA /
-    # LLM_ENDPOINT the same way agent.py does. The endpoint's runtime identity
-    # supplies the credentials; the declared resources below grant access.
-    # UC-backed tracing: the experiment's traces land in Delta tables in the
-    # target schema (created above) instead of workspace-managed storage.
     from agent import set_experiment_uc_backed
 
     set_experiment_uc_backed(args.experiment, catalog, schema)
 
-    web_search_fqn = f"{catalog}.{schema}.{FUNCTION_NAME}"
-
-    # The Genie space resource does NOT propagate access to the SQL warehouse
-    # Genie executes on — the warehouse must be declared in its own right, so
-    # derive it from the space instead of asking for more config.
-    from databricks.sdk import WorkspaceClient
-
-    warehouse_id = WorkspaceClient().genie.get_space(args.genie_space_id).warehouse_id
-    resources = model_resources(
-        genie_space_id=args.genie_space_id,
-        web_search_fqn=web_search_fqn,
-        llm_endpoint=args.llm_endpoint,
-        warehouse_id=warehouse_id,
-        genie_tables=[t.strip() for t in args.genie_tables.split(",") if t.strip()],
-    )
-
     uc_model_name = f"{catalog}.{schema}.{MODEL_NAME}"
     mlflow.set_registry_uri("databricks-uc")
+    resources = model_resources(env.values())
 
-    # 2. Code-based logging: log serving_agent.py directly (it calls
-    #    mlflow.models.set_model at import).
     with mlflow.start_run(run_name="log_dispatcher"):
         logged = mlflow.pyfunc.log_model(**log_model_kwargs(resources))
-
-        # 3. Register the model version to Unity Catalog.
-        registered = mlflow.register_model(
-            model_uri=logged.model_uri,
-            name=uc_model_name,
-        )
+        registered = mlflow.register_model(model_uri=logged.model_uri, name=uc_model_name)
         print(f"Registered {uc_model_name} version {registered.version}")
 
-    # 4. Optionally deploy a scale-to-zero serving endpoint.
     if str(args.deploy_endpoint).strip().lower() == "true":
-        from databricks import agents
+        import base64
 
-        # NB: the parameter is `scale_to_zero` — `scale_to_zero_enabled` is
+        from databricks import agents
+        from databricks.sdk import WorkspaceClient
+
+        if not args.secret_scope:
+            raise ValueError(
+                "--secret-scope is required to deploy: Model Serving can't pass its own "
+                "credential through to Unity AI Gateway model services (see README)."
+            )
+        w = WorkspaceClient()
+        app_id = base64.b64decode(
+            w.secrets.get_secret(args.secret_scope, "client_id").value
+        ).decode()
+        experiment_id = mlflow.get_experiment_by_name(args.experiment).experiment_id
+        grant_trace_access(w, app_id, catalog, schema, experiment_id)
+
+        # NB: the parameter is `scale_to_zero`; `scale_to_zero_enabled` is
         # silently swallowed by **kwargs and the endpoint stays always-on.
-        agents.deploy(
+        deployment = agents.deploy(
             uc_model_name,
             registered.version,
             scale_to_zero=True,
-            environment_vars=_agent_environment(args),
+            environment_vars={**env, **serving_credentials_env(w.config.host, args.secret_scope)},
         )
-        print(f"Deployed {uc_model_name} v{registered.version} (scale-to-zero).")
+        print(f"Deployed {uc_model_name} v{registered.version} → {deployment.endpoint_name}")
     else:
         print("deploy_endpoint != true; skipping endpoint deployment.")
 
     return uc_model_name
+
+
+def ensure_schema(catalog: str, schema: str) -> None:
+    from databricks.sdk import WorkspaceClient
+    from databricks.sdk.errors import NotFound
+
+    w = WorkspaceClient()
+    try:
+        w.schemas.get(f"{catalog}.{schema}")
+    except NotFound:
+        w.schemas.create(name=schema, catalog_name=catalog)
 
 
 if __name__ == "__main__":
