@@ -9,8 +9,10 @@ request, and the agent forwards it through Unity AI Gateway:
                                        extraction, long documents).
   - opus  (system.ai.claude-opus-5-5)  high-intelligence work (hard reasoning,
                                        complex code, multi-step analysis).
-  - argon (system.ai.gemini-4-argon)   visual design, real-world 3D/spatial
+  - gemini (system.ai.gemini-3-8-flash) visual design, real-world 3D/spatial
                                        thinking, high-quality written copy.
+                                       Set GEMINI_MODEL=system.ai.gemini-4-argon
+                                       where argon is rolled out.
 
 JEV (system.ai.openjev-qwen35-4b) is a judge model. It answers a `choice`
 question with a probability for every option and generates no text, so a
@@ -24,16 +26,17 @@ Usage:
     uv run python agent.py "Write a hero tagline and layout for a coffee brand site"
 
 Configuration (environment variables, or a local .env). Everything has a default:
-    LUNA_MODEL / OPUS_MODEL / ARGON_MODEL  UC model ids of the three models
-    JEV_MODEL                    UC model id of the router (JEV)
+    LUNA_MODEL / OPUS_MODEL / GEMINI_MODEL  UC model ids of the three models
+    JEV_MODEL                    UC model id of the router (OpenJev by default)
     ROUTER_MIN_CONFIDENCE        below this JEV confidence, use the default model (0.5)
     MLFLOW_EXPERIMENT            MLflow experiment path for traces
     BASE_CATALOG / BASE_SCHEMA   UC home for UC-backed traces (optional locally)
 
-Auth is PAT-free and never branched on in code: local dev uses your SSO CLI
-profile (DATABRICKS_PROFILE), CI/prod use injected service-principal creds,
-and deployed code uses the ambient runtime identity. All of it resolves
-through the Databricks SDK's default credential chain.
+Auth is PAT-free and never branched on in code. Gateway calls use
+ModelServingUserCredentials: on a serving endpoint that is the *caller's*
+identity (on-behalf-of-user, via the `ai-gateway` scope); anywhere else it
+falls back to the SDK's default chain (your SSO CLI profile locally,
+injected service-principal creds in jobs).
 """
 
 from __future__ import annotations
@@ -58,6 +61,9 @@ logger = logging.getLogger("simple_dispatcher_agent")
 # ---------------------------------------------------------------------------
 
 DEFAULT_ROUTE = "luna"
+# OpenJev is the open-weights JEV and is served in production workspaces today.
+# TypeSafe AI's Jev (system.ai.typesafeai-jev-1-14-0) speaks the same System One
+# API; set JEV_MODEL to it once it is served in your workspace.
 DEFAULT_JEV_MODEL = "system.ai.openjev-qwen35-4b"
 DEFAULT_MIN_CONFIDENCE = 0.5
 
@@ -93,10 +99,10 @@ ROUTES: dict[str, Route] = {
             "mistake is costly."
         ),
     ),
-    "argon": Route(
-        name="argon",
-        env_var="ARGON_MODEL",
-        default_model="system.ai.gemini-4-argon",
+    "gemini": Route(
+        name="gemini",
+        env_var="GEMINI_MODEL",
+        default_model="system.ai.gemini-3-8-flash",
         criterion=(
             "Visual and creative craft: visual or UI design, layouts, images and "
             "diagrams, real-world 3D or spatial and physical reasoning, or "
@@ -108,7 +114,7 @@ ROUTES: dict[str, Route] = {
 
 ROUTER_INSTRUCTIONS = (
     "Route this user request to the one AI model whose description best fits "
-    "what the request needs. luna is the cheap default; choose opus or argon "
+    "what the request needs. luna is the cheap default; choose opus or gemini "
     "when the request matches their description."
 )
 
@@ -239,13 +245,21 @@ class GatewayError(RuntimeError):
 
 
 class GatewayClient:
-    """Calls the Unity AI Gateway routes with SDK-resolved OAuth credentials."""
+    """Calls the Unity AI Gateway routes as the caller.
+
+    On a serving endpoint, ModelServingUserCredentials yields the invoking
+    user's down-scoped token (on-behalf-of-user), so every model call runs as,
+    is permissioned as, and is billed to the person who asked. Build one per
+    request: the user token only exists inside predict(). Off-serving it is the
+    SDK default credential chain.
+    """
 
     def __init__(self, workspace_client: Any = None) -> None:
         if workspace_client is None:
             from databricks.sdk import WorkspaceClient
+            from databricks_ai_bridge import ModelServingUserCredentials
 
-            workspace_client = WorkspaceClient()
+            workspace_client = WorkspaceClient(credentials_strategy=ModelServingUserCredentials())
         self._config = workspace_client.config
         self.host = self._config.host.rstrip("/")
 

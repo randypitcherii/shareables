@@ -88,7 +88,7 @@ class TestConfig:
         assert cfg["models"] == {
             "luna": "system.ai.gpt-6-luna",
             "opus": "system.ai.claude-opus-5-5",
-            "argon": "system.ai.gemini-4-argon",
+            "gemini": "system.ai.gemini-3-8-flash",
         }
         assert cfg["jev_model"] == "system.ai.openjev-qwen35-4b"
         assert cfg["min_confidence"] == 0.5
@@ -106,9 +106,9 @@ class TestConfig:
             agent.load_config()
 
     def test_dotenv_file_is_loaded(self, cfg, monkeypatch, tmp_path):
-        (tmp_path / ".env").write_text("ARGON_MODEL=cat.sch.argon\n")
-        assert agent.load_config()["models"]["argon"] == "cat.sch.argon"
-        monkeypatch.delenv("ARGON_MODEL")
+        (tmp_path / ".env").write_text("GEMINI_MODEL=cat.sch.gemini\n")
+        assert agent.load_config()["models"]["gemini"] == "cat.sch.gemini"
+        monkeypatch.delenv("GEMINI_MODEL")
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ class TestConfig:
 
 
 class TestRouting:
-    @pytest.mark.parametrize("route", ["luna", "opus", "argon"])
+    @pytest.mark.parametrize("route", ["luna", "opus", "gemini"])
     def test_confident_jev_choice_wins(self, cfg, route):
         gw = FakeGateway(jev=jev_answer(route, 0.9))
         d = agent.route_request(gw, USER, cfg)
@@ -161,7 +161,7 @@ class TestRouting:
         assert call["model"] == "system.ai.openjev-qwen35-4b"
         q = call["questions"]["model"]
         assert q["type"] == "choice"
-        assert list(q["criteria"]) == ["luna", "opus", "argon"]
+        assert list(q["criteria"]) == ["luna", "opus", "gemini"]
 
     def test_router_state_carries_size_signals_but_truncates(self):
         big = "x" * (agent.ROUTER_MAX_REQUEST_CHARS + 10)
@@ -210,13 +210,13 @@ class TestDispatch:
         assert call["tags"] == {"app": "simple_dispatcher_agent", "route": "opus"}
 
     def test_unavailable_model_falls_back_to_luna_and_says_why(self, cfg):
-        gw = FakeGateway(jev=jev_answer("argon", 0.99), failing_models={"system.ai.gemini-4-argon"})
+        gw = FakeGateway(jev=jev_answer("gemini", 0.99), failing_models={"system.ai.gemini-3-8-flash"})
         out = agent.dispatch(USER, cfg, client=gw)
         r = out["routing"]
-        assert (r["route"], r["fallback_from"]) == ("luna", "argon")
+        assert (r["route"], r["fallback_from"]) == ("luna", "gemini")
         assert "404" in r["fallback_reason"]
         assert [c["model"] for c in gw.chat_calls] == [
-            "system.ai.gemini-4-argon",
+            "system.ai.gemini-3-8-flash",
             "system.ai.gpt-6-luna",
         ]
 
@@ -242,7 +242,7 @@ class TestTrace:
     def test_trace_has_routing_tags_and_spans(self, cfg, tmp_path):
         mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
         mlflow.set_experiment("dispatcher-test")
-        gw = FakeGateway(jev=jev_answer("argon", 0.97), failing_models={"system.ai.gemini-4-argon"})
+        gw = FakeGateway(jev=jev_answer("gemini", 0.97), failing_models={"system.ai.gemini-3-8-flash"})
 
         agent.dispatch(USER, cfg, client=gw)
         mlflow.flush_trace_async_logging()
@@ -250,15 +250,15 @@ class TestTrace:
 
         tags = trace.info.tags
         assert tags["dispatcher.route"] == "luna"
-        assert tags["dispatcher.fallback_from"] == "argon"
+        assert tags["dispatcher.fallback_from"] == "gemini"
         assert tags["dispatcher.decided_by"] == "jev"
         assert tags["dispatcher.jev_confidence"] == "0.970"
 
         spans = {s.name: s for s in trace.data.spans}
         assert {"dispatch", "jev_router", "call_model"} <= set(spans)
         router = spans["jev_router"]
-        assert router.attributes["routing.jev_choice"] == "argon"
-        assert router.attributes["routing.probabilities"]["argon"] == 0.9
+        assert router.attributes["routing.jev_choice"] == "gemini"
+        assert router.attributes["routing.probabilities"]["gemini"] == 0.9
 
 
 class TestTracingSetup:
@@ -316,10 +316,10 @@ class TestServingWrapper:
         gw = FakeGateway()
         model = serving_agent.DispatcherResponsesAgent(client=gw)
         req = ResponsesAgentRequest(
-            input=[{"role": "user", "content": "hi"}], custom_inputs={"route": "argon"}
+            input=[{"role": "user", "content": "hi"}], custom_inputs={"route": "gemini"}
         )
         assert model.predict(req).custom_outputs["routing"]["decided_by"] == "caller"
-        assert gw.chat_calls[0]["model"] == "system.ai.gemini-4-argon"
+        assert gw.chat_calls[0]["model"] == "system.ai.gemini-3-8-flash"
 
     def test_responses_input_converts_to_chat_messages(self):
         from mlflow.types.responses import ResponsesAgentRequest
@@ -392,35 +392,42 @@ class TestModelPackaging:
 
 
 class TestDriver:
-    def test_resources_are_the_four_model_services(self):
+    def _args(self):
         import driver
 
-        args = driver._parse_args(
+        return driver._parse_args(
             [
                 "--catalog", "c", "--schema", "s",
                 "--luna-model", "system.ai.gpt-6-luna",
                 "--opus-model", "system.ai.claude-opus-5-5",
-                "--argon-model", "system.ai.gemini-4-argon",
+                "--gemini-model", "system.ai.gemini-3-8-flash",
                 "--jev-model", "system.ai.openjev-qwen35-4b",
                 "--experiment", "/Users/x/e",
             ]
         )  # fmt: skip
-        env = driver.agent_environment(args)
-        res = driver.model_resources(env.values())
-        assert [r.name for r in res] == [
-            "system.ai.gpt-6-luna",
-            "system.ai.claude-opus-5-5",
-            "system.ai.gemini-4-argon",
-            "system.ai.openjev-qwen35-4b",
-        ]
-        assert all(r.type.value == "uc_model_service" for r in res)
 
-    def test_serving_credentials_come_from_the_secret_scope(self):
+    def test_model_calls_run_as_the_caller(self):
+        """OBO: the user policy asks for exactly the ai-gateway scope."""
         import driver
 
-        env = driver.serving_credentials_env("https://h", "scope")
-        assert env == {
-            "DATABRICKS_HOST": "https://h",
-            "DATABRICKS_CLIENT_ID": "{{secrets/scope/client_id}}",
-            "DATABRICKS_CLIENT_SECRET": "{{secrets/scope/client_secret}}",
-        }
+        policy = driver.auth_policy(driver.agent_environment(self._args()).values())
+        assert policy.user_auth_policy.api_scopes == ["ai-gateway"]
+
+    def test_system_policy_lists_the_model_services(self):
+        import driver
+
+        policy = driver.auth_policy(driver.agent_environment(self._args()).values())
+        assert [(r.type.value, r.name) for r in policy.system_auth_policy.resources] == [
+            ("uc_model_service", "system.ai.gpt-6-luna"),
+            ("uc_model_service", "system.ai.claude-opus-5-5"),
+            ("uc_model_service", "system.ai.gemini-3-8-flash"),
+            ("uc_model_service", "system.ai.openjev-qwen35-4b"),
+        ]
+
+    def test_endpoint_experiment_is_a_reused_sibling(self, tmp_path):
+        import driver
+
+        mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+        first = driver.endpoint_experiment_id("/Users/x/e")
+        assert mlflow.get_experiment(first).name == "/Users/x/e_endpoint"
+        assert driver.endpoint_experiment_id("/Users/x/e") == first

@@ -9,7 +9,11 @@ of picking a model themselves.
 
 Every response carries the routing decision in `custom_outputs.routing`, so
 callers see which model answered and why. Callers can also pin a model with
-`custom_inputs: {"route": "luna" | "opus" | "argon"}`.
+`custom_inputs: {"route": "luna" | "opus" | "gemini"}`.
+
+Model calls run as the caller (on-behalf-of-user): the model is logged with a
+UserAuthPolicy for the `ai-gateway` scope, and a fresh GatewayClient is built
+inside each predict() so it picks up that request's user token.
 
 The bottom of the file calls `mlflow.models.set_model(...)` for code-based
 logging: `driver.py` logs it with `mlflow.pyfunc.log_model(python_model="serving_agent.py", ...)`.
@@ -73,18 +77,15 @@ def response_text(response: ResponsesAgentResponse) -> str:
 
 
 class DispatcherResponsesAgent(ResponsesAgent):
-    """ResponsesAgent that routes each request to luna, opus, or argon via JEV."""
+    """ResponsesAgent that routes each request to luna, opus, or gemini via JEV."""
 
     def __init__(self, client: agent.GatewayClient | None = None) -> None:
-        # Lazy: the serving container builds the client (and its credentials) once.
+        # Tests inject a fake; otherwise a client is built per request (OBO).
         self._client = client
         self._cfg: dict[str, Any] | None = None
 
-    @property
     def client(self) -> agent.GatewayClient:
-        if self._client is None:
-            self._client = agent.GatewayClient()
-        return self._client
+        return self._client or agent.GatewayClient()
 
     @property
     def cfg(self) -> dict[str, Any]:
@@ -98,7 +99,7 @@ class DispatcherResponsesAgent(ResponsesAgent):
         result = agent.dispatch(
             to_chat_messages(request),
             self.cfg,
-            client=self.client,
+            client=self.client(),
             forced_route=custom.get("route"),
             params=params,
         )

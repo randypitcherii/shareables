@@ -26,7 +26,7 @@ GOLDEN = {
         "Prove there are infinitely many primes",
         "Should we shard by tenant or by region? Walk through failure modes, cost, and migration risk.",
     ],
-    "argon": [
+    "gemini": [
         "Write a tagline for a hiking boot brand",
         "Sketch a dashboard layout for a fleet tracking app",
         "How should I orient a 3D-printed bracket so it is strongest under a downward load?",
@@ -44,7 +44,7 @@ def main() -> int:
             ok = d.route == want
             misses += not ok
             conf = f"{d.confidence:.2f}" if d.confidence is not None else " -- "
-            print(f"{'✅' if ok else '❌'} want={want:<5} got={d.route:<5} conf={conf}  {prompt[:60]}")
+            print(f"{'✅' if ok else '❌'} want={want:<6} got={d.route:<6} conf={conf}  {prompt[:60]}")
     total = sum(map(len, GOLDEN.values()))
     print(f"\n{total - misses}/{total} routed as expected")
     return 1 if misses else 0

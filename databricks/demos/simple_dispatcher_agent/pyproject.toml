@@ -1,7 +1,7 @@
 [project]
 name = "simple-dispatcher-agent"
 version = "0.1.0"
-description = "A tiny model dispatcher: JEV routes each request to luna, opus, or argon on Unity AI Gateway"
+description = "A tiny model dispatcher: JEV routes each request to luna, opus, or gemini on Unity AI Gateway"
 # databricks-agents pulls transitive deps that only ship binary wheels for the
 # Databricks runtime interpreters (3.11/3.12). 3.13+ falls back to building
 # `whenever` from sdist, which needs a Rust toolchain. Cap to a known-good band.
@@ -10,6 +10,7 @@ dependencies = [
     "mlflow>=3.0",
     "databricks-agents>=1.0",
     "databricks-sdk",
+    "databricks-ai-bridge",
     "requests",
 ]
 

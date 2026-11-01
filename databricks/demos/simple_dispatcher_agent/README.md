@@ -10,22 +10,36 @@ forwards the request through Unity AI Gateway:
 | --- | --- | --- |
 | **luna** (default) | `gpt-6-luna` | Everyday and low-difficulty work, including work over a lot of context: chat, summaries, extraction, classification, long docs and logs. Cheap and fast. |
 | **opus** | `claude-opus-5-5` | Work that needs deep intelligence: hard reasoning, proofs, complex code, architecture trade-offs, subtle debugging. |
-| **argon** | `gemini-4-argon` | Visual and creative craft: UI/visual design, layouts, real-world 3D/spatial reasoning, polished written copy. |
+| **gemini** | `gemini-3-8-flash` | Visual and creative craft: UI/visual design, layouts, real-world 3D/spatial reasoning, polished written copy. Set `GEMINI_MODEL=system.ai.gemini-4-argon` where argon is rolled out. |
 
-The router is `system.ai.openjev-qwen35-4b`. It answers a single `choice`
-question with a probability for each route and generates no text, so a routing
-call is cheap, fast, and auditable.
+The router is `system.ai.openjev-qwen35-4b` (OpenJev). It answers a single
+`choice` question with a probability for each route and generates no text, so
+a routing call is cheap, fast, and auditable.
+
+**Why OpenJev and not Jev?** TypeSafe AI's Jev
+(`system.ai.typesafeai-jev-1-14-0`) speaks the same System One API and looks
+like the stronger router. It is listed in `system.ai` but not yet served in
+production workspaces (`ENDPOINT_NOT_FOUND` on fe-vm and e2-demo; it answers
+on dogfood). Both score 12/12 on `eval_routing.py`. Switch with
+`JEV_MODEL=system.ai.typesafeai-jev-1-14-0` (or `--var jev_model=...`) once
+it's served in your workspace.
+
+**Every model call runs as the caller.** The endpoint calls the gateway
+on-behalf-of the user who queried it, so the caller's own `EXECUTE` grants
+apply, and `system.ai_gateway.usage` bills each request to that person. There
+are no secrets and no shared service principal (see
+[Identity](#identity-on-behalf-of-user-no-secrets)).
 
 ```mermaid
 flowchart LR
     C[client] --> D[dispatcher endpoint]
     D -- "1. which model?" --> J["JEV<br/>/ai-gateway/typesafe/v1/systemone"]
-    J -- "argon (p=0.99)" --> D
+    J -- "gemini (p=0.99)" --> D
     D -- "2. forward request" --> G["Unity AI Gateway<br/>/ai-gateway/mlflow/v1/chat/completions"]
     G --> L[gpt-6-luna]
     G --> O[claude-opus-5-5]
-    G --> A[gemini-4-argon]
-    D -. "3. trace: route, model, why" .-> M[(MLflow traces<br/>in UC)]
+    G --> A[gemini-3-8-flash]
+    D -. "3. trace: route, model, why" .-> M[(MLflow trace +<br/>UC inference table)]
 ```
 
 The whole dispatcher is one function in `agent.py`:
@@ -44,14 +58,15 @@ judges each request against those sentences.
 
 ## How a routing decision is logged
 
-Every request leaves the same evidence in four places, so "which model ran,
-and why" is never a guess:
+Every request leaves the same evidence in several places, so "which model
+ran, and why" is never a guess:
 
 | Where | What you see |
 | --- | --- |
 | **MLflow trace tags** (searchable) | `dispatcher.route`, `dispatcher.model`, `dispatcher.decided_by`, `dispatcher.jev_confidence`, `dispatcher.reason`, plus `dispatcher.fallback_from` / `dispatcher.fallback_reason` when a fallback ran |
 | **MLflow spans** | `dispatch` (AGENT) → `jev_router` (CHAIN; attributes `routing.*` hold JEV's full probability table) → `call_model` (CHAT_MODEL; `model`, `route`, token `usage`). A failed model call is its own red span. |
 | **Response** | `custom_outputs.routing` carries the same decision object back to the caller |
+| **Inference table** (deployed endpoint, UC) | the endpoint's AI Gateway payload table stores each request's `requester` and the full response, `custom_outputs.routing` included |
 | **`system.ai_gateway.usage`** | every gateway call carries `Databricks-Ai-Gateway-Request-Tags: {"app": "simple_dispatcher_agent", "route": "opus"}`, so billing rows show the route too |
 
 Example `custom_outputs.routing` from a live call:
@@ -63,7 +78,7 @@ Example `custom_outputs.routing` from a live call:
   "decided_by": "jev",
   "jev_choice": "opus",
   "confidence": 0.84,
-  "probabilities": {"luna": 0.094, "opus": 0.894, "argon": 0.011},
+  "probabilities": {"luna": 0.094, "opus": 0.894, "gemini": 0.011},
   "reason": "JEV chose 'opus' with confidence 0.84: Work that needs deep intelligence: ...",
   "fallback_from": null,
   "fallback_reason": null
@@ -89,18 +104,26 @@ Find every request that went to opus, in the MLflow UI search box or with code:
 mlflow.search_traces(filter_string="tags.`dispatcher.route` = 'opus'")
 ```
 
-Deployed traces are UC-backed, so SQL works too (this query ran against the dev
-deploy):
+The deployed endpoint's UC record is its inference table. This query ran
+against the dev deploy:
 
 ```sql
-SELECT from_unixtime(start_time_unix_nano / 1e9)        AS at,
-       attributes:['routing.jev_choice']::string        AS jev_choice,
-       attributes:['routing.route']::string             AS route,
-       attributes:['routing.decided_by']::string        AS decided_by
-FROM   <catalog>.<schema>.`<experiment_id>_otel_spans`
-WHERE  name = 'jev_router'
-ORDER  BY 1 DESC;
+SELECT request_time,
+       requester,
+       get_json_object(response, '$.custom_outputs.routing.route')  AS route,
+       get_json_object(response, '$.custom_outputs.routing.reason') AS reason
+FROM   <catalog>.<schema>.simple_dispatcher_agent_payload
+ORDER  BY request_time DESC;
 ```
+
+Where the traces live:
+- **Local runs and the deploy job:** the target experiment, UC-backed when
+  `BASE_CATALOG`/`BASE_SCHEMA` are set.
+- **The deployed endpoint:** a workspace-managed sibling experiment,
+  `<experiment>_endpoint`. Serving writes traces as a hidden system principal
+  that gets a new id on every deploy and has no UC grants, so it can't write a
+  UC-linked experiment's Delta tables. The inference table above is the
+  endpoint's UC copy of the same decision.
 
 ## Files
 
@@ -117,9 +140,10 @@ ORDER  BY 1 DESC;
 
 - A workspace with Unity AI Gateway and the four `system.ai` model services
   above. Check with `databricks api get /api/2.1/unity-catalog/model-services`.
-  `gemini-4-argon` is still rolling out by region: where it's missing, argon
-  requests fall back to luna (logged), or you can set `ARGON_MODEL` to another
-  Gemini.
+  The default Gemini is `gemini-3-8-flash`, the newest one served on fe-vm.
+  `gemini-4-argon` and `gemini-3-1-pro` are served on e2-demo but not fe-vm.
+  Check yours, then set `GEMINI_MODEL`. If the chosen model isn't served, the
+  request falls back to luna and the fallback is logged.
 - `EXECUTE` on those model services. By default, all account users have it.
 - Python 3.10–3.12 and `uv`.
 
@@ -134,7 +158,7 @@ databricks auth login --profile DEFAULT        # one-time SSO; PATs are not supp
 
 uv run python agent.py "Summarize: the standup moved from 9 to 10am"           # → luna
 uv run python agent.py "Prove sqrt(2) is irrational, then say why sqrt(4) fails" # → opus
-uv run python agent.py "Write a three-line hero tagline for a coffee roaster"    # → argon
+uv run python agent.py "Write a three-line hero tagline for a coffee roaster"    # → gemini
 ```
 
 Changed a criterion? Re-check routing against the golden set (calls JEV only):
@@ -146,9 +170,9 @@ uv run python eval_routing.py     # 12/12 routed as expected
 Output from `agent.py` shows the route, the reason, and JEV's probabilities:
 
 ```
-Route:  argon  →  system.ai.gemini-4-argon
-Why:    JEV chose 'argon' with confidence 0.99: Visual and creative craft: ...
-JEV:    luna=0.005, opus=0.001, argon=0.994
+Route:  gemini  →  system.ai.gemini-3-8-flash
+Why:    JEV chose 'gemini' with confidence 0.99: Visual and creative craft: ...
+JEV:    luna=0.007, opus=0.001, gemini=0.992
 ```
 
 Configuration is optional. Copy `.env.template` to `.env` to override any of
@@ -158,8 +182,8 @@ these settings:
 | --- | --- | --- |
 | `LUNA_MODEL` | `system.ai.gpt-6-luna` | default / cheap-fast route |
 | `OPUS_MODEL` | `system.ai.claude-opus-5-5` | high-intelligence route |
-| `ARGON_MODEL` | `system.ai.gemini-4-argon` | visual / spatial / copy route |
-| `JEV_MODEL` | `system.ai.openjev-qwen35-4b` | the router |
+| `GEMINI_MODEL` | `system.ai.gemini-3-8-flash` | visual / spatial / copy route (`gemini-4-argon` where served) |
+| `JEV_MODEL` | `system.ai.openjev-qwen35-4b` | the router (`typesafeai-jev-1-14-0` once served) |
 | `ROUTER_MIN_CONFIDENCE` | `0.5` | below this, luna answers |
 | `MLFLOW_EXPERIMENT` | unset | experiment for traces (local runs go to `./mlflow.db` otherwise) |
 | `BASE_CATALOG` / `BASE_SCHEMA` | unset | with an experiment, stores traces in UC Delta tables |
@@ -195,36 +219,36 @@ databricks api post /serving-endpoints/<endpoint>/invocations --json '{
 }'
 ```
 
-### The serving endpoint needs a service principal (one-time setup)
+### Identity: on-behalf-of-user, no secrets
 
-Agents on Model Serving **can't use automatic authentication passthrough to
-query Unity AI Gateway model services** ([docs](https://docs.databricks.com/aws/en/ai-gateway/migrate-to-unity-gateway)).
-Declaring the model services as resources isn't enough: the gateway answers the
-endpoint's built-in credential with `NOT_FOUND: 'system.ai.gpt-6-luna' does not exist`.
+**The problem.** Agents on Model Serving can't use their own credential to
+call Unity AI Gateway model services
+([docs](https://docs.databricks.com/aws/en/ai-gateway/migrate-to-unity-gateway)).
+The gateway answers it with `NOT_FOUND: 'system.ai.gpt-6-luna' does not exist`,
+even when the model services are declared as resources.
 
-So the endpoint runs as a service principal whose OAuth secret lives in a
-secret scope. The SDK picks OAuth M2M ahead of the model-serving credential,
-so the agent code doesn't change:
+**The fix.** The model is logged with a `UserAuthPolicy` for the
+`ai-gateway` scope. Inside each `predict()`, the dispatcher builds its gateway
+client with `ModelServingUserCredentials`, which returns the invoking user's
+down-scoped token. Outside Model Serving, the same class falls back to the
+SDK's default chain, so local runs and jobs need no code change.
 
-```bash
-SP=$(databricks service-principals create --display-name simple-dispatcher-agent -o json)
-databricks service-principal-secrets-proxy create "$(echo "$SP" | jq -r .id)" -o json > /tmp/sp.json
-databricks secrets create-scope simple_dispatcher_agent
-databricks secrets put-secret simple_dispatcher_agent client_id     --string-value "$(echo "$SP" | jq -r .applicationId)"
-databricks secrets put-secret simple_dispatcher_agent client_secret --string-value "$(jq -r .secret /tmp/sp.json)"
-rm /tmp/sp.json
-```
+**What that means:**
+- No secret scopes, service principals, or rotation.
+- The caller needs `EXECUTE` on the four model services. All account users
+  have it by default, so this only bites if you lock models down, and then
+  it's the point.
+- Usage and cost are attributed per user in `system.ai_gateway.usage`, and
+  `requester` in the inference table.
+- A caller with no user identity (e.g. a job's service principal) is
+  authorized as that principal.
 
-The SP gets `EXECUTE` on `system.ai` model services as an account user. The
-deploy job grants it the rest: `CAN_EDIT` on the experiment, plus
-`USE CATALOG` / `USE SCHEMA` / `SELECT` / `MODIFY` on the trace schema, so the
-endpoint's traces land in UC. Use another scope name with
-`--var secret_scope=<scope>`.
+Prerequisite: the workspace preview **Agent Framework: On-Behalf-Of-User
+Authorization**. The endpoint's logs say so if it's off.
 
-> Databricks now recommends Databricks Apps for new agent deployments, where
-> the app's service principal gets this for free. This demo stays on Model
-> Serving for the AI Gateway endpoint features (usage tracking, inference
-> tables, Review App).
+> Databricks now recommends Databricks Apps for new agent deployments. This
+> demo stays on Model Serving for the AI Gateway endpoint features (usage
+> tracking, inference table, Review App).
 
 ## Engineering notes
 
@@ -260,7 +284,8 @@ wheels for the Databricks runtime interpreters.
 | Symptom | Fix |
 | --- | --- |
 | `NOT_FOUND: 'system.ai.databricks-…' does not exist` | `system.ai` model-service names drop the `databricks-` prefix |
-| `ENDPOINT_NOT_FOUND` for `gemini-4-argon` | Not rolled out to this workspace's region yet. Argon requests fall back to luna (see `dispatcher.fallback_reason`), or set `ARGON_MODEL`. |
-| Deployed endpoint: `NOT_FOUND` for every model, `JEV routing failed` in logs | The endpoint is using its built-in credential. Set up the service principal secret scope above and redeploy. |
-| Deployed endpoint: `Failed to send trace … USE CATALOG` in logs | The endpoint identity can't write the UC trace tables. Redeploy with `--secret-scope` so the job grants the SP access. |
+| `ENDPOINT_NOT_FOUND` for a model (e.g. `gemini-4-argon`, Jev) | Not served in this workspace yet. Requests fall back to luna (see `dispatcher.fallback_reason`); point the env var at a served model. |
+| Deployed endpoint: `NOT_FOUND` for every model, `JEV routing failed` in logs | The gateway client was built with the endpoint's own credential: either outside `predict()`, or the model was logged without the `ai-gateway` user policy. |
+| Deployed endpoint: `Unable to detect credentials for user authorization` | The OBO workspace preview is off, or the model was logged without a `UserAuthPolicy`. |
+| Deployed endpoint: `Failed to send trace … signed principal context token` | The endpoint is pointed at a UC-linked experiment. Redeploy with this driver; it uses the `<experiment>_endpoint` experiment. |
 | `401` with two profiles matching one host | `export DATABRICKS_CONFIG_PROFILE=<profile>` |

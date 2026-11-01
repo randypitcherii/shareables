@@ -21,18 +21,18 @@ variables:
   opus_model:
     description: High-intelligence model.
     default: system.ai.claude-opus-5-5
-  argon_model:
-    description: Visual design, real-world 3D/spatial reasoning, and high-quality written copy.
-    default: system.ai.gemini-4-argon
-  jev_model:
-    description: The router. A JEV judge model that picks luna, opus, or argon per request.
-    default: system.ai.openjev-qwen35-4b
-  secret_scope:
+  gemini_model:
     description: >
-      Secret scope with `client_id` / `client_secret` of the service principal
-      the serving endpoint runs as. Model Serving can't pass its own credential
-      through to Unity AI Gateway model services, so deploys need one.
-    default: simple_dispatcher_agent
+      Visual design, real-world 3D/spatial reasoning, and high-quality written
+      copy. Newest Gemini served on fe-vm; use system.ai.gemini-4-argon where
+      it is rolled out.
+    default: system.ai.gemini-3-8-flash
+  jev_model:
+    description: >
+      The router. A JEV judge model that picks luna, opus, or gemini per
+      request. Switch to system.ai.typesafeai-jev-1-14-0 (TypeSafe AI's Jev)
+      once it is served in your workspace.
+    default: system.ai.openjev-qwen35-4b
   pr_number:
     description: PR number suffix for the `test` target (CI only).
     default: "0"
@@ -69,16 +69,14 @@ resources:
               - "${var.luna_model}"
               - "--opus-model"
               - "${var.opus_model}"
-              - "--argon-model"
-              - "${var.argon_model}"
+              - "--gemini-model"
+              - "${var.gemini_model}"
               - "--jev-model"
               - "${var.jev_model}"
               - "--experiment"
               - "${var.target_experiment}"
               - "--deploy-endpoint"
               - "${var.deploy_endpoint}"
-              - "--secret-scope"
-              - "${var.secret_scope}"
           environment_key: default
       environments:
         - environment_key: default
@@ -88,6 +86,7 @@ resources:
               - mlflow>=3.0
               - databricks-agents
               - databricks-sdk
+              - databricks-ai-bridge
 
 targets:
   dev:
