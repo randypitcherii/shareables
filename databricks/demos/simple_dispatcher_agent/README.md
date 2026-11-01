@@ -117,13 +117,31 @@ ORDER  BY request_time DESC;
 ```
 
 Where the traces live:
-- **Local runs and the deploy job:** the target experiment, UC-backed when
-  `BASE_CATALOG`/`BASE_SCHEMA` are set.
-- **The deployed endpoint:** a workspace-managed sibling experiment,
-  `<experiment>_endpoint`. Serving writes traces as a hidden system principal
-  that gets a new id on every deploy and has no UC grants, so it can't write a
-  UC-linked experiment's Delta tables. The inference table above is the
-  endpoint's UC copy of the same decision.
+- **The deploy job and endpoint share the target UC-linked experiment.**
+  `driver.py` binds it before logging the model, passes its ID to
+  `agents.deploy`, and configures managed endpoint telemetry with its existing
+  OTel tables. It waits for deployment and verifies the destination readback.
+- **No secrets or rotating-principal grants.** Endpoint telemetry provides the
+  managed persistence path; `agents.deploy` alone is not sufficient. Matching
+  telemetry configuration is retained on redeploy without another update.
+- **One export path.** `MLFLOW_ENABLE_OTLP_EXPORTER=false` prevents MLflow from
+  also exporting raw OTLP spans to the collector, which would duplicate the
+  native traces. Gateway model calls still use the caller's `ai-gateway` token.
+
+To inspect actual JEV decisions in SQL:
+
+```sql
+SELECT time, trace_id, name, attributes
+FROM <catalog>.<schema>.<experiment_id>_otel_spans
+WHERE name = 'jev_router'
+ORDER BY time DESC
+LIMIT 10;
+```
+
+The AI Gateway inference table remains enabled separately. Local CLI runs use
+UC storage when `MLFLOW_EXPERIMENT`, `BASE_CATALOG`, and `BASE_SCHEMA` are set.
+See [UC tracing setup and investigation](UC_TRACING.md) for permissions,
+preview status, evidence, and alternatives.
 
 ## Files
 
@@ -133,6 +151,7 @@ Where the traces live:
 | `serving_agent.py` | MLflow 3 `ResponsesAgent` wrapper for Model Serving (Playground, Review App), used by code-based logging |
 | `eval_routing.py` | Golden-set check: 12 prompts with an expected route each; run it after editing a criterion (JEV calls only) |
 | `driver.py` | Bundle job entry point: log, register to UC, and optionally deploy the endpoint |
+| `UC_TRACING.md` | Secret-free serving-to-UC tracing recipe, live evidence, costs, and alternatives |
 | `databricks.yml` | Databricks Asset Bundle (dev/test/prod targets, one deploy-on-demand job) |
 | `tests/` | Pytest suite. Runs fully offline (the gateway is faked). |
 
@@ -146,6 +165,11 @@ Where the traces live:
   request falls back to luna and the fallback is logged.
 - `EXECUTE` on those model services. By default, all account users have it.
 - Python 3.10–3.12 and `uv`.
+- Endpoint telemetry in a [supported region](https://docs.databricks.com/aws/en/machine-learning/model-serving/custom-model-serving-uc-logs).
+  The deployer needs `USE CATALOG`, `USE SCHEMA`, `CREATE TABLE`, and `MODIFY`
+  on the telemetry destination, plus `SELECT`/`MODIFY` on the trace
+  tables. The telemetry API's table-name fields are marked **Public Preview**.
+  MLflow is pinned to the live-verified `3.17.2` in the project, model, and job.
 
 ## Usage
 

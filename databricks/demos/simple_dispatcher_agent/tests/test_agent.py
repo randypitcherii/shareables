@@ -424,10 +424,62 @@ class TestDriver:
             ("uc_model_service", "system.ai.openjev-qwen35-4b"),
         ]
 
-    def test_endpoint_experiment_is_a_reused_sibling(self, tmp_path):
+    def test_endpoint_uses_the_existing_uc_experiment(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from mlflow.entities.trace_location import UnityCatalog
+
+        import driver
+
+        experiment = SimpleNamespace(
+            experiment_id="42", trace_location=UnityCatalog(catalog_name="c", schema_name="s")
+        )
+        lookup = MagicMock(return_value=experiment)
+        monkeypatch.setattr(driver.mlflow, "get_experiment_by_name", lookup)
+        assert driver.endpoint_experiment_id("/Users/x/e") == "42"
+        lookup.assert_called_once_with("/Users/x/e")
+
+    def test_endpoint_refuses_workspace_managed_storage(self, tmp_path):
         import driver
 
         mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
-        first = driver.endpoint_experiment_id("/Users/x/e")
-        assert mlflow.get_experiment(first).name == "/Users/x/e_endpoint"
-        assert driver.endpoint_experiment_id("/Users/x/e") == first
+        mlflow.create_experiment("/Users/x/e")
+        with pytest.raises(ValueError, match="must be linked to Unity Catalog"):
+            driver.endpoint_experiment_id("/Users/x/e")
+        assert mlflow.get_experiment_by_name("/Users/x/e_endpoint") is None
+
+    def test_deployment_configures_native_uc_telemetry(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from mlflow.entities.trace_location import UnityCatalog
+
+        from databricks import agents
+
+        import driver
+
+        args = self._args()
+        args.deploy_endpoint = "true"
+        for name in driver.agent_environment(args):
+            monkeypatch.setenv(name, "")
+        monkeypatch.setattr(driver, "ensure_schema", MagicMock())
+        monkeypatch.setattr(agent, "set_experiment_uc_backed", MagicMock())
+        monkeypatch.setattr(mlflow, "set_tracking_uri", MagicMock())
+        monkeypatch.setattr(mlflow, "set_registry_uri", MagicMock())
+        monkeypatch.setattr(mlflow, "start_run", MagicMock())
+        monkeypatch.setattr(mlflow.pyfunc, "log_model", MagicMock(return_value=SimpleNamespace(model_uri="models:/logged")))
+        monkeypatch.setattr(mlflow, "register_model", MagicMock(return_value=SimpleNamespace(version="7")))
+        monkeypatch.setattr(mlflow, "get_experiment_by_name", MagicMock(return_value=SimpleNamespace(
+            experiment_id="42", trace_location=UnityCatalog(catalog_name="c", schema_name="s")
+        )))
+        deploy = MagicMock(return_value=SimpleNamespace(endpoint_name="endpoint"))
+        monkeypatch.setattr(agents, "deploy", deploy)
+        configure = MagicMock()
+        monkeypatch.setattr(driver, "configure_endpoint_telemetry", configure)
+
+        assert driver.run(args) == "c.s.simple_dispatcher_agent"
+
+        settings = deploy.call_args.kwargs
+        assert settings["environment_vars"]["MLFLOW_EXPERIMENT_ID"] == "42"
+        assert settings["environment_vars"]["MLFLOW_ENABLE_OTLP_EXPORTER"] == "false"
+        assert settings["tags"] == {"MONITOR_EXPERIMENT_ID": "42"}
+        configure.assert_called_once_with("endpoint", "42")

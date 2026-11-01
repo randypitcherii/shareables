@@ -11,8 +11,8 @@ spark_python_task). It:
        - system policy: the model services, listed for lineage
   3. registers the model to UC as {catalog}.{schema}.simple_dispatcher_agent
   4. if deploy_endpoint == "true", deploys it with databricks.agents.deploy(...),
-     sending the endpoint's traces to a workspace-managed sibling experiment
-     (`<experiment>_endpoint`; see endpoint_experiment_id for why)
+     configuring endpoint telemetry to persist traces in the experiment's UC
+     tables without secrets or grants to rotating serving principals
 
 Why OBO: agents on Model Serving can't use automatic authentication
 passthrough for Unity AI Gateway model services (the endpoint's own credential
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from datetime import timedelta
 
 import mlflow
 from mlflow.models.auth_policy import AuthPolicy, SystemAuthPolicy, UserAuthPolicy
@@ -57,7 +58,7 @@ def log_model_kwargs(auth_policy: AuthPolicy | None = None) -> dict:
         "code_paths": ["agent.py"],
         "auth_policy": auth_policy,
         "input_example": INPUT_EXAMPLE,
-        "pip_requirements": ["mlflow>=3.0", "databricks-sdk", "databricks-ai-bridge", "requests"],
+        "pip_requirements": ["mlflow==3.17.2", "databricks-sdk", "databricks-ai-bridge", "requests"],
     }
 
 
@@ -90,18 +91,72 @@ def agent_environment(args) -> dict[str, str]:
 
 
 def endpoint_experiment_id(experiment: str) -> str:
-    """The deployed endpoint's trace experiment: workspace-managed, not UC-linked.
+    """Require the same UC-linked experiment for authoring and serving."""
+    from mlflow.entities.trace_location import UnityCatalog
 
-    Serving exports traces as a hidden per-deployment system principal, not
-    as the caller. That principal gets a new id on every deploy and has no UC
-    grants, so it can't write a UC-linked experiment's Delta tables, but a
-    workspace-managed experiment just works. The endpoint's UC record of every
-    routing decision is its AI Gateway inference table instead: the response
-    payload carries custom_outputs.routing, next to the requester.
+    found = mlflow.get_experiment_by_name(experiment)
+    if found is None or not isinstance(found.trace_location, UnityCatalog):
+        raise ValueError(
+            f"Experiment {experiment!r} must be linked to Unity Catalog before deployment. "
+            "Use a fresh experiment if the existing one contains workspace-managed traces."
+        )
+    return found.experiment_id
+
+
+def configure_endpoint_telemetry(endpoint_name: str, experiment_id: str) -> None:
+    """Bind managed endpoint telemetry to the experiment's existing UC tables.
+
+    agents.deploy does not expose telemetry_config. Use its documented REST
+    API through the SDK, including fields not yet exposed by older SDK models.
+    The API requires logs, metrics, and spans table names even when only traces
+    are enabled; its readback omits unused logs/metrics destinations.
     """
-    name = f"{experiment}_endpoint"
-    found = mlflow.get_experiment_by_name(name)
-    return found.experiment_id if found else mlflow.create_experiment(name)
+    from databricks.sdk import WorkspaceClient
+    from mlflow.entities.trace_location import UnityCatalog
+
+    location = mlflow.get_experiment(experiment_id).trace_location
+    if not isinstance(location, UnityCatalog):
+        raise ValueError(f"Experiment {experiment_id} is not linked to Unity Catalog.")
+    table_names = {
+        "traces_table": location.full_otel_spans_table_name,
+        "logs_table": location.full_otel_logs_table_name,
+        "metrics_table": f"{location.full_table_prefix}_otel_metrics",
+        "annotations_table": (
+            location.full_annotations_table_name or f"{location.full_table_prefix}_otel_annotations"
+        ),
+    }
+    if not all(table_names.values()):
+        raise ValueError(f"Experiment {experiment_id} has an incomplete UC trace location.")
+
+    def matches(config: dict) -> bool:
+        destinations = config.get("table_names") or {}
+        return (
+            all(destinations.get(key) == table_names[key] for key in ("traces_table", "annotations_table"))
+            and set(config.get("enabled_telemetry_features") or []) == {"TELEMETRY_FEATURE_TRACES"}
+        )
+
+    workspace = WorkspaceClient()
+    timeout = timedelta(minutes=30)
+    workspace.serving_endpoints.wait_get_serving_endpoint_not_updating(endpoint_name, timeout=timeout)
+    path = f"/api/2.0/serving-endpoints/{endpoint_name}"
+    current = workspace.api_client.do("GET", path).get("telemetry_config") or {}
+    if matches(current):
+        print(f"UC endpoint telemetry already configured: {table_names['traces_table']}")
+        return
+
+    workspace.api_client.do(
+        "PATCH",
+        f"{path}/telemetry-config",
+        body={"telemetry_config": {
+            "table_names": table_names,
+            "enabled_telemetry_features": ["TELEMETRY_FEATURE_TRACES"],
+        }},
+    )
+    workspace.serving_endpoints.wait_get_serving_endpoint_not_updating(endpoint_name, timeout=timeout)
+    configured = workspace.api_client.do("GET", path).get("telemetry_config") or {}
+    if not matches(configured):
+        raise RuntimeError(f"Endpoint {endpoint_name} did not retain its UC telemetry destination.")
+    print(f"UC endpoint telemetry configured: {table_names['traces_table']}")
 
 
 def auth_policy(model_ids) -> AuthPolicy:
@@ -120,6 +175,7 @@ def auth_policy(model_ids) -> AuthPolicy:
 
 def run(args) -> str:
     """Execute the full deploy flow. Returns the UC model name."""
+    mlflow.set_tracking_uri("databricks")
     catalog, schema = args.catalog, args.schema
     ensure_schema(catalog, schema)  # dev/test schemas are per-user/per-PR
 
@@ -129,6 +185,7 @@ def run(args) -> str:
     from agent import set_experiment_uc_backed
 
     set_experiment_uc_backed(args.experiment, catalog, schema)
+    experiment_id = endpoint_experiment_id(args.experiment)
 
     policy = auth_policy(env.values())
 
@@ -152,9 +209,12 @@ def run(args) -> str:
             scale_to_zero=True,
             environment_vars={
                 **env,
-                "MLFLOW_EXPERIMENT_ID": endpoint_experiment_id(args.experiment),
+                "MLFLOW_EXPERIMENT_ID": experiment_id,
+                "MLFLOW_ENABLE_OTLP_EXPORTER": "false",
             },
+            tags={"MONITOR_EXPERIMENT_ID": experiment_id},
         )
+        configure_endpoint_telemetry(deployment.endpoint_name, experiment_id)
         print(f"Deployed {uc_model_name} v{registered.version} → {deployment.endpoint_name}")
     else:
         print("deploy_endpoint != true; skipping endpoint deployment.")

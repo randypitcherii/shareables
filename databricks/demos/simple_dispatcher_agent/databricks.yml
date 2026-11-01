@@ -83,7 +83,7 @@ resources:
           spec:
             environment_version: "3"
             dependencies:
-              - mlflow>=3.0
+              - mlflow==3.17.2
               - databricks-agents
               - databricks-sdk
               - databricks-ai-bridge

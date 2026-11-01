@@ -7,7 +7,7 @@ description = "A tiny model dispatcher: JEV routes each request to luna, opus, o
 # `whenever` from sdist, which needs a Rust toolchain. Cap to a known-good band.
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "mlflow>=3.0",
+    "mlflow==3.17.2",
     "databricks-agents>=1.0",
     "databricks-sdk",
     "databricks-ai-bridge",
