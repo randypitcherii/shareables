@@ -1,65 +1,132 @@
 """
-A simple dispatcher agent.
+A simple model dispatcher on Unity AI Gateway.
 
-You built a Genie space. People love it. Now they're asking questions Genie
-alone can't answer — fresh public facts that live on the internet, not in your
-tables. This agent routes each question to the right tool:
+Clients send one request to this agent. JEV picks the best model for that
+request, and the agent forwards it through Unity AI Gateway:
 
-  - your existing Genie space (structured org data), or
-  - a `web_search` Unity Catalog UDF (fresh public/internet information).
+  - luna  (system.ai.gpt-6-luna)       default; cheap and fast. Low-intelligence
+                                       or high-context work (summaries,
+                                       extraction, long documents).
+  - opus  (system.ai.claude-opus-5-5)  high-intelligence work (hard reasoning,
+                                       complex code, multi-step analysis).
+  - gemini (system.ai.gemini-3-8-flash) visual design, real-world 3D/spatial
+                                       thinking, high-quality written copy.
+                                       Set GEMINI_MODEL=system.ai.gemini-4-argon
+                                       where argon is rolled out.
 
-The dispatcher itself is ~10 lines of LangChain `create_agent` (see the marked
-section below). That small footprint is the whole pitch: graduating from a
-Genie space to a multi-tool agent costs almost no code.
+JEV (system.ai.openjev-qwen35-4b) is a judge model. It answers a `choice`
+question with a probability for every option and generates no text, so a
+routing call is fast and cheap, and its reasoning is auditable. Every decision
+(the probabilities, the confidence, the criterion that won, and any fallback)
+is written to the MLflow trace, so the trace shows which model answered and why.
 
 Usage:
-    uv run python agent.py "What were total sales last quarter?"
-    uv run python agent.py "What's the latest news about Databricks?"
+    uv run python agent.py "Summarize this changelog in three bullets: ..."
+    uv run python agent.py "Prove there are infinitely many primes of the form 4k+3"
+    uv run python agent.py "Write a hero tagline and layout for a coffee brand site"
 
-Configuration (environment variables, or a local .env):
-    GENIE_SPACE_ID    (required) Databricks Genie space ID
-    BASE_CATALOG      (required) UC catalog hosting the web_search UDF
-    BASE_SCHEMA       (required) UC schema hosting the web_search UDF
-    LLM_ENDPOINT      (optional) chat model serving endpoint
-                      Default: databricks-claude-sonnet-4-6
-    MLFLOW_EXPERIMENT (optional) MLflow experiment path for traces
+Configuration (environment variables, or a local .env). Everything has a default:
+    LUNA_MODEL / OPUS_MODEL / GEMINI_MODEL  UC model ids of the three models
+    JEV_MODEL                    UC model id of the router (OpenJev by default)
+    ROUTER_MIN_CONFIDENCE        below this JEV confidence, use the default model (0.5)
+    MLFLOW_EXPERIMENT            MLflow experiment path for traces
+    BASE_CATALOG / BASE_SCHEMA   UC home for UC-backed traces (optional locally)
 
-Auth is PAT-free and never branched on in code: local dev uses your SSO CLI
-profile (DATABRICKS_PROFILE), CI/prod use injected service-principal creds,
-and deployed code uses the ambient runtime identity. All of it resolves through
-the Databricks SDK's default credential chain.
+Auth is PAT-free and never branched on in code. Gateway calls use
+ModelServingUserCredentials: on a serving endpoint that is the *caller's*
+identity (on-behalf-of-user, via the `ai-gateway` scope); anywhere else it
+falls back to the SDK's default chain (your SSO CLI profile locally,
+injected service-principal creds in jobs).
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import sys
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 import mlflow
-from databricks_langchain import ChatDatabricks, DatabricksFunctionClient
-from databricks_ai_bridge.genie import Genie
-from langchain.agents import create_agent
-from langchain_core.tools import tool
+import requests
+from mlflow.entities import SpanType
+
+logger = logging.getLogger("simple_dispatcher_agent")
 
 # ---------------------------------------------------------------------------
-# Constants
+# The menu: three models, one router. Each criterion is the text JEV judges
+# the request against, so editing a criterion changes routing behavior.
 # ---------------------------------------------------------------------------
 
-DEFAULT_LLM_ENDPOINT = "databricks-claude-sonnet-4-6"
-WEB_SEARCH_FUNCTION = "web_search"
+DEFAULT_ROUTE = "luna"
+# OpenJev is the open-weights JEV and is served in production workspaces today.
+# TypeSafe AI's Jev (system.ai.typesafeai-jev-1-14-0) speaks the same System One
+# API; set JEV_MODEL to it once it is served in your workspace.
+DEFAULT_JEV_MODEL = "system.ai.openjev-qwen35-4b"
+DEFAULT_MIN_CONFIDENCE = 0.5
 
-SYSTEM_PROMPT = (
-    "You are a dispatcher. Answer the user's question by routing it to exactly "
-    "one of your tools, then summarize the result.\n"
-    "- Use `ask_genie` for questions about YOUR organization's structured data "
-    "(metrics, KPIs, tables, anything that lives in the Genie space).\n"
-    "- Use `web_search` for fresh public/internet information that would not be "
-    "in an internal database or in your training data.\n"
-    "If a question needs both, call the tools in turn. If neither applies, "
-    "answer directly. Always ground your final answer in the tool output."
+
+@dataclass(frozen=True)
+class Route:
+    name: str
+    env_var: str
+    default_model: str
+    criterion: str
+
+
+ROUTES: dict[str, Route] = {
+    "luna": Route(
+        name="luna",
+        env_var="LUNA_MODEL",
+        default_model="system.ai.gpt-6-luna",
+        criterion=(
+            "Everyday or low-difficulty work, including work over a lot of "
+            "context: chat, quick answers, summarizing, extracting, classifying, "
+            "reformatting, translating, or searching long documents and logs. "
+            "The cheap, fast default."
+        ),
+    ),
+    "opus": Route(
+        name="opus",
+        env_var="OPUS_MODEL",
+        default_model="system.ai.claude-opus-5-5",
+        criterion=(
+            "Work that needs deep intelligence: hard multi-step reasoning, math "
+            "proofs, complex or high-stakes code, architecture and design "
+            "trade-offs, debugging subtle problems, or careful analysis where a "
+            "mistake is costly."
+        ),
+    ),
+    "gemini": Route(
+        name="gemini",
+        env_var="GEMINI_MODEL",
+        default_model="system.ai.gemini-3-8-flash",
+        criterion=(
+            "Visual and creative craft: visual or UI design, layouts, images and "
+            "diagrams, real-world 3D or spatial and physical reasoning, or "
+            "polished, high-quality written copy such as marketing, taglines, "
+            "speeches, and brand voice."
+        ),
+    ),
+}
+
+ROUTER_INSTRUCTIONS = (
+    "Route this user request to the one AI model whose description best fits "
+    "what the request needs. luna is the cheap default; choose opus or gemini "
+    "when the request matches their description."
 )
+
+# How much of the conversation JEV sees. Routing needs the gist, not the whole
+# context, so the last user turn is truncated and the size is passed as a number.
+ROUTER_MAX_REQUEST_CHARS = 4000
+
+CHAT_PATH = "/ai-gateway/mlflow/v1/chat/completions"
+SYSTEMONE_PATH = "/ai-gateway/typesafe/v1/systemone"
+REQUEST_TAGS_HEADER = "Databricks-Ai-Gateway-Request-Tags"
+APP_TAG = "simple_dispatcher_agent"
+HTTP_TIMEOUT_SECONDS = 300
 
 
 # ---------------------------------------------------------------------------
@@ -68,10 +135,7 @@ SYSTEM_PROMPT = (
 
 
 def _load_dotenv_if_present() -> None:
-    """Minimal stdlib .env loader: KEY=VALUE lines, no overriding of real env.
-
-    Kept tiny on purpose — avoids a python-dotenv dependency for a demo.
-    """
+    """Minimal stdlib .env loader: KEY=VALUE lines, no overriding of real env."""
     env_path = Path.cwd() / ".env"
     if not env_path.is_file():
         return
@@ -85,40 +149,42 @@ def _load_dotenv_if_present() -> None:
             os.environ[key] = value
 
 
-def load_config() -> dict[str, str]:
-    """Load and validate configuration from the environment (and a local .env).
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, "").strip() or default
 
-    Returns a dict with: genie_space_id, base_catalog, base_schema,
-    llm_endpoint, mlflow_experiment.
 
-    Raises ValueError naming every missing required variable.
+def load_config() -> dict[str, Any]:
+    """Load configuration from the environment (and a local .env).
+
+    Every key has a default, so a bare `uv run python agent.py "..."` works.
+    Model ids must be three-part UC identifiers (catalog.schema.model): Unity
+    AI Gateway resolves them in the model catalog, and legacy `databricks-*`
+    endpoint names are refused so the demo can't silently drift back.
     """
     _load_dotenv_if_present()
 
-    required = {
-        "GENIE_SPACE_ID": os.environ.get("GENIE_SPACE_ID", "").strip(),
-        "BASE_CATALOG": os.environ.get("BASE_CATALOG", "").strip(),
-        "BASE_SCHEMA": os.environ.get("BASE_SCHEMA", "").strip(),
-    }
-    missing = [name for name, value in required.items() if not value]
-    if missing:
+    models = {name: _env(r.env_var, r.default_model) for name, r in ROUTES.items()}
+    jev_model = _env("JEV_MODEL", DEFAULT_JEV_MODEL)
+    bad = [m for m in [*models.values(), jev_model] if len(m.split(".")) != 3]
+    if bad:
         raise ValueError(
-            "Missing required environment variable(s): "
-            + ", ".join(missing)
-            + ". Set them (or add them to a local .env) before running the agent."
+            "Model ids must be three-part Unity Catalog identifiers "
+            f"(catalog.schema.model); got: {', '.join(bad)}"
         )
 
+    min_conf = float(_env("ROUTER_MIN_CONFIDENCE", str(DEFAULT_MIN_CONFIDENCE)))
     return {
-        "genie_space_id": required["GENIE_SPACE_ID"],
-        "base_catalog": required["BASE_CATALOG"],
-        "base_schema": required["BASE_SCHEMA"],
-        "llm_endpoint": os.environ.get("LLM_ENDPOINT", "").strip() or DEFAULT_LLM_ENDPOINT,
-        "mlflow_experiment": os.environ.get("MLFLOW_EXPERIMENT", "").strip(),
+        "models": models,
+        "jev_model": jev_model,
+        "min_confidence": min_conf,
+        "mlflow_experiment": _env("MLFLOW_EXPERIMENT"),
+        "base_catalog": _env("BASE_CATALOG"),
+        "base_schema": _env("BASE_SCHEMA"),
     }
 
 
 # ---------------------------------------------------------------------------
-# MLflow tracing
+# MLflow tracing (UC-backed when a catalog/schema is given)
 # ---------------------------------------------------------------------------
 
 
@@ -127,14 +193,11 @@ def setup_tracing(
     catalog: str | None = None,
     schema: str | None = None,
 ) -> None:
-    """Enable MLflow LangChain autologging and (optionally) set the experiment.
+    """Set the experiment, UC-backed when a namespace is given.
 
-    When a UC namespace is provided alongside the experiment, the experiment's
-    traces are stored UC-backed (Delta tables in {catalog}.{schema}) instead of
-    workspace-managed MLflow storage — unlimited retention, governable,
-    queryable from SQL.
+    The dispatcher's spans are explicit (@mlflow.trace), so there is no
+    framework autolog to enable.
     """
-    mlflow.langchain.autolog()
     if not experiment_name:
         return
     if catalog and schema:
@@ -147,8 +210,8 @@ def set_experiment_uc_backed(experiment_name: str, catalog: str, schema: str) ->
     """Set the experiment with UC-backed trace storage, falling back gracefully.
 
     A UC trace destination can only be linked to an experiment that has no
-    traces yet. If this experiment already accumulated workspace-managed
-    traces, keep using it unlinked rather than failing the run.
+    traces yet. If this experiment already has workspace-managed traces, keep
+    using it unlinked rather than failing the run.
     """
     from mlflow.entities.trace_location import UnityCatalog
 
@@ -170,112 +233,310 @@ def set_experiment_uc_backed(experiment_name: str, catalog: str, schema: str) ->
 
 
 # ---------------------------------------------------------------------------
-# Tool seams (each one wraps a single external dependency, easy to mock)
+# Unity AI Gateway client: the one seam to the outside world (tests mock it)
 # ---------------------------------------------------------------------------
 
 
-def make_genie_tool(space_id: str):
-    """A @tool that asks a Databricks Genie space a natural-language question.
+class GatewayError(RuntimeError):
+    def __init__(self, status: int, body: str):
+        super().__init__(f"HTTP {status}: {body[:500]}")
+        self.status = status
+        self.body = body
 
-    This is the seam tests mock: all Genie I/O lives behind `Genie`.
+
+class GatewayClient:
+    """Calls the Unity AI Gateway routes as the caller.
+
+    On a serving endpoint, ModelServingUserCredentials yields the invoking
+    user's down-scoped token (on-behalf-of-user), so every model call runs as,
+    is permissioned as, and is billed to the person who asked. Build one per
+    request: the user token only exists inside predict(). Off-serving it is the
+    SDK default credential chain.
     """
-    genie = Genie(space_id)
 
-    @tool
-    def ask_genie(question: str) -> str:
-        """Answer a question about YOUR organization's structured data.
+    def __init__(self, workspace_client: Any = None) -> None:
+        if workspace_client is None:
+            from databricks.sdk import WorkspaceClient
+            from databricks_ai_bridge import ModelServingUserCredentials
 
-        Use this for metrics, KPIs, and anything that lives in the company's
-        Genie space (tables, dashboards, internal numbers). Not for fresh
-        public/internet facts.
+            workspace_client = WorkspaceClient(credentials_strategy=ModelServingUserCredentials())
+        self._config = workspace_client.config
+        self.host = self._config.host.rstrip("/")
 
-        Args:
-            question: The natural-language question to ask the Genie space.
-        """
-        response = genie.ask_question(question)
-        result = response.result if response.result is not None else ""
-        if hasattr(result, "to_markdown"):  # pandas DataFrame
-            return result.to_markdown(index=False)
-        return str(result)
+    def _post(self, path: str, payload: dict, tags: dict[str, str]) -> dict:
+        headers = {
+            **self._config.authenticate(),
+            "Content-Type": "application/json",
+            # Lands in system.ai_gateway.usage.request_tags, so the billing
+            # table records *why* a model was used, not just *that* it was.
+            REQUEST_TAGS_HEADER: json.dumps(tags),
+        }
+        resp = requests.post(
+            self.host + path, headers=headers, json=payload, timeout=HTTP_TIMEOUT_SECONDS
+        )
+        if resp.status_code != 200:
+            raise GatewayError(resp.status_code, resp.text)
+        return resp.json()
 
-    return ask_genie
+    def systemone(self, model: str, state: Any, questions: dict, tags: dict) -> dict:
+        return self._post(
+            SYSTEMONE_PATH, {"model": model, "state": state, "questions": questions}, tags
+        )
+
+    def chat(self, model: str, messages: list[dict], tags: dict, **params: Any) -> dict:
+        return self._post(CHAT_PATH, {"model": model, "messages": messages, **params}, tags)
 
 
-def make_web_search_tool(catalog: str, schema: str):
-    """A @tool that runs the {catalog}.{schema}.web_search(query) UC function.
+# ---------------------------------------------------------------------------
+# Routing: ask JEV which model fits
+# ---------------------------------------------------------------------------
 
-    Execution uses DatabricksFunctionClient in its default serverless mode, so
-    no SQL warehouse needs to be configured. This is the seam tests mock.
+
+@dataclass
+class RoutingDecision:
+    route: str
+    model: str
+    reason: str
+    decided_by: str  # "jev" | "low_confidence_default" | "caller" | "jev_error_default"
+    jev_choice: str | None = None
+    confidence: float | None = None
+    probabilities: dict[str, float] = field(default_factory=dict)
+    fallback_from: str | None = None
+    fallback_reason: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _text_of(content: Any) -> str:
+    """Flatten chat content (a string or a list of parts) to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            p.get("text", "") for p in content if isinstance(p, dict) and p.get("text")
+        )
+    return "" if content is None else str(content)
+
+
+def _has_images(messages: list[dict]) -> bool:
+    return any(
+        isinstance(m.get("content"), list)
+        and any(isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"])
+        for m in messages
+    )
+
+
+def router_state(messages: list[dict]) -> dict[str, Any]:
+    """What JEV judges: the latest user request plus size signals.
+
+    The size signals let JEV see "low difficulty, huge context" (luna) without
+    sending it the whole context.
     """
-    client = DatabricksFunctionClient()
-    fq_name = f"{catalog}.{schema}.{WEB_SEARCH_FUNCTION}"
-
-    @tool
-    def web_search(query: str) -> str:
-        """Search the public internet for fresh information.
-
-        Use this for current events, recent public facts, or anything that
-        would not be in an internal database or in your training data. Not for
-        the organization's private/structured data.
-
-        Args:
-            query: The natural-language web search query.
-        """
-        result = client.execute_function(fq_name, {"query": query})
-        if getattr(result, "error", None):
-            return f"web_search error: {result.error}"
-        return str(result.value)
-
-    return web_search
+    user_turns = [m for m in messages if m.get("role") == "user"]
+    latest = _text_of(user_turns[-1]["content"]) if user_turns else ""
+    total_chars = sum(len(_text_of(m.get("content"))) for m in messages)
+    return {
+        "request": latest[:ROUTER_MAX_REQUEST_CHARS],
+        "request_truncated": len(latest) > ROUTER_MAX_REQUEST_CHARS,
+        "conversation_turns": len(messages),
+        "conversation_chars": total_chars,
+        "includes_images": _has_images(messages),
+    }
 
 
-# ===========================================================================
-# THIS IS THE WHOLE AGENT.
-# A dispatcher is just create_agent over the tools you already have.
-# ===========================================================================
-def build_dispatcher(llm: Any, tools: list) -> Any:
-    """Build the dispatcher: a LangChain create_agent over the given tools."""
-    return create_agent(llm, tools, system_prompt=SYSTEM_PROMPT)
+def router_questions() -> dict[str, Any]:
+    return {
+        "model": {
+            "type": "choice",
+            "instructions": ROUTER_INSTRUCTIONS,
+            "criteria": {name: r.criterion for name, r in ROUTES.items()},
+        }
+    }
 
 
-def build_dispatcher_from_config(cfg: dict[str, str]) -> Any:
-    """Assemble the LLM + both tools + dispatcher from a loaded config dict."""
-    llm = ChatDatabricks(endpoint=cfg["llm_endpoint"])
-    tools = [
-        make_genie_tool(cfg["genie_space_id"]),
-        make_web_search_tool(cfg["base_catalog"], cfg["base_schema"]),
-    ]
-    return build_dispatcher(llm, tools)
+@mlflow.trace(name="jev_router", span_type=SpanType.CHAIN)
+def route_request(
+    client: GatewayClient,
+    messages: list[dict],
+    cfg: dict[str, Any],
+    forced_route: str | None = None,
+) -> RoutingDecision:
+    """Pick a route for this request. Never raises: a router failure means luna."""
+    models = cfg["models"]
+    span = mlflow.get_current_active_span()
 
+    if forced_route:
+        if forced_route not in ROUTES:
+            raise ValueError(f"Unknown route {forced_route!r}; expected one of {list(ROUTES)}")
+        decision = RoutingDecision(
+            route=forced_route,
+            model=models[forced_route],
+            reason=f"Caller forced route '{forced_route}' via custom_inputs.route.",
+            decided_by="caller",
+        )
+    else:
+        try:
+            answer = client.systemone(
+                cfg["jev_model"],
+                router_state(messages),
+                router_questions(),
+                tags={"app": APP_TAG, "step": "route"},
+            )["answers"]["model"]
+            choice = answer["choice"]
+            confidence = float(answer.get("confidence", 0.0))
+            probs = {k: round(float(v), 4) for k, v in answer.get("probabilities", {}).items()}
+            confident = confidence >= cfg["min_confidence"]
+            if choice in ROUTES and (confident or choice == DEFAULT_ROUTE):
+                decision = RoutingDecision(
+                    route=choice,
+                    model=models[choice],
+                    reason=(
+                        f"JEV chose '{choice}' with confidence {confidence:.2f}: "
+                        f"{ROUTES[choice].criterion}"
+                    ),
+                    decided_by="jev",
+                    jev_choice=choice,
+                    confidence=confidence,
+                    probabilities=probs,
+                )
+            else:
+                decision = RoutingDecision(
+                    route=DEFAULT_ROUTE,
+                    model=models[DEFAULT_ROUTE],
+                    reason=(
+                        f"JEV leaned '{choice}' but confidence {confidence:.2f} is below "
+                        f"{cfg['min_confidence']:.2f}, so the default '{DEFAULT_ROUTE}' "
+                        "handles it."
+                    ),
+                    decided_by="low_confidence_default",
+                    jev_choice=choice,
+                    confidence=confidence,
+                    probabilities=probs,
+                )
+        except Exception as e:  # router down must not mean dispatcher down
+            logger.warning("JEV routing failed, using default: %s", e)
+            decision = RoutingDecision(
+                route=DEFAULT_ROUTE,
+                model=models[DEFAULT_ROUTE],
+                reason=f"JEV call failed ({e}); the default '{DEFAULT_ROUTE}' handles it.",
+                decided_by="jev_error_default",
+            )
 
-# ===========================================================================
+    if span is not None:
+        span.set_attributes(
+            {f"routing.{k}": v for k, v in decision.as_dict().items() if v is not None}
+        )
+    return decision
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point
+# Dispatch: call the chosen model, with one fallback to the default
 # ---------------------------------------------------------------------------
+
+
+@mlflow.trace(name="call_model", span_type=SpanType.CHAT_MODEL)
+def call_model(
+    client: GatewayClient, model: str, route: str, messages: list[dict], params: dict
+) -> dict:
+    span = mlflow.get_current_active_span()
+    if span is not None:
+        span.set_attributes({"model": model, "route": route})
+    resp = client.chat(model, messages, tags={"app": APP_TAG, "route": route}, **params)
+    if span is not None and resp.get("usage"):
+        span.set_attribute("usage", resp["usage"])
+    return resp
+
+
+def _tag_trace(decision: RoutingDecision) -> None:
+    """Trace tags are searchable in the MLflow UI and in the UC trace tables,
+    e.g. `tags.dispatcher.route = 'opus'`."""
+    tags = {
+        "dispatcher.route": decision.route,
+        "dispatcher.model": decision.model,
+        "dispatcher.decided_by": decision.decided_by,
+        "dispatcher.reason": decision.reason[:250],
+    }
+    if decision.confidence is not None:
+        tags["dispatcher.jev_confidence"] = f"{decision.confidence:.3f}"
+    if decision.fallback_from:
+        tags["dispatcher.fallback_from"] = decision.fallback_from
+        tags["dispatcher.fallback_reason"] = (decision.fallback_reason or "")[:250]
+    if mlflow.get_current_active_span() is None:
+        return  # tracing disabled (e.g. mlflow's log-time validation predict)
+    try:
+        mlflow.update_current_trace(tags=tags)
+    except Exception as e:  # tagging is best-effort; never fail the request
+        logger.debug("could not tag trace: %s", e)
+
+
+# ===========================================================================
+# THIS IS THE WHOLE DISPATCHER: ask JEV, call the model it picks, log why.
+# ===========================================================================
+@mlflow.trace(name="dispatch", span_type=SpanType.AGENT)
+def dispatch(
+    messages: list[dict],
+    cfg: dict[str, Any],
+    client: GatewayClient | None = None,
+    forced_route: str | None = None,
+    params: dict | None = None,
+) -> dict[str, Any]:
+    """Route `messages` to the best model. Returns {"text", "routing", "response"}."""
+    client = client or GatewayClient()
+    params = params or {}
+    decision = route_request(client, messages, cfg, forced_route)
+
+    try:
+        response = call_model(client, decision.model, decision.route, messages, params)
+    except GatewayError as e:
+        if decision.route == DEFAULT_ROUTE:
+            raise
+        # e.g. a model not yet rolled out to this region: answer from the default
+        # model rather than fail, and say so in the trace.
+        decision.fallback_from = decision.route
+        decision.fallback_reason = (
+            f"'{decision.route}' ({decision.model}) failed with HTTP {e.status}, "
+            f"so '{DEFAULT_ROUTE}' answered instead."
+        )
+        decision.route, decision.model = DEFAULT_ROUTE, cfg["models"][DEFAULT_ROUTE]
+        response = call_model(client, decision.model, decision.route, messages, params)
+
+    _tag_trace(decision)
+    logger.info(
+        "routed to %s (%s): %s%s",
+        decision.route,
+        decision.model,
+        decision.reason,
+        f" [{decision.fallback_reason}]" if decision.fallback_reason else "",
+    )
+    text = _text_of(response["choices"][0]["message"].get("content"))
+    return {"text": text, "routing": decision.as_dict(), "response": response}
+
+
+# ===========================================================================
 
 
 def main(question: str) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = load_config()
-    setup_tracing(
-        cfg["mlflow_experiment"] or None, cfg["base_catalog"], cfg["base_schema"]
-    )
+    setup_tracing(cfg["mlflow_experiment"] or None, cfg["base_catalog"], cfg["base_schema"])
 
-    dispatcher = build_dispatcher_from_config(cfg)
-    result = dispatcher.invoke({"messages": [{"role": "user", "content": question}]})
-    answer = result["messages"][-1].content
-
-    print(f"\nAnswer: {answer}\n")
-    if cfg["mlflow_experiment"]:
-        print(
-            f"MLflow trace logged to experiment '{cfg['mlflow_experiment']}' "
-            f"(tracking URI: {mlflow.get_tracking_uri()})."
-        )
+    result = dispatch([{"role": "user", "content": question}], cfg)
+    r = result["routing"]
+    print(f"\nRoute:  {r['route']}  →  {r['model']}")
+    print(f"Why:    {r['reason']}")
+    if r["fallback_reason"]:
+        print(f"Fallback: {r['fallback_reason']}")
+    if r["probabilities"]:
+        print("JEV:    " + ", ".join(f"{k}={v:.3f}" for k, v in r["probabilities"].items()))
+    print(f"\nAnswer:\n{result['text']}\n")
+    trace_id = mlflow.get_last_active_trace_id()
+    if trace_id:
+        print(f"MLflow trace: {trace_id} (tracking URI: {mlflow.get_tracking_uri()})")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print('Usage: uv run python agent.py "<your question>"')
+        print('Usage: uv run python agent.py "<your request>"')
         sys.exit(1)
     main(sys.argv[1])

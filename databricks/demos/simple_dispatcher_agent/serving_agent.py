@@ -1,13 +1,22 @@
 """
-MLflow 3 serving interface for the dispatcher agent.
+MLflow 3 serving interface for the model dispatcher.
 
-Wraps the same `build_dispatcher` graph from agent.py in an
-`mlflow.pyfunc.ResponsesAgent`, the currently-recommended interface for
-Databricks Model Serving (Playground / Review App / agent endpoints).
+Wraps `agent.dispatch` in an `mlflow.pyfunc.ResponsesAgent`, the recommended
+interface for Databricks Model Serving (Playground, Review App, agent
+endpoints). Deployed with `agents.deploy`, the endpoint gets AI Gateway usage
+tracking and an inference table, so clients call one governed endpoint instead
+of picking a model themselves.
 
-This module is also the entry point for code-based model logging: the bottom
-of the file calls `mlflow.models.set_model(...)`, so `driver.py` can log it
-with `mlflow.pyfunc.log_model(python_model="serving_agent.py", ...)`.
+Every response carries the routing decision in `custom_outputs.routing`, so
+callers see which model answered and why. Callers can also pin a model with
+`custom_inputs: {"route": "luna" | "opus" | "gemini"}`.
+
+Model calls run as the caller (on-behalf-of-user): the model is logged with a
+UserAuthPolicy for the `ai-gateway` scope, and a fresh GatewayClient is built
+inside each predict() so it picks up that request's user token.
+
+The bottom of the file calls `mlflow.models.set_model(...)` for code-based
+logging: `driver.py` logs it with `mlflow.pyfunc.log_model(python_model="serving_agent.py", ...)`.
 """
 
 from __future__ import annotations
@@ -23,69 +32,82 @@ from mlflow.types.responses import (
     ResponsesAgentStreamEvent,
 )
 
-from agent import build_dispatcher_from_config, load_config
+import agent
+
+# Chat-completions params a caller may pass through to the chosen model.
+PASSTHROUGH_PARAMS = ("temperature", "max_tokens", "top_p", "stop")
 
 
-def _build_dispatcher_from_env() -> Any:
-    """Build the dispatcher from environment config.
+def _part_to_chat(part: dict) -> dict | None:
+    kind = part.get("type")
+    if kind in ("input_text", "output_text", "text"):
+        return {"type": "text", "text": part.get("text", "")}
+    if kind == "input_image" and part.get("image_url"):
+        return {"type": "image_url", "image_url": {"url": part["image_url"]}}
+    return None
 
-    Indirection kept as a module-level function so tests can monkeypatch it.
-    """
-    return build_dispatcher_from_config(load_config())
 
-
-def _to_langchain_messages(request: ResponsesAgentRequest) -> list[dict[str, str]]:
-    """Convert a ResponsesAgentRequest into LangChain-style message dicts."""
-    messages: list[dict[str, str]] = []
+def to_chat_messages(request: ResponsesAgentRequest) -> list[dict[str, Any]]:
+    """Convert Responses-API input items into chat-completions messages."""
+    messages: list[dict[str, Any]] = []
     for item in request.input:
         data = item.model_dump() if hasattr(item, "model_dump") else dict(item)
-        role = data.get("role")
-        content = data.get("content")
-        if role and content is not None:
-            messages.append({"role": role, "content": content})
+        role, content = data.get("role"), data.get("content")
+        if not role or content is None:
+            continue  # tool calls etc. are out of scope for a pass-through dispatcher
+        if isinstance(content, list):
+            parts = [p for p in (_part_to_chat(c) for c in content if isinstance(c, dict)) if p]
+            if all(p["type"] == "text" for p in parts):
+                content = "\n".join(p["text"] for p in parts)
+            else:
+                content = parts
+        messages.append({"role": role, "content": content})
     return messages
 
 
-def _response_text(response: ResponsesAgentResponse) -> str:
-    """Flatten a ResponsesAgentResponse's output items into a single string.
-
-    Used by tests and as a convenience; the real output structure is the list
-    of output items, but a flat string makes assertions and logging simple.
-    """
+def response_text(response: ResponsesAgentResponse) -> str:
+    """Flatten a ResponsesAgentResponse's output items to one string."""
     parts: list[str] = []
     for item in response.output:
         data = item if isinstance(item, dict) else item.model_dump()
-        content = data.get("content")
-        if isinstance(content, str):
-            parts.append(content)
-        elif isinstance(content, list):
-            for block in content:
-                text = block.get("text") if isinstance(block, dict) else None
-                if text:
-                    parts.append(text)
+        for block in data.get("content") or []:
+            if isinstance(block, dict) and block.get("text"):
+                parts.append(block["text"])
     return "\n".join(parts)
 
 
 class DispatcherResponsesAgent(ResponsesAgent):
-    """ResponsesAgent that delegates to the dispatcher graph."""
+    """ResponsesAgent that routes each request to luna, opus, or gemini via JEV."""
 
-    def __init__(self, dispatcher: Any = None) -> None:
-        # Lazy by default so model loading at serving time builds it once.
-        self._dispatcher = dispatcher
+    def __init__(self, client: agent.GatewayClient | None = None) -> None:
+        # Tests inject a fake; otherwise a client is built per request (OBO).
+        self._client = client
+        self._cfg: dict[str, Any] | None = None
+
+    def client(self) -> agent.GatewayClient:
+        return self._client or agent.GatewayClient()
 
     @property
-    def dispatcher(self) -> Any:
-        if self._dispatcher is None:
-            self._dispatcher = _build_dispatcher_from_env()
-        return self._dispatcher
+    def cfg(self) -> dict[str, Any]:
+        if self._cfg is None:
+            self._cfg = agent.load_config()
+        return self._cfg
 
     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
-        messages = _to_langchain_messages(request)
-        result = self.dispatcher.invoke({"messages": messages})
-        final = result["messages"][-1]
-        text = final.content if hasattr(final, "content") else str(final)
-        output_item = self.create_text_output_item(text=str(text), id=str(uuid4()))
-        return ResponsesAgentResponse(output=[output_item])
+        custom = request.custom_inputs or {}
+        params = {k: custom[k] for k in PASSTHROUGH_PARAMS if k in custom}
+        result = agent.dispatch(
+            to_chat_messages(request),
+            self.cfg,
+            client=self.client(),
+            forced_route=custom.get("route"),
+            params=params,
+        )
+        item = self.create_text_output_item(text=result["text"], id=str(uuid4()))
+        return ResponsesAgentResponse(
+            output=[item],
+            custom_outputs={"routing": result["routing"], "usage": result["response"].get("usage")},
+        )
 
     def predict_stream(self, request: ResponsesAgentRequest):
         # Minimal streaming: emit the final answer as a single completed item.

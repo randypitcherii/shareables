@@ -6,7 +6,7 @@ workspace:
 
 variables:
   base_catalog:
-    description: Catalog hosting the web_search UDF and the registered agent model.
+    description: Catalog hosting the registered dispatcher model and its UC-backed traces.
     default: rpw_prod
   base_schema:
     description: >
@@ -15,18 +15,24 @@ variables:
       - test: a PR number is appended (`_<pr_number>`).
       - prod: used unchanged.
     default: simple_dispatcher
-  genie_space_id:
-    description: Databricks Genie space ID the dispatcher routes structured-data questions to.
-    default: ""
-  genie_tables:
+  luna_model:
+    description: Default model, also for low-intelligence / high-context work (cheap and fast).
+    default: system.ai.gpt-6-luna
+  opus_model:
+    description: High-intelligence model.
+    default: system.ai.claude-opus-5-5
+  gemini_model:
     description: >
-      Comma-separated fully-qualified tables the Genie space queries. Declared
-      as serving resources so the deployed endpoint's scoped credential can
-      read them (UC grants to the serving principal are not a substitute).
-    default: ""
-  llm_endpoint:
-    description: Databricks chat model serving endpoint backing the dispatcher.
-    default: databricks-claude-sonnet-4-6
+      Visual design, real-world 3D/spatial reasoning, and high-quality written
+      copy. Newest Gemini served on fe-vm; use system.ai.gemini-4-argon where
+      it is rolled out.
+    default: system.ai.gemini-3-8-flash
+  jev_model:
+    description: >
+      The router. A JEV judge model that picks luna, opus, or gemini per
+      request. Switch to system.ai.typesafeai-jev-1-14-0 (TypeSafe AI's Jev)
+      once it is served in your workspace.
+    default: system.ai.openjev-qwen35-4b
   pr_number:
     description: PR number suffix for the `test` target (CI only).
     default: "0"
@@ -43,14 +49,13 @@ sync:
   include:
     - "agent.py"
     - "serving_agent.py"
-    - "register_web_search.py"
     - "driver.py"
 
 resources:
   jobs:
     deploy_dispatcher:
       # No schedule: this is a deploy-on-demand job, run via `databricks bundle run`.
-      name: "Deploy Simple Dispatcher Agent"
+      name: "Deploy Simple Model Dispatcher"
       tasks:
         - task_key: deploy
           spark_python_task:
@@ -60,26 +65,28 @@ resources:
               - "${var.base_catalog}"
               - "--schema"
               - "${var.target_schema}"
-              - "--genie-space-id"
-              - "${var.genie_space_id}"
-              - "--llm-endpoint"
-              - "${var.llm_endpoint}"
+              - "--luna-model"
+              - "${var.luna_model}"
+              - "--opus-model"
+              - "${var.opus_model}"
+              - "--gemini-model"
+              - "${var.gemini_model}"
+              - "--jev-model"
+              - "${var.jev_model}"
               - "--experiment"
               - "${var.target_experiment}"
               - "--deploy-endpoint"
               - "${var.deploy_endpoint}"
-              - "--genie-tables"
-              - "${var.genie_tables}"
           environment_key: default
       environments:
         - environment_key: default
           spec:
             environment_version: "3"
             dependencies:
-              - databricks-langchain
-              - langchain>=1.3
-              - mlflow>=3.0
+              - mlflow==3.17.2
               - databricks-agents
+              - databricks-sdk
+              - databricks-ai-bridge
 
 targets:
   dev:
