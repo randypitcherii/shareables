@@ -99,6 +99,11 @@ vars:
 
 flags:
   use_managed_iceberg: true
+  # One DESCRIBE TABLE EXTENDED ... AS JSON per relation replaces separate
+  # information_schema lookups for constraints, column masks, row filters and
+  # view definitions (opt-in since dbt-databricks 1.12.0; falls back on runtimes
+  # without support). Expected to become the default in a later minor release.
+  use_describe_as_json_for_relation_metadata: true
 
 models:
   rpw_dbt_databricks_reference:

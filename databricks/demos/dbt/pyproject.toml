@@ -7,5 +7,5 @@ requires-python = ">=3.11"
 # hard-code this machine's package proxy), so the EXACT pin below is the single
 # source of truth. Upgrading dbt = bump it, `make venv`, `make build`, open a PR.
 dependencies = [
-    "dbt-databricks==1.12.4",
+    "dbt-databricks==1.13.0",
 ]
