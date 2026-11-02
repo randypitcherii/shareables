@@ -512,7 +512,9 @@ by display name:
   the artifacts volume.
 - **`dbt_ci_sp`** runs CI and nothing else: it owns the CI catalog the disposable per-PR
   schemas land in, and on the production catalog it holds **read-only** grants (USE CATALOG,
-  USE SCHEMA, SELECT, READ VOLUME — enough for Slim CI deferral and the state download), so
+  USE SCHEMA, SELECT, EXECUTE, READ VOLUME — enough for Slim CI deferral and the state
+  download; EXECUTE covers deferred models that call a production UDF such as
+  `ai_gateway_distill_transcript`), so
   a CI run of unreviewed PR code cannot write to production by accident.
 
 The deploying identity needs CAN_USE on both SPs — including `dbt_prod_sp` itself, since the

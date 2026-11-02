@@ -77,7 +77,8 @@ variables:
       Application ID of the service principal CI runs as (looked up by display
       name). Deliberately NOT the production SP: it owns the CI catalog, but on
       the production catalog it holds only read grants (USE CATALOG, USE SCHEMA,
-      SELECT, READ VOLUME -- enough for Slim CI deferral and the state-manifest
+      SELECT, EXECUTE, READ VOLUME -- enough for Slim CI deferral, including
+      deferred models that call production UDFs, and the state-manifest
       download), so a CI run of unreviewed PR code cannot write to production.
     lookup:
       service_principal: dbt_ci_sp
