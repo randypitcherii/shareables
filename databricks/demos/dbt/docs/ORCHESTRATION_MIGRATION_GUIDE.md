@@ -81,7 +81,7 @@ Regenerate it with the `diagram` skill. The render command is in the file header
 
 Do not use a global dbt installation as an implicit version source.
 
-This project pins `dbt-databricks==1.12.4`. A version upgrade changes one reviewed line, and
+This project pins `dbt-databricks==1.13.0`. A version upgrade changes one reviewed line, and
 the same adapter pin controls development, CI, CD, and scheduled production jobs. Because
 this project does not commit `uv.lock`, compatible transitive dependencies can still change
 between resolutions. The exact guarantee applies to the adapter pin, not every installed
