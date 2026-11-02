@@ -13,9 +13,10 @@
 # databricks.yml) IS the auth -- the task wrapper resolves a runtime token from
 # its ambient credentials. No OAuth client secret exists anywhere. CI runs as
 # its OWN SP (dbt_ci_sp), never production's: it owns the CI catalog the
-# disposable schemas land in, and it holds only read grants on the production
-# catalog (enough for Slim CI deferral + the state download), so unreviewed PR
-# code cannot write to production even if it tries.
+# disposable schemas land in, and it holds only the standard read-only set on
+# the production catalog (THE_ONE_TRUE_WAY #7: USE CATALOG, USE SCHEMA, SELECT,
+# EXECUTE, READ VOLUME -- everything Slim CI defers to, plus the state
+# download), so unreviewed PR code cannot write to production even if it tries.
 #
 # The task downloads the repo tarball at `git_ref` (the PR head SHA), so PR
 # code executes here under the run_as SP -- never inside the GitHub runner's

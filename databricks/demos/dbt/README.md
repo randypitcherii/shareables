@@ -510,12 +510,16 @@ by display name:
 - **`dbt_prod_sp`** runs CD/Daily/Hourly and owns everything durable: it needs SELECT on
   `system.billing`, ownership-level access to the production catalog/schemas, and WRITE on
   the artifacts volume.
-- **`dbt_ci_sp`** runs CI and nothing else: it owns the CI catalog the disposable per-PR
-  schemas land in, and on the production catalog it holds **read-only** grants (USE CATALOG,
-  USE SCHEMA, SELECT, EXECUTE, READ VOLUME — enough for Slim CI deferral and the state
-  download; EXECUTE covers deferred models that call a production UDF such as
-  `ai_gateway_distill_transcript`), so
-  a CI run of unreviewed PR code cannot write to production by accident.
+- **`dbt_ci_sp`** runs CI and nothing else. It owns the CI catalog the disposable per-PR
+  schemas land in. On the production catalog it holds the standard **read-only** set from
+  [THE_ONE_TRUE_WAY #7](THE_ONE_TRUE_WAY.md#7-least-privilege-per-environment--and-run_as-is-the-credential):
+  `USE CATALOG`, `USE SCHEMA`, `SELECT` (relations), `EXECUTE` (functions) and `READ VOLUME`
+  (the state manifest). That covers everything Slim CI defers to production, and a CI run of
+  unreviewed PR code cannot write to production by accident:
+
+  ```sql
+  GRANT USE CATALOG, USE SCHEMA, SELECT, EXECUTE, READ VOLUME ON CATALOG rpw_prod TO `<dbt_ci_sp application id>`;
+  ```
 
 The deploying identity needs CAN_USE on both SPs — including `dbt_prod_sp` itself, since the
 CD job redeploys this bundle as the production SP and must set the CI job's `run_as`. Both

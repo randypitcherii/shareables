@@ -49,8 +49,21 @@ For each run:
 2. If the run succeeds, clean the schema.
 3. If the run fails, keep the schema for investigation. Remove it during a later cleanup.
 
-The CI service principal must have read-only access to the production state and relations.
-It must have write access only to the CI catalog.
+The CI service principal must have read-only access to production. It must have write
+access only to the CI catalog. Read-only means one privilege for each kind of object CI
+defers to:
+
+| Securable | Grant |
+|---|---|
+| production catalog / schemas | `USE CATALOG`, `USE SCHEMA` |
+| tables, views, metric views | `SELECT` |
+| functions (UDFs) | `EXECUTE` |
+| state volume | `READ VOLUME` |
+
+`EXECUTE` is the UDF equivalent of `SELECT`, not an exception. Without it, CI fails the
+first time it selects a model that calls a production UDF without also rebuilding that UDF.
+Keep production functions free of embedded credentials, because anyone with `EXECUTE` can
+read a function's body.
 
 ## 3. Use the same state for continuous delivery
 

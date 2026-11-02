@@ -123,10 +123,36 @@ token. Production deployments must not run as the deploying human either: the DA
 target sets `run_as` to a dedicated service principal and deploys to a shared workspace
 path, so production survives people changing teams.
 
-- **In this repo:** two SPs, assigned per-job in `databricks.yml` (prod target) —
-  `dbt_ci_sp` runs CI only (owns the CI catalog; **read-only** on the production catalog,
-  so CI can defer to prod state but never write to it) and `dbt_prod_sp` runs everything
-  else — plus a root path under the production SP's own workspace folder.
+**"Read-only on production" is a fixed set of privileges, one per kind of securable.**
+Any non-production identity that reads production gets exactly this set on the production
+catalog and nothing more. The main case is CI deferring to prod state:
+
+| Securable | Read privilege |
+|---|---|
+| catalog / schema | `USE CATALOG`, `USE SCHEMA` |
+| tables, views, metric views | `SELECT` |
+| functions (UDFs) | `EXECUTE` |
+| volumes (state manifests, artifacts) | `READ VOLUME` |
+
+`EXECUTE` is to a UDF what `SELECT` is to a table: it lets you use the function, not change
+it. It is not an extra exception. Slim CI defers *every* unbuilt `ref` to production, so a
+model that calls a production UDF needs `EXECUTE` for the same reason a model that reads a
+production table needs `SELECT`. Leave it out and CI breaks the first time it selects a
+model that calls a production UDF but doesn't rebuild the UDF itself.
+
+`EXECUTE` is only read-equivalent if production functions are **pure**: no embedded
+credentials and no outbound side effects. Anyone holding `EXECUTE` can read a function's
+body (`DESCRIBE FUNCTION EXTENDED`, `information_schema.routines`). A credential written
+into that body can then be read and used by every reader (see
+[`experiments/udf_privilege_delegation`](../../../experiments/udf_privilege_delegation/README.md),
+rows 6–7). Keep functions deterministic transforms over data the reader could already
+`SELECT`, and the read-only boundary holds.
+
+- **In this repo:** two SPs, assigned per-job in `databricks.yml` (prod target).
+  `dbt_ci_sp` runs CI only. It owns the CI catalog and holds the **read-only set above** on
+  the production catalog, so CI can defer to prod relations, functions and state but never
+  write to them. `dbt_prod_sp` runs everything else. The bundle deploys under the
+  production SP's own workspace folder.
 
 ### 8. Raw/source data is read-only and shared across environments
 Every environment reads the SAME upstream sources; only the outputs are namespaced. Dev
