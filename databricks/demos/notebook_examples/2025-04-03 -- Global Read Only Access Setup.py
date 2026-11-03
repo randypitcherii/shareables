@@ -19,7 +19,12 @@
 # - SQL Queries: CAN_VIEW
 #
 # Unity Catalog Permissions Applied via SQL GRANT:
-# - CATALOG: USE CATALOG, USE SCHEMA, SELECT, READ VOLUME, BROWSE
+# - CATALOG: USE CATALOG, USE SCHEMA, SELECT, EXECUTE, READ VOLUME, BROWSE
+#   EXECUTE is the function (UDF) equivalent of SELECT, and it is part of read-only
+#   access (see databricks/demos/dbt/THE_ONE_TRUE_WAY.md #7). On a catalog it also
+#   covers registered models. It stays read-equivalent only while functions carry no
+#   embedded credentials and have no outbound side effects: anyone holding EXECUTE
+#   can read a function's body.
 #
 # Intentionally Skipped Objects:
 # - Root Directory ('/'): Permissions API does not support.
@@ -326,7 +331,7 @@ def process_unity_catalog_permissions():
 
         print(f"  Found {num_catalogs} catalogs.")
         permissions_to_grant_uc = [
-            "USE CATALOG", "USE SCHEMA", "SELECT", "READ VOLUME", "BROWSE"
+            "USE CATALOG", "USE SCHEMA", "SELECT", "EXECUTE", "READ VOLUME", "BROWSE"
         ]
         # Dictionary to track success/failure per permission type for non-verbose summary
         uc_summary = {p: {"success": 0, "failed": 0, "total": num_catalogs} for p in permissions_to_grant_uc}
