@@ -23,7 +23,13 @@ elif not rows:
 else:
     services = {r[0] for r in rows}
     requesters = {r[1] for r in rows}
+    statuses = sorted({str(r[2]) for r in rows})
+    # Row 04's 403s (test caller on sub_b / sub_c) are denied before the service resolves for
+    # that caller; record whether they show up at all.
+    denied_logged = any(r[2] in ("403", 403) for r in rows)
     record("07_usage_attributes_service_and_caller", "✅" if len(services) >= 2 and len(requesters) >= 2 else "◑",
            f"{len(rows)} (service, requester, status) groups across {len(services)} services and "
-           f"{len(requesters)} requesters; relayed flag set: {sorted({str(r[3]) for r in rows})}",
-           {"rows": rows})
+           f"{len(requesters)} requesters, statuses {statuses}; relayed flag true on every call that "
+           f"carried a subscription token (incl. 429s), false on the no-token 400s. "
+           f"UC 403 denials {'are' if denied_logged else 'are NOT'} logged against the service",
+           {"rows": rows, "denied_403_logged": denied_logged})

@@ -146,10 +146,78 @@
     "target": "dev"
   },
   "07_usage_attributes_service_and_caller": {
-    "evidence": {},
-    "notes": "no rows yet for these services; usage ingestion lags 15-40 min. Re-run: make row-07",
-    "recorded_at": "2026-11-05T02:09:50+00:00",
-    "result": "❓",
+    "evidence": {
+      "denied_403_logged": false,
+      "rows": [
+        [
+          "<schema>.claude_sub_a",
+          "<test_caller>",
+          "401",
+          "true",
+          "6",
+          "2026-11-05T02:08:29.000Z"
+        ],
+        [
+          "<schema>.claude_sub_a",
+          "<test_caller>",
+          "429",
+          "true",
+          "3",
+          "2026-11-05T02:08:29.000Z"
+        ],
+        [
+          "<schema>.claude_sub_a",
+          "<owner>",
+          "400",
+          "false",
+          "1",
+          "2026-11-05T02:05:51.000Z"
+        ],
+        [
+          "<schema>.claude_sub_a",
+          "<owner>",
+          "401",
+          "true",
+          "1",
+          "2026-11-05T02:05:54.000Z"
+        ],
+        [
+          "<schema>.claude_sub_b",
+          "<owner>",
+          "400",
+          "false",
+          "1",
+          "2026-11-05T02:05:51.000Z"
+        ],
+        [
+          "<schema>.claude_sub_b",
+          "<owner>",
+          "401",
+          "true",
+          "1",
+          "2026-11-05T02:05:55.000Z"
+        ],
+        [
+          "<schema>.claude_sub_c",
+          "<owner>",
+          "400",
+          "false",
+          "1",
+          "2026-11-05T02:05:52.000Z"
+        ],
+        [
+          "<schema>.claude_sub_c",
+          "<owner>",
+          "401",
+          "true",
+          "1",
+          "2026-11-05T02:05:55.000Z"
+        ]
+      ]
+    },
+    "notes": "8 (service, requester, status) groups across 3 services and 2 requesters, statuses ['400', '401', '429']; relayed flag true on every call that carried a subscription token (incl. 429s), false on the no-token 400s. UC 403 denials are NOT logged against the service",
+    "recorded_at": "2026-11-05T02:31:13+00:00",
+    "result": "✅",
     "target": "dev"
   },
   "08_omnigent_launcher_wraps_ug": {
