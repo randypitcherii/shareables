@@ -1,0 +1,63 @@
+# N Claude subscriptions behind one Unity Gateway.
+#
+# One relayed Anthropic model provider service per subscription. Each stores no credential:
+# the gateway forwards the caller's own Anthropic OAuth token, so each request is billed to
+# whichever subscription the caller is signed in to. Unity Catalog EXECUTE decides who may use
+# which service.
+#
+#   make setup    # dev only: a throwaway test-caller SP (the non-owner the matrix acts as)
+#   make deploy   # schema + three relayed services
+#   make matrix   # every row that needs no real subscription
+bundle:
+  name: multi_claude_subscription_unity_gateway
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Catalog that holds the schema. Must have its own storage root for inference tables.
+    default: main
+  base_schema:
+    description: Base schema name. dev appends the deployer's short name.
+    default: multi_claude_sub
+  schema:
+    description: Resolved schema for the active target. Resources reference this.
+    default: ${var.base_schema}
+
+  # Who may use each subscription's service. In a real rollout these are the three account
+  # groups, one per Anthropic subscription. In dev, sub_a goes to the test-caller SP so the
+  # matrix can prove the EXECUTE gate, and sub_b / sub_c stay owner-only.
+  sub_a_principal:
+    description: Group (or SP application id) granted EXECUTE on the sub_a service.
+  sub_b_principal:
+    description: Group (or SP application id) granted EXECUTE on the sub_b service.
+    default: ${workspace.current_user.userName}
+  sub_c_principal:
+    description: Group (or SP application id) granted EXECUTE on the sub_c service.
+    default: ${workspace.current_user.userName}
+
+targets:
+  dev:
+    default: true
+    variables:
+      schema: ${var.base_schema}_${workspace.current_user.short_name}
+    presets:
+      name_prefix: ""
+    resources:
+      model_provider_services:
+        # Dev only: a tight per-caller limit so row 06 can show the gateway throttles a
+        # subscription's service before the request reaches Anthropic.
+        sub_a:
+          config:
+            rate_limits:
+              - key: RATE_LIMIT_KEY_SERVICE_PRINCIPAL
+                principal: ${var.sub_a_principal}
+                requests: 2
+                renewal_period: RATE_LIMIT_RENEWAL_PERIOD_MINUTE
+
+  # A real rollout: pass the three group names, e.g.
+  #   databricks bundle deploy -t rollout --var sub_a_principal=claude-sub-a-users ...
+  rollout:
+    variables:
+      schema: ${var.base_schema}
