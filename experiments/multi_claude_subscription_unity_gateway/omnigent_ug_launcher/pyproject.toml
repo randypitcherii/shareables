@@ -1,0 +1,23 @@
+[project]
+name = "omnigent-ug-launcher"
+version = "2026.11.501"
+description = "Omnigent Claude launcher plugin: run the native Claude terminal through `ug claude --provider <service>`."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+omnigent = ["omnigent"]
+
+[project.entry-points."omnigent.claude_launcher"]
+ug = "omnigent_ug_launcher:UgClaudeLauncher"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/omnigent_ug_launcher"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

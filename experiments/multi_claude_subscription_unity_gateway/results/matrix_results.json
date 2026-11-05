@@ -1,0 +1,179 @@
+{
+  "01_n_relayed_services_coexist": {
+    "evidence": {
+      "sub_a": {
+        "inference_table_prefix": "claude_sub_a",
+        "provider_type": "EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC",
+        "relayed": true,
+        "status": 200,
+        "stores_credential": false
+      },
+      "sub_b": {
+        "inference_table_prefix": "claude_sub_b",
+        "provider_type": "EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC",
+        "relayed": true,
+        "status": 200,
+        "stores_credential": false
+      },
+      "sub_c": {
+        "inference_table_prefix": "claude_sub_c",
+        "provider_type": "EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC",
+        "relayed": true,
+        "status": 200,
+        "stores_credential": false
+      }
+    },
+    "notes": "3/3 relayed Anthropic services side by side in <schema>, none storing a credential, each with its own inference table",
+    "recorded_at": "2026-11-05T02:05:49+00:00",
+    "result": "✅",
+    "target": "dev"
+  },
+  "02_relay_refuses_without_subscription": {
+    "evidence": {
+      "sub_a": {
+        "message": "This Anthropic Model Provider Service uses relayed authentication and can only be invoked by a relayed (credential-swapped) request.",
+        "status": 400,
+        "stopped_at": "relay_refused"
+      },
+      "sub_b": {
+        "message": "This Anthropic Model Provider Service uses relayed authentication and can only be invoked by a relayed (credential-swapped) request.",
+        "status": 400,
+        "stopped_at": "relay_refused"
+      },
+      "sub_c": {
+        "message": "This Anthropic Model Provider Service uses relayed authentication and can only be invoked by a relayed (credential-swapped) request.",
+        "status": 400,
+        "stopped_at": "relay_refused"
+      }
+    },
+    "notes": "every service answers 400 'uses relayed authentication and can only be invoked by a relayed (credential-swapped) request' when no Anthropic credential rides along",
+    "recorded_at": "2026-11-05T02:05:52+00:00",
+    "result": "✅",
+    "target": "dev"
+  },
+  "03_relay_forwards_caller_credential": {
+    "evidence": {
+      "sub_a": {
+        "provider": "anthropic",
+        "status": 401,
+        "stopped_at": "reached_anthropic",
+        "upstream_says": "OAuth access token is invalid.",
+        "upstream_status": "401"
+      },
+      "sub_b": {
+        "provider": "anthropic",
+        "status": 401,
+        "stopped_at": "reached_anthropic",
+        "upstream_says": "OAuth access token is invalid.",
+        "upstream_status": "401"
+      },
+      "sub_c": {
+        "provider": "anthropic",
+        "status": 401,
+        "stopped_at": "reached_anthropic",
+        "upstream_says": "OAuth access token is invalid.",
+        "upstream_status": "401"
+      }
+    },
+    "notes": "fake subscription token reached Anthropic on every service: gateway returns upstream 401 'OAuth access token is invalid.' from provider=anthropic. Nothing stored, nothing swapped in",
+    "recorded_at": "2026-11-05T02:05:56+00:00",
+    "result": "✅",
+    "target": "dev"
+  },
+  "04_execute_gates_each_service": {
+    "evidence": {
+      "sub_a": {
+        "message": "Model Provider Service returned error with status code 401: OAuth access token is invalid. Authentication with the model provider failed — verify the credential",
+        "status": 401,
+        "stopped_at": "reached_anthropic"
+      },
+      "sub_b": {
+        "message": "Doesn't have permission to query '<schema>.claude_sub_b'.",
+        "status": 403,
+        "stopped_at": "denied_by_uc"
+      },
+      "sub_c": {
+        "message": "Doesn't have permission to query '<schema>.claude_sub_c'.",
+        "status": 403,
+        "stopped_at": "denied_by_uc"
+      }
+    },
+    "notes": "test caller (EXECUTE on sub_a only): sub_a reached_anthropic (HTTP 401), sub_b HTTP 403 denied_by_uc, sub_c HTTP 403 denied_by_uc",
+    "recorded_at": "2026-11-05T02:06:00+00:00",
+    "result": "✅",
+    "target": "dev"
+  },
+  "05_no_org_binding_on_service": {
+    "evidence": {
+      "allowed_organizations": {
+        "field_kept": false,
+        "message": "",
+        "status": 200
+      },
+      "anthropic_organization_id": {
+        "field_kept": false,
+        "message": "",
+        "status": 200
+      },
+      "control": {
+        "field_kept": false,
+        "message": "",
+        "status": 200
+      },
+      "organization_id": {
+        "field_kept": false,
+        "message": "",
+        "status": 200
+      }
+    },
+    "notes": "no binding: create accepts each organization field with HTTP 200 and silently drops it (stored config is relayed: {}). A relayed service relays ANY subscription token; group grants (row 04) plus per-service usage (row 07) are the control. Confirm with a real cross-subscription call (runbook R2)",
+    "recorded_at": "2026-11-05T02:07:19+00:00",
+    "result": "❌",
+    "target": "dev"
+  },
+  "06_rate_limit_per_service": {
+    "evidence": {
+      "trail": [
+        "reached_anthropic",
+        "reached_anthropic",
+        "rate_limited",
+        "rate_limited"
+      ]
+    },
+    "notes": "4 calls in a row on sub_a: reached_anthropic → reached_anthropic → rate_limited → rate_limited. A throttled call never reaches Anthropic, so it spends none of that subscription's limit",
+    "recorded_at": "2026-11-05T02:08:30+00:00",
+    "result": "✅",
+    "target": "dev"
+  },
+  "07_usage_attributes_service_and_caller": {
+    "evidence": {},
+    "notes": "no rows yet for these services; usage ingestion lags 15-40 min. Re-run: make row-07",
+    "recorded_at": "2026-11-05T02:09:50+00:00",
+    "result": "❓",
+    "target": "dev"
+  },
+  "08_omnigent_launcher_wraps_ug": {
+    "evidence": {
+      "args": [
+        "claude",
+        "--provider",
+        "<schema>.claude_sub_a",
+        "--workspace",
+        "<workspace>",
+        "--mcp-config",
+        "/tmp/x.json",
+        "--session-id",
+        "s1"
+      ],
+      "cmd": "ucode",
+      "entry_points": [
+        "ug"
+      ],
+      "via": "omnigent.resolve_claude_launch"
+    },
+    "notes": "Omnigent resolves ucode claude --provider <schema>.claude_sub_a --workspace <workspace> … with every Omnigent-injected arg preserved (ucode is ug's legacy name, used when ug is not on PATH). Live session with a real subscription: runbook R3",
+    "recorded_at": "2026-11-05T02:07:24+00:00",
+    "result": "◑",
+    "target": "dev"
+  }
+}

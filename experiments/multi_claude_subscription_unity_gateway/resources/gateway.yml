@@ -1,0 +1,67 @@
+# One schema, three relayed Anthropic provider services: one per subscription.
+#
+# `anthropic.relayed: {}` has no fields. The service cannot name an Anthropic organization, so
+# it relays whichever subscription token the caller presents (see row 05). Group grants are the
+# control; per-service usage rows and inference tables are the audit.
+resources:
+  schemas:
+    msub:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: N Claude subscriptions behind one Unity Gateway (relayed provider services, payload logs).
+      grants:
+        - principal: ${var.sub_a_principal}
+          privileges: [USE_SCHEMA]
+        - principal: ${var.sub_b_principal}
+          privileges: [USE_SCHEMA]
+        - principal: ${var.sub_c_principal}
+          privileges: [USE_SCHEMA]
+
+  model_provider_services:
+    sub_a:
+      parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+      model_provider_service_id: claude_sub_a
+      comment: Relays Claude subscription A. Members of the sub_a group sign in to subscription A.
+      config:
+        provider_type: EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC
+        anthropic:
+          relayed: {}
+        allow_all_targets: true
+        inference_table:
+          parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+          table_name_prefix: claude_sub_a
+      grants:
+        - principal: ${var.sub_a_principal}
+          privileges: [EXECUTE]
+
+    sub_b:
+      parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+      model_provider_service_id: claude_sub_b
+      comment: Relays Claude subscription B. Members of the sub_b group sign in to subscription B.
+      config:
+        provider_type: EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC
+        anthropic:
+          relayed: {}
+        allow_all_targets: true
+        inference_table:
+          parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+          table_name_prefix: claude_sub_b
+      grants:
+        - principal: ${var.sub_b_principal}
+          privileges: [EXECUTE]
+
+    sub_c:
+      parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+      model_provider_service_id: claude_sub_c
+      comment: Relays Claude subscription C. Members of the sub_c group sign in to subscription C.
+      config:
+        provider_type: EXTERNAL_MODEL_PROVIDER_TYPE_ANTHROPIC
+        anthropic:
+          relayed: {}
+        allow_all_targets: true
+        inference_table:
+          parent: schemas/${resources.schemas.msub.catalog_name}.${resources.schemas.msub.name}
+          table_name_prefix: claude_sub_c
+      grants:
+        - principal: ${var.sub_c_principal}
+          privileges: [EXECUTE]
