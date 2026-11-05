@@ -2,8 +2,7 @@
 
 ## Status: first live run 2026-11-05
 
-Rows 01–08 ran against one AWS Databricks workspace, `dev` target. 7 rows answered, 1 waiting
-on usage-table lag. The four rows that need real, separate Claude subscriptions are in the
+Rows 01–08 ran against one AWS Databricks workspace, `dev` target, and all 8 are answered. The four rows that need real, separate Claude subscriptions are in the
 [runbook](docs/runbook.md).
 
 ## The question
@@ -31,7 +30,10 @@ Yes, with one caveat that matters.
 - **The caveat: a service can't be pinned to an Anthropic organization** (row 05). The relayed
   config has no fields. The API accepts organization fields with HTTP 200 and drops them, so a
   `sub_a` service relays a subscription-B token too. Group grants keep people on the right
-  service. Per-service usage rows let you audit it. Nothing enforces it.
+  service. Per-service usage rows (row 07) let you audit it. Nothing enforces it.
+- **Usage attributes every relayed call to the caller and the service** (row 07), so an audit
+  query can catch someone on the wrong subscription's service. A call Unity Catalog denies is
+  not logged.
 - **Per-service rate limits fire before the relay** (row 06), so you can keep each subscription's
   traffic under Anthropic's limit without spending any of it on throttled calls.
 - **Omnigent needs no change** (row 08). A small launcher plugin rewrites Omnigent's native
@@ -64,7 +66,7 @@ Source of truth: [`results/matrix_results.json`](results/matrix_results.json). �
 | 04 | `EXECUTE` gates each service before the relay | ✅ | caller with EXECUTE on `sub_a` only: `sub_a` reached Anthropic; `sub_b`, `sub_c` 403 at Unity Catalog |
 | 05 | A relayed service can be pinned to one Anthropic organization | ❌ | control create 200; `organization_id`, `anthropic_organization_id`, `allowed_organizations` each 200 and **dropped**. Config stays `relayed: {}` |
 | 06 | A per-service rate limit throttles before the relay | ✅ | limit 2/min: reached → reached → 429 → 429 |
-| 07 | Usage attributes each relayed call to caller **and** service | ❓ | `system.ai_gateway.usage` has `requester`, `service_name`, `invocation_metadata.relayed`; ingestion lags 15–40 min, re-run `make row-07` |
+| 07 | Usage attributes each relayed call to caller **and** service | ✅ | `system.ai_gateway.usage`: one row per call with `service_name`, `requester`, `status_code`; `invocation_metadata.relayed = true` on every call carrying a subscription token (429s included). Row 04's 403 denials are **not** logged. Lag ~25 min |
 | 08 | Omnigent's native Claude launch runs through `ug claude --provider` | ◑ | Omnigent's own `resolve_claude_launch()` returns `ug claude --provider <svc> --workspace <ws> <Omnigent args…>`. Live session: runbook R3 |
 | R1 | A real call through each service bills that subscription only | ❓ | needs subscriptions: [runbook](docs/runbook.md#r1--a-real-call-through-each-service-bills-that-subscription) |
 | R2 | A subscription-B token through `sub_a`'s service is refused | ❓ | expected ❌ per row 05: [runbook](docs/runbook.md#r2--a-subscription-b-token-through-subscription-as-service) |
