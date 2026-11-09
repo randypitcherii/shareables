@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Iceberg REST rate-limit probe: live</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  body { font: 14px/1.4 -apple-system, system-ui, sans-serif; margin: 16px 24px; color: #1f2933; background: #fbfbfa; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  #status { color: #52606d; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #e4e7eb; margin-right: 6px; }
+  .pill.hold { background: #fde2e1; } .pill.recovery { background: #e3f8e9; } .pill.done { background: #d9e2ec; }
+  .wrap { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 1200px; }
+  .card { background: #fff; border: 1px solid #e4e7eb; border-radius: 8px; padding: 10px 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #52606d; margin: 0 0 6px; }
+  canvas { max-height: 300px; }
+</style>
+</head>
+<body>
+<h1>Iceberg REST catalog: requests per second</h1>
+<div id="status">waiting for data…</div>
+<div class="wrap">
+  <div class="card"><h2>Attempted vs succeeded vs 429 (per second)</h2><canvas id="rate"></canvas></div>
+  <div class="card"><h2>Latency of successful calls (ms)</h2><canvas id="lat"></canvas></div>
+</div>
+<script>
+// Palette: okabe-ito-derived, colour-blind safe. Attempted = neutral, ok = blue, 429 = vermillion.
+const C = { attempted: '#7b8794', ok: '#0072B2', throttled: '#D55E00', target: '#3e4c59', p50: '#0072B2', p95: '#E69F00', other: '#CC79A7' };
+const DASH = [5, 4];
+function lineDs(label, color, extra = {}) {
+  return Object.assign({ label, data: [], borderColor: color, backgroundColor: color, pointRadius: 0, borderWidth: 2, tension: 0 }, extra);
+}
+const common = { animation: false, responsive: true, interaction: { mode: 'index', intersect: false },
+  scales: { x: { type: 'linear', title: { display: true, text: 'seconds since start' } }, y: { beginAtZero: true } },
+  plugins: { legend: { position: 'top', labels: { boxWidth: 14 } } } };
+const rate = new Chart(document.getElementById('rate'), { type: 'line', data: { datasets: [] },
+  options: Object.assign({}, common, { scales: Object.assign({}, common.scales, { y: { beginAtZero: true, title: { display: true, text: 'requests / s' } } }) }) });
+const lat = new Chart(document.getElementById('lat'), { type: 'line', data: { datasets: [] },
+  options: Object.assign({}, common, { scales: Object.assign({}, common.scales, { y: { beginAtZero: true, title: { display: true, text: 'ms' } } }) }) });
+
+async function tick() {
+  try {
+    const r = await fetch('/api/series'); const d = await r.json();
+    const ws = Object.keys(d.series);
+    const many = ws.length > 1;
+    const rd = [], ld = [];
+    ws.forEach((w, i) => {
+      const s = d.series[w]; const sfx = many ? ` (ws ${w})` : '';
+      const dash = i === 0 ? {} : { borderDash: [2, 2] };
+      const pts = k => s.map(p => ({ x: p.t, y: p[k] }));
+      rd.push(lineDs('attempted' + sfx, C.attempted, Object.assign({ data: pts('attempted') }, dash)));
+      rd.push(lineDs('succeeded (2xx)' + sfx, C.ok, Object.assign({ data: pts('ok') }, dash)));
+      rd.push(lineDs('429' + sfx, C.throttled, Object.assign({ data: pts('throttled') }, dash)));
+      if (s.some(p => p.other)) rd.push(lineDs('other errors' + sfx, C.other, Object.assign({ data: pts('other') }, dash)));
+      if (i === 0) rd.push(lineDs('target rate', C.target, { data: pts('target_rate'), borderDash: DASH, borderWidth: 1 }));
+      ld.push(lineDs('p50' + sfx, C.p50, Object.assign({ data: pts('p50_ms') }, dash)));
+      ld.push(lineDs('p95' + sfx, C.p95, Object.assign({ data: pts('p95_ms') }, dash)));
+    });
+    rate.data.datasets = rd; lat.data.datasets = ld; rate.update(); lat.update();
+    const st = d.state;
+    document.getElementById('status').innerHTML =
+      `<span class="pill">${st.endpoint}</span><span class="pill ${st.phase}">${st.phase}</span>` +
+      `target <b>${st.target_rate}</b> req/s per workspace · workspaces: ${ws.join(', ') || '–'} · ` +
+      `${st.cloud}/${st.region} · ${st.date_utc} · calls ${st.calls} · 429s ${st.throttled}` +
+      (st.onset_rate ? ` · <b>429 onset ≈ ${st.onset_rate} req/s</b>` : '');
+  } catch (e) { document.getElementById('status').textContent = 'probe not reachable (finished?)'; }
+}
+setInterval(tick, 1000); tick();
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+[project]
+name = "iceberg-rest-rate-limit-probe"
+version = "0.1.0"
+description = "Measure when the Unity Catalog Iceberg REST catalog starts returning 429, how long throttling lasts, and how fast it recovers"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.10.0",
+    "pyarrow>=17.0.0",
+    "pyiceberg>=0.9.0",
+    "databricks-sdk>=0.38.0",
+    "matplotlib>=3.11.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+pythonpath = ["scripts"]
+markers = [
+    "infrastructure: tests requiring a live Databricks workspace",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

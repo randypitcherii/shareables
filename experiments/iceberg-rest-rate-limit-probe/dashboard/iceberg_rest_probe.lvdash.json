@@ -1,0 +1,804 @@
+{
+  "datasets": [
+    {
+      "name": "seconds_long",
+      "displayName": "Probe: per-second series",
+      "queryLines": [
+        "SELECT run_id, endpoint, workspace, t, series, value FROM __FQ__.v_probe_seconds_long"
+      ]
+    },
+    {
+      "name": "seconds",
+      "displayName": "Probe: per-second latency",
+      "queryLines": [
+        "SELECT run_id, endpoint, workspace, t, s.series, s.ms FROM __FQ__.v_probe_seconds LATERAL VIEW STACK(2, 'p50', p50_ms, 'p95', p95_ms) s AS series, ms"
+      ]
+    },
+    {
+      "name": "steps",
+      "displayName": "Probe: 429 share by target rate",
+      "queryLines": [
+        "SELECT run_id, endpoint, workspace, target_rate, throttled_share, p50_ms, CONCAT(endpoint, ' / ws ', workspace) AS endpoint_ws FROM __FQ__.v_probe_steps"
+      ]
+    },
+    {
+      "name": "onset",
+      "displayName": "Probe: onset per endpoint",
+      "queryLines": [
+        "SELECT run_id, endpoint, workspace, first_429_rate, onset_rate, peak_target_rate FROM __FQ__.v_probe_onset ORDER BY endpoint, workspace"
+      ]
+    },
+    {
+      "name": "audit",
+      "displayName": "Audit: Iceberg REST calls per minute",
+      "queryLines": [
+        "SELECT minute, CONCAT(service_name, '.', action_name) AS action, status_code, calls, peak_qps FROM __FQ__.v_iceberg_rest_audit"
+      ]
+    },
+    {
+      "name": "audit_status",
+      "displayName": "Audit: Iceberg REST calls by status",
+      "queryLines": [
+        "SELECT minute, CAST(status_code AS STRING) AS status_code, SUM(calls) AS calls FROM __FQ__.v_iceberg_rest_audit WHERE service_name = 'uniformIcebergRestCatalog' GROUP BY ALL"
+      ]
+    },
+    {
+      "name": "audit_failures",
+      "displayName": "Audit: Iceberg REST failures",
+      "queryLines": [
+        "SELECT event_time, action_name, status_code, error_message, user_agent FROM __FQ__.v_iceberg_rest_audit_failures ORDER BY event_time DESC LIMIT 500"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "probe",
+      "displayName": "Probe results",
+      "layout": [
+        {
+          "widget": {
+            "name": "title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Iceberg REST catalog: when do 429s start?\n\n",
+                "Probe runs against a transient sandbox workspace. Each run ramps one endpoint in steps, holds above the onset, then drops to a trickle. **Onset** = first step with >= 5% 429s. One environment, one point in time: compare shapes, don't treat the numbers as an SLA.\n\n",
+                "**Pick one Run first**: with All selected the charts add every run together.\n\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_run",
+            "queries": [
+              {
+                "name": "f_f_run_seconds_long",
+                "query": {
+                  "datasetName": "seconds_long",
+                  "fields": [
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_f_run_seconds",
+                "query": {
+                  "datasetName": "seconds",
+                  "fields": [
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_f_run_steps",
+                "query": {
+                  "datasetName": "steps",
+                  "fields": [
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_f_run_onset",
+                "query": {
+                  "datasetName": "onset",
+                  "fields": [
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "run_id",
+                    "queryName": "f_f_run_seconds_long"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "run_id",
+                    "queryName": "f_f_run_seconds"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "run_id",
+                    "queryName": "f_f_run_steps"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "run_id",
+                    "queryName": "f_f_run_onset"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Run"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_endpoint",
+            "queries": [
+              {
+                "name": "f_f_endpoint_seconds_long",
+                "query": {
+                  "datasetName": "seconds_long",
+                  "fields": [
+                    {
+                      "name": "endpoint",
+                      "expression": "`endpoint`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_f_endpoint_seconds",
+                "query": {
+                  "datasetName": "seconds",
+                  "fields": [
+                    {
+                      "name": "endpoint",
+                      "expression": "`endpoint`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "endpoint",
+                    "displayName": "endpoint",
+                    "queryName": "f_f_endpoint_seconds_long"
+                  },
+                  {
+                    "fieldName": "endpoint",
+                    "displayName": "endpoint",
+                    "queryName": "f_f_endpoint_seconds"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Endpoint"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f_ws",
+            "queries": [
+              {
+                "name": "f_f_ws_seconds_long",
+                "query": {
+                  "datasetName": "seconds_long",
+                  "fields": [
+                    {
+                      "name": "workspace",
+                      "expression": "`workspace`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_f_ws_seconds",
+                "query": {
+                  "datasetName": "seconds",
+                  "fields": [
+                    {
+                      "name": "workspace",
+                      "expression": "`workspace`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "workspace",
+                    "displayName": "workspace",
+                    "queryName": "f_f_ws_seconds_long"
+                  },
+                  {
+                    "fieldName": "workspace",
+                    "displayName": "workspace",
+                    "queryName": "f_f_ws_seconds"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Workspace"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "seconds_long",
+                  "fields": [
+                    {
+                      "name": "t",
+                      "expression": "`t`"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    },
+                    {
+                      "name": "sum(value)",
+                      "expression": "SUM(`value`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "t",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "seconds since start"
+                },
+                "y": {
+                  "fieldName": "sum(value)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "requests / s"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "series"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Attempted vs succeeded vs 429 per second (pick one endpoint)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "latency",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "seconds",
+                  "fields": [
+                    {
+                      "name": "t",
+                      "expression": "`t`"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    },
+                    {
+                      "name": "avg(ms)",
+                      "expression": "AVG(`ms`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "t",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "seconds since start"
+                },
+                "y": {
+                  "fieldName": "avg(ms)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "ms"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "series"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Latency of successful calls (ms)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "share",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "steps",
+                  "fields": [
+                    {
+                      "name": "target_rate",
+                      "expression": "`target_rate`"
+                    },
+                    {
+                      "name": "endpoint_ws",
+                      "expression": "`endpoint_ws`"
+                    },
+                    {
+                      "name": "max(throttled_share)",
+                      "expression": "MAX(`throttled_share`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "target_rate",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "target req/s per workspace"
+                },
+                "y": {
+                  "fieldName": "max(throttled_share)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "share of calls rejected"
+                },
+                "color": {
+                  "fieldName": "endpoint_ws",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "endpoint_ws"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "429 share by target rate (ramp steps)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 4,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "onset_tbl",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "onset",
+                  "fields": [
+                    {
+                      "name": "endpoint",
+                      "expression": "`endpoint`"
+                    },
+                    {
+                      "name": "workspace",
+                      "expression": "`workspace`"
+                    },
+                    {
+                      "name": "first_429_rate",
+                      "expression": "`first_429_rate`"
+                    },
+                    {
+                      "name": "onset_rate",
+                      "expression": "`onset_rate`"
+                    },
+                    {
+                      "name": "peak_target_rate",
+                      "expression": "`peak_target_rate`"
+                    },
+                    {
+                      "name": "run_id",
+                      "expression": "`run_id`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "endpoint",
+                    "displayName": "endpoint"
+                  },
+                  {
+                    "fieldName": "workspace",
+                    "displayName": "workspace"
+                  },
+                  {
+                    "fieldName": "first_429_rate",
+                    "displayName": "first_429_rate"
+                  },
+                  {
+                    "fieldName": "onset_rate",
+                    "displayName": "onset_rate"
+                  },
+                  {
+                    "fieldName": "peak_target_rate",
+                    "displayName": "peak_target_rate"
+                  },
+                  {
+                    "fieldName": "run_id",
+                    "displayName": "run_id"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Onset per endpoint"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 14,
+            "width": 2,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    },
+    {
+      "name": "audit",
+      "displayName": "Real load (audit)",
+      "layout": [
+        {
+          "widget": {
+            "name": "audit_title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Your real Iceberg REST load (system.access.audit)\n\n",
+                "Iceberg REST calls log as `uniformIcebergRestCatalog`; the UC calls underneath (getTable, generateTemporaryTableCredential) log as `unityCatalog`. **Peak QPS** is the busiest second in each minute: limits are enforced per second, so compare that, not the average, with the probe's onset. The audit log lagged about 10 minutes in our runs. 429s from the per-workspace edge limit did **not** show up here; 429s from the shared (cross-workspace) limit did. So a quiet audit log does not prove clients were never throttled.\n\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "audit_peak",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "audit",
+                  "fields": [
+                    {
+                      "name": "minute",
+                      "expression": "`minute`"
+                    },
+                    {
+                      "name": "action",
+                      "expression": "`action`"
+                    },
+                    {
+                      "name": "max(peak_qps)",
+                      "expression": "MAX(`peak_qps`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "minute",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "minute"
+                },
+                "y": {
+                  "fieldName": "max(peak_qps)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "peak req/s"
+                },
+                "color": {
+                  "fieldName": "action",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "action"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Peak calls per second, by action (busiest second in each minute)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "audit_status_chart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "audit_status",
+                  "fields": [
+                    {
+                      "name": "minute",
+                      "expression": "`minute`"
+                    },
+                    {
+                      "name": "status_code",
+                      "expression": "`status_code`"
+                    },
+                    {
+                      "name": "sum(calls)",
+                      "expression": "SUM(`calls`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "minute",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "minute"
+                },
+                "y": {
+                  "fieldName": "sum(calls)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "calls / min"
+                },
+                "color": {
+                  "fieldName": "status_code",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "status_code"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Iceberg REST calls per minute by status code"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "audit_fail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "audit_failures",
+                  "fields": [
+                    {
+                      "name": "event_time",
+                      "expression": "`event_time`"
+                    },
+                    {
+                      "name": "action_name",
+                      "expression": "`action_name`"
+                    },
+                    {
+                      "name": "status_code",
+                      "expression": "`status_code`"
+                    },
+                    {
+                      "name": "error_message",
+                      "expression": "`error_message`"
+                    },
+                    {
+                      "name": "user_agent",
+                      "expression": "`user_agent`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "event_time",
+                    "displayName": "event_time"
+                  },
+                  {
+                    "fieldName": "action_name",
+                    "displayName": "action_name"
+                  },
+                  {
+                    "fieldName": "status_code",
+                    "displayName": "status_code"
+                  },
+                  {
+                    "fieldName": "error_message",
+                    "displayName": "error_message"
+                  },
+                  {
+                    "fieldName": "user_agent",
+                    "displayName": "user_agent"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Recent Iceberg REST failures (4xx/5xx)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ]
+}

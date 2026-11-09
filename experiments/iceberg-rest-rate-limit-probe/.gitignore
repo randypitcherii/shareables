@@ -1,0 +1,11 @@
+*.env
+!template.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+uv.lock
+# Raw per-call logs hold hostnames, table names and request IDs. Only scrubbed
+# aggregates under results/ are committed.
+data/
+.databricks/
