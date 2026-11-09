@@ -124,9 +124,9 @@ Rules of thumb from the data:
 - **One environment.** The metastore was shared with other tenants, whose load we could not
   see. The ~400/s shared ceiling may be "what was left" rather than a fixed number.
 - **Metastore vs account** scope is unresolved. It needs a workspace on a second metastore
-  in the same account.
+  in the same account (#111).
 - **Per-workspace total across routes** (the ~720/s figure) was not tested. That needs a
-  mixed-route ramp.
+  mixed-route ramp (#112).
 - Each run was done once or twice. The repeated in-workspace `loadTable` run reproduced
   within 0.1 pp (10.0% vs 10.0% 429s at 350/s; 22.2% vs 23.1% at 400/s).
 
