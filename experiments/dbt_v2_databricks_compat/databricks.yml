@@ -1,0 +1,36 @@
+# Two ways to orchestrate the SAME dbt v2 project in Lakeflow Jobs, deployed
+# side by side so the matrix can record which one runs. Both install the same
+# pinned dbt v2 wheel through the serverless environment, so the only variable
+# is the task type.
+bundle:
+  name: dbt_v2_databricks_compat
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog the experiment schema lives in.
+  schema_prefix:
+    description: >-
+      Each job builds into its own `<prefix>_<job>` schema so the two jobs can
+      run at the same time without fighting over the same tables.
+    default: dbt_v2_compat
+  warehouse_id:
+    description: SQL warehouse dbt sends model SQL to.
+  # The pinned dbt v2 wheels, taken from the GitHub release so a release can
+  # be tested the day it ships (package mirrors lag). Serverless compute can
+  # land on x86_64 OR aarch64 between runs, so each wheel carries a PEP 508
+  # platform marker and pip installs exactly the one that matches. Once the
+  # release is on PyPI, `dbt-oss==<version>` alone does the same job.
+  dbt_v2_wheel_x86_64:
+    default: "dbt-oss @ https://github.com/dbt-labs/dbt-core/releases/download/v2.0.11/dbt_oss-2.0.11-cp310-abi3-manylinux_2_28_x86_64.whl ; platform_machine == 'x86_64'"
+  dbt_v2_wheel_aarch64:
+    default: "dbt-oss @ https://github.com/dbt-labs/dbt-core/releases/download/v2.0.11/dbt_oss-2.0.11-cp310-abi3-manylinux_2_28_aarch64.whl ; platform_machine == 'aarch64'"
+  landing_path:
+    description: UC volume folder the streaming-table row reads (created by `make setup`).
+
+targets:
+  dev:
+    mode: development
+    default: true

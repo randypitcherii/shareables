@@ -1,0 +1,15 @@
+seeds:
+  - name: events
+    config:
+      event_time: event_ts
+      column_types:
+        event_id: int
+        customer_id: int
+        event_date: date
+        event_ts: timestamp
+        amount: decimal(10,2)
+        batch_no: int
+  - name: customers
+    config:
+      column_types:
+        customer_id: int

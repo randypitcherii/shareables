@@ -1,0 +1,8 @@
+snapshots:
+  - name: r09_snapshot
+    relation: ref('r09_snapshot_source')
+    config:
+      unique_key: customer_id
+      strategy: check
+      check_cols: [region]
+      tags: [r09_snapshot]

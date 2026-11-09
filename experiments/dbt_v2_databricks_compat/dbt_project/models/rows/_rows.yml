@@ -1,0 +1,43 @@
+models:
+  - name: r05_view
+    description: Plain view over the events seed.
+    columns:
+      - name: event_id
+        data_tests: [not_null]
+  - name: r06_table
+    columns:
+      - name: region
+        data_tests: [unique, not_null]
+  - name: r20_tags_persist_docs
+    description: Persisted to the table comment by persist_docs.
+    columns:
+      - name: customer_id
+        description: Persisted to the column comment by persist_docs.
+        databricks_tags: {dbt_v2_compat_column: "r20"}
+  - name: r21_contract_constraints
+    config:
+      contract: {enforced: true}
+    constraints:
+      - type: primary_key
+        columns: [customer_id]
+    columns:
+      - name: customer_id
+        data_type: int
+        constraints: [{type: not_null}]
+      - name: customer_name
+        data_type: string
+
+unit_tests:
+  - name: r08_unit_test_r06_table
+    model: r06_table
+    given:
+      - input: ref('r05_view')
+        rows:
+          - {event_id: 1, customer_id: 1, amount: 5.0}
+          - {event_id: 2, customer_id: 1, amount: 7.0}
+      - input: ref('customers')
+        rows:
+          - {customer_id: 1, customer_name: x, region: east}
+    expect:
+      rows:
+        - {region: east, total_amount: 12.0}
