@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Snowflake metadata refresh vs. Databricks rate limits: the three outcomes",
+    "output": "refresh-throttling-sequence.html",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "participants": [
+    {
+      "id": "sf",
+      "type": "external",
+      "label": "Snowflake",
+      "sublabel": "catalog-linked DB"
+    },
+    {
+      "id": "irc",
+      "type": "security",
+      "label": "Iceberg REST edge",
+      "sublabel": "per-workspace limit"
+    },
+    {
+      "id": "ucm",
+      "type": "security",
+      "label": "Shared UC budget",
+      "sublabel": "all workspaces"
+    },
+    {
+      "id": "audit",
+      "type": "database",
+      "label": "Audit log",
+      "sublabel": "system.access.audit"
+    },
+    {
+      "id": "adls",
+      "type": "database",
+      "label": "Object storage",
+      "sublabel": "metadata + Parquet"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 360,
+      "label": "1 \u00b7 Normal (<300/s per workspace)"
+    },
+    {
+      "from": 375,
+      "to": 535,
+      "label": "2 \u00b7 Per-workspace 429 (\u2265350/s)"
+    },
+    {
+      "from": 550,
+      "to": 765,
+      "label": "3 \u00b7 Shared-limit 429 (>~400/s total)"
+    }
+  ],
+  "messages": [
+    {
+      "id": "lt1",
+      "from": "sf",
+      "to": "irc",
+      "y": 160,
+      "label": "loadTable",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gt1",
+      "from": "irc",
+      "to": "ucm",
+      "y": 188,
+      "label": "UC getTable"
+    },
+    {
+      "id": "ok1",
+      "from": "ucm",
+      "to": "irc",
+      "y": 216,
+      "label": "ok",
+      "variant": "return"
+    },
+    {
+      "id": "log1",
+      "from": "irc",
+      "to": "audit",
+      "y": 244,
+      "label": "log 200",
+      "variant": "dashed"
+    },
+    {
+      "id": "r1",
+      "from": "irc",
+      "to": "sf",
+      "y": 272,
+      "label": "200 metadata location",
+      "variant": "return"
+    },
+    {
+      "id": "read1",
+      "from": "sf",
+      "to": "adls",
+      "y": 300,
+      "label": "read metadata + Parquet",
+      "variant": "emphasis",
+      "note": "Through Snowflake's external volume, not UC-vended credentials"
+    },
+    {
+      "id": "lt2",
+      "from": "sf",
+      "to": "irc",
+      "y": 400,
+      "label": "loadTable burst",
+      "variant": "emphasis"
+    },
+    {
+      "id": "r429a",
+      "from": "irc",
+      "to": "sf",
+      "y": 428,
+      "label": "429 \u00b7 Retry-After: 1",
+      "variant": "return",
+      "note": "Rejected at the edge; never written to the audit log"
+    },
+    {
+      "id": "retry",
+      "from": "sf",
+      "to": "irc",
+      "y": 490,
+      "label": "retry after 1s"
+    },
+    {
+      "id": "r2",
+      "from": "irc",
+      "to": "sf",
+      "y": 518,
+      "label": "200 (recovers in 0\u20131s)",
+      "variant": "return"
+    },
+    {
+      "id": "lt3",
+      "from": "sf",
+      "to": "irc",
+      "y": 565,
+      "label": "loadTable",
+      "variant": "emphasis",
+      "note": "Median latency climbs before any rejection"
+    },
+    {
+      "id": "gt3",
+      "from": "irc",
+      "to": "ucm",
+      "y": 617,
+      "label": "UC getTable"
+    },
+    {
+      "id": "no3",
+      "from": "ucm",
+      "to": "irc",
+      "y": 645,
+      "label": "over budget",
+      "variant": "return"
+    },
+    {
+      "id": "log3",
+      "from": "irc",
+      "to": "audit",
+      "y": 673,
+      "label": "log 429",
+      "variant": "dashed"
+    },
+    {
+      "id": "r429b",
+      "from": "irc",
+      "to": "sf",
+      "y": 701,
+      "label": "429 ServiceUnavailable",
+      "variant": "return",
+      "note": "No Retry-After header: the client's own backoff decides recovery"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "irc",
+      "from": 158,
+      "to": 278,
+      "type": "security"
+    },
+    {
+      "participant": "ucm",
+      "from": 184,
+      "to": 220,
+      "type": "security"
+    },
+    {
+      "participant": "irc",
+      "from": 396,
+      "to": 434,
+      "type": "security"
+    },
+    {
+      "participant": "irc",
+      "from": 486,
+      "to": 524,
+      "type": "security"
+    },
+    {
+      "participant": "irc",
+      "from": 561,
+      "to": 707,
+      "type": "security"
+    },
+    {
+      "participant": "ucm",
+      "from": 613,
+      "to": 649,
+      "type": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "1 \u00b7 Normal",
+      "items": [
+        "Every loadTable is audited (service uniformIcebergRestCatalog)",
+        "Sizing: loadTable/s \u2248 active tables \u00f7 refresh seconds"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "2 \u00b7 Per-workspace 429",
+      "items": [
+        "Clean to 300/s, 429 at 350/s (sandbox)",
+        "Retry-After: 1 is enough; no lingering penalty",
+        "Watch Snowflake's side too: SYSTEM$AUTO_REFRESH_STATUS"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "3 \u00b7 Shared-limit 429",
+      "items": [
+        "Two workspaces got ~400/s combined, not 300 each",
+        "Other jobs on the same metastore spend the same budget",
+        "Visible in audit; client backoff must be configured"
+      ]
+    }
+  ]
+}

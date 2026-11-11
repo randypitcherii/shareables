@@ -1,0 +1,16 @@
+{
+  "latency_ms": {
+    "config": 380,
+    "list_tables": 265,
+    "load_table": 1136
+  },
+  "pyiceberg_version": "0.12.0",
+  "stamp": {
+    "cloud": "aws",
+    "date_utc": "2026-11-09",
+    "endpoint": "/api/2.1/unity-catalog/iceberg-rest",
+    "region": "us-east-2"
+  },
+  "t000_rows_via_vended_credentials": 1,
+  "tables_listed": 51
+}

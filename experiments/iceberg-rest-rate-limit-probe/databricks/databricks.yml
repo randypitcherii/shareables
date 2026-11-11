@@ -1,0 +1,41 @@
+# Databricks Asset Bundle: run the probe from serverless compute inside the workspace.
+#
+# Why: from a laptop, two workspaces' worth of loadTable responses (~4 KB each) saturate a
+# home downlink and hide the server-side limit. In-region serverless removes that.
+# Deploy once per workspace (one target each, so bundle state never collides; no PATs):
+#   databricks bundle deploy --profile <profile-a> --target a
+#   databricks bundle deploy --profile <profile-b> --target b
+# Runs are launched by scripts/06_run_in_workspace.py (SDK run_now with python_params),
+# which lines up one run per workspace with --start-at for the scope test.
+bundle:
+  name: iceberg_rest_rate_limit_probe
+
+sync:
+  paths:
+    - ../scripts
+
+targets:
+  a:
+    mode: development
+    default: true
+  b:
+    mode: development
+
+resources:
+  jobs:
+    probe:
+      name: "iceberg-rest-rate-limit-probe: in-workspace ramp"
+      max_concurrent_runs: 1
+      timeout_seconds: 1800  # hard stop well above PROBE_MAX_DURATION_SEC
+      tasks:
+        - task_key: probe
+          environment_key: probe
+          spark_python_task:
+            python_file: ../scripts/01_probe.py
+            parameters: ["--endpoint", "config", "--no-live"]
+      environments:
+        - environment_key: probe
+          spec:
+            client: "2"
+            dependencies:  # pyarrow and databricks-sdk ship with the serverless environment
+              - aiohttp>=3.9

@@ -1,0 +1,4 @@
+# Archify delivery/finalize receipts contain local paths
+*.delivery.json
+*.finalize.json
+*.finalize-summary.json

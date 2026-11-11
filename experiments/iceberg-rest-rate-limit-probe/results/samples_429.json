@@ -1,0 +1,145 @@
+{
+  "samples": [
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 21404,
+      "endpoint": "load_table_spread",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "diag-conn250/load_table_spread-a",
+        "diag-conn800/load_table_spread-a",
+        "r1-20261109/load_table_spread-a",
+        "r2-inws/load_table_spread-a-job"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 15816,
+      "endpoint": "config",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r1-20261109/config-a",
+        "r1-20261109/config-axb"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 7651,
+      "endpoint": "load_table_hot",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r1-20261109/load_table_hot-a"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 7334,
+      "endpoint": "load_table_nocreds",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "diag-client/load_table_nocreds-a",
+        "r1-20261109/load_table_nocreds-a"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error\":{\"message\":\"Too many requests. Please try again later. [ErrorCode: 2001] (request_id: <uuid>)\",\"type\":\"ServiceUnavailableException\",\"code\":429}}",
+      "count": 6925,
+      "endpoint": "load_table_spread",
+      "error_code": "ServiceUnavailableException",
+      "headers": {
+        "Content-Type": "application/json",
+        "Server": "databricks"
+      },
+      "runs": [
+        "diag-conn800/load_table_spread-a",
+        "r1-20261109/load_table_spread-axb",
+        "r2-inws-sp/load_table_spread-axb-job",
+        "r2-inws/load_table_spread-axb-job"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error\":{\"message\":\"Too many requests. Please try again later. [ErrorCode: 2001] (request_id: <uuid>)\",\"type\":\"ServiceUnavailableException\",\"code\":429}}",
+      "count": 3901,
+      "endpoint": "load_table_nocreds",
+      "error_code": "ServiceUnavailableException",
+      "headers": {
+        "Content-Type": "application/json",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r2-inws/load_table_nocreds-axb-job"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 1530,
+      "endpoint": "load_table_credentials",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r1-20261109/load_table_credentials-a"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 446,
+      "endpoint": "legacy_config",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r1-20261109/legacy_config-a"
+      ],
+      "status": 429
+    },
+    {
+      "body": "{\"error_code\":\"RESOURCE_EXHAUSTED\",\"message\":\"Too many requests. Please wait a moment and try again. If the issue persists, consider adjusting your request frequency or reaching out to support for assistance.\"}",
+      "count": 442,
+      "endpoint": "legacy_load_table",
+      "error_code": "RESOURCE_EXHAUSTED",
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "1",
+        "Server": "databricks"
+      },
+      "runs": [
+        "r1-20261109/legacy_load_table-a"
+      ],
+      "status": 429
+    }
+  ]
+}

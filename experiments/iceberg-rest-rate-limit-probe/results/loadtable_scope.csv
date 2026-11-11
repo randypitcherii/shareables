@@ -1,0 +1,32 @@
+condition,workspace,target_rate,accepted_rps,throttled_rps,p50_ms
+one workspace alone,a,10.0,10.1,0.0,148.7
+one workspace alone,a,25.0,25.0,0.0,145.0
+one workspace alone,a,50.0,50.0,0.0,141.1
+one workspace alone,a,100.0,100.0,0.0,141.3
+one workspace alone,a,200.0,200.0,0.0,137.9
+one workspace alone,a,250.0,250.0,0.0,137.2
+one workspace alone,a,300.0,285.2,0.0,140.1
+one workspace alone,a,350.0,315.1,34.9,139.4
+one workspace alone,a,400.0,307.7,92.2,139.0
+"two workspaces, same user",a,100.0,100.0,0.0,144.4
+"two workspaces, same user",a,200.0,200.0,0.0,143.9
+"two workspaces, same user",a,300.0,205.9,5.9,356.1
+"two workspaces, same user",a,350.0,215.1,6.5,388.8
+"two workspaces, same user",a,400.0,211.1,8.3,369.9
+"two workspaces, same user",a,500.0,191.2,19.9,950.2
+"two workspaces, same user",b,100.0,100.0,0.0,143.4
+"two workspaces, same user",b,200.0,200.0,0.0,143.8
+"two workspaces, same user",b,300.0,214.3,6.6,349.9
+"two workspaces, same user",b,350.0,216.6,7.7,377.8
+"two workspaces, same user",b,400.0,211.7,9.2,389.2
+"two workspaces, same user",b,500.0,192.8,19.7,956.2
+"two workspaces, user + service principal",a,100.0,100.0,0.0,140.7
+"two workspaces, user + service principal",a,200.0,194.5,4.4,163.2
+"two workspaces, user + service principal",a,300.0,198.4,6.2,391.2
+"two workspaces, user + service principal",a,350.0,204.0,11.3,220.5
+"two workspaces, user + service principal",a,400.0,188.3,18.0,448.0
+"two workspaces, user + service principal",b,100.0,100.0,0.0,169.0
+"two workspaces, user + service principal",b,200.0,185.0,4.4,206.6
+"two workspaces, user + service principal",b,300.0,186.2,6.1,998.2
+"two workspaces, user + service principal",b,350.0,171.3,10.9,390.4
+"two workspaces, user + service principal",b,400.0,166.9,15.5,994.4
