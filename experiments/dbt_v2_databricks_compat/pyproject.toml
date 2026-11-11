@@ -1,0 +1,21 @@
+[project]
+name = "dbt-v2-databricks-compat"
+version = "0.1.0"
+description = "Experiment: what works today with dbt v2 (dbt-oss) on Databricks, locally and in Lakeflow Jobs?"
+requires-python = ">=3.11"
+# dbt v2 itself is NOT a dependency here: it is a self-contained binary that
+# scripts/install_dbt_v2.py installs into its own venv (.dbt-v2/), pinned by
+# DBT_V2_VERSION. Keeping it separate means the harness never shares a venv
+# with the thing under test.
+dependencies = ["databricks-sdk>=0.40.0", "pyyaml>=6.0"]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = ["infrastructure: Tests requiring live Databricks infrastructure"]
+
+[tool.ruff]
+line-length = 100

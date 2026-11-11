@@ -1,0 +1,21 @@
+# Committed on purpose: every value comes from an environment variable, so it
+# carries no secret and no workspace identifier. `make` exports them from .env.
+dbt_v2_compat:
+  target: token
+  outputs:
+    # A bearer token (from `databricks auth token`, or the job's runtime token).
+    token:
+      type: databricks
+      host: "{{ env_var('DBT_HOST') }}"
+      http_path: "{{ env_var('DBT_HTTP_PATH') }}"
+      catalog: "{{ env_var('DBT_CATALOG') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
+      token: "{{ env_var('DBT_ENV_SECRET_DATABRICKS_TOKEN') }}"
+    # Reuse the Databricks CLI's own auth (a configured profile), no token.
+    databricks_cli:
+      type: databricks
+      host: "{{ env_var('DBT_HOST') }}"
+      http_path: "{{ env_var('DBT_HTTP_PATH') }}"
+      catalog: "{{ env_var('DBT_CATALOG') }}"
+      schema: "{{ env_var('DBT_SCHEMA') }}"
+      auth_type: databricks_cli

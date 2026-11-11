@@ -1,0 +1,51 @@
+resources:
+  jobs:
+    # Path 1: the managed dbt task, pointed at dbt v2 instead of dbt-databricks.
+    # The task generates profiles.yml from warehouse_id/catalog/schema and
+    # injects DBT_ACCESS_TOKEN for the run_as identity.
+    dbt_v2_native_dbt_task:
+      name: dbt v2 compat - native dbt task
+      tasks:
+        - task_key: dbt
+          dbt_task:
+            project_directory: ../dbt_project
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.catalog}
+            schema: ${var.schema_prefix}_native
+            commands:
+              - dbt --version
+              - dbt deps
+              - "dbt build --full-refresh --vars '{batch: 1, landing_path: ${var.landing_path}}'"
+          environment_key: dbt_v2
+      environments:
+        - environment_key: dbt_v2
+          spec:
+            environment_version: "3"
+            dependencies:
+              - ${var.dbt_v2_wheel_x86_64}
+              - ${var.dbt_v2_wheel_aarch64}
+
+    # Path 2: a plain serverless Python task that runs the dbt v2 binary itself.
+    # Auth is the job's run_as identity, resolved at runtime from the task's
+    # ambient credentials -- no secret is stored anywhere.
+    dbt_v2_python_runner:
+      name: dbt v2 compat - serverless python runner
+      tasks:
+        - task_key: dbt
+          spark_python_task:
+            python_file: ../scripts/jobs_dbt_v2_runner.py
+            parameters:
+              - "--project-dir=${workspace.file_path}/dbt_project"
+              - "--warehouse-id=${var.warehouse_id}"
+              - "--catalog=${var.catalog}"
+              - "--schema=${var.schema_prefix}_runner"
+              - "--landing-path=${var.landing_path}"
+          environment_key: dbt_v2
+      environments:
+        - environment_key: dbt_v2
+          spec:
+            environment_version: "3"
+            dependencies:
+              - ${var.dbt_v2_wheel_x86_64}
+              - ${var.dbt_v2_wheel_aarch64}
+              - databricks-sdk

@@ -1,0 +1,20 @@
+# One model per findings-matrix row (models/rows/rNN_*.sql), each tagged with
+# its row id, so one unsupported feature fails one node and hides nothing else.
+name: dbt_v2_compat
+version: "1.0.0"
+profile: dbt_v2_compat
+
+vars:
+  # 1 on the first (full-refresh) build, 2 on the incremental re-run. The
+  # matrix runner flips it to prove each incremental strategy's second pass.
+  batch: 1
+  # Unity Catalog volume path the streaming-table row reads files from.
+  landing_path: "{{ env_var('DBT_LANDING_PATH', '/Volumes/my_catalog/dbt_v2_compat/landing') }}"
+
+seeds:
+  dbt_v2_compat:
+    +tags: [r04_seed]
+
+models:
+  dbt_v2_compat:
+    +materialized: view

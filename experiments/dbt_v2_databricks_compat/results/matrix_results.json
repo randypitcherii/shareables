@@ -1,0 +1,197 @@
+{
+  "local_run": {
+    "at": "2026-11-09T15:31:16+00:00",
+    "compute": "serverless SQL warehouse (PRO); Python model on serverless jobs compute",
+    "dbt_version": "dbt-oss 2.0.11"
+  },
+  "rows": {
+    "j01": {
+      "at": "2026-11-09T15:20:13+00:00",
+      "attempts": [
+        {
+          "attempt": 0,
+          "evidence": "Summary: 29 total | 27 success | 1 warn | 1 no-op",
+          "result": "SUCCESS"
+        }
+      ],
+      "evidence": "Summary: 29 total | 27 success | 1 warn | 1 no-op",
+      "question": "Native Lakeflow Jobs `dbt_task` (serverless) with the dbt v2 wheel as its environment dependency: does the whole project build?",
+      "status": "pass"
+    },
+    "j02": {
+      "at": "2026-11-09T15:20:13+00:00",
+      "attempts": [
+        {
+          "attempt": 0,
+          "evidence": "Summary: 29 total | 27 success | 1 warn | 1 no-op",
+          "result": "SUCCESS"
+        }
+      ],
+      "evidence": "Summary: 29 total | 27 success | 1 warn | 1 no-op",
+      "question": "Serverless Python task running the dbt v2 binary as the job's `run_as` identity: does the whole project build?",
+      "status": "pass"
+    },
+    "j03": {
+      "at": "2026-11-09T15:20:13+00:00",
+      "evidence": "every task attempt installed the wheel",
+      "question": "With per-platform PEP 508 markers on the wheel URLs, does the serverless environment install dbt v2 on the first attempt?",
+      "status": "pass"
+    },
+    "r01": {
+      "at": "2026-11-09T15:31:16+00:00",
+      "evidence": "dbt-oss 2.0.11",
+      "question": "Does `dbt-oss` install as one wheel with no separate Databricks adapter package?",
+      "status": "pass"
+    },
+    "r02": {
+      "at": "2026-11-09T15:31:16+00:00",
+      "evidence": "dbt debug: All checks passed",
+      "question": "Does a bearer token (`token:` profile field) connect? (`dbt debug`)",
+      "status": "pass"
+    },
+    "r03": {
+      "at": "2026-11-09T15:31:16+00:00",
+      "evidence": "[error] [AuthenticationFailed (dbt1011)]: dbt was unable to connect to the database configured for the `databricks` adapter. The following error was returned: Serde YAML Error: missing field `token`",
+      "question": "Does `auth_type: databricks_cli` (reuse the Databricks CLI login) connect?",
+      "status": "fail"
+    },
+    "r04": {
+      "at": "2026-11-09T15:31:17+00:00",
+      "evidence": "events seed rows: 8 (expected 8)",
+      "question": "Do `dbt deps` (dbt_utils from the hub) and `dbt seed` work?",
+      "status": "pass"
+    },
+    "r05": {
+      "at": "2026-11-09T15:31:18+00:00",
+      "evidence": "r05_view rows after build 2: 8 (expected 8)",
+      "question": "Do `view` models build?",
+      "status": "pass"
+    },
+    "r06": {
+      "at": "2026-11-09T15:31:18+00:00",
+      "evidence": "r06_table rows after build 2: 2 (expected 2)",
+      "question": "Do `table` models build?",
+      "status": "pass"
+    },
+    "r07": {
+      "at": "2026-11-09T15:31:19+00:00",
+      "evidence": "(rows, CTE inlined): (3, True) (expected (3, True))",
+      "question": "Are `ephemeral` models inlined into their consumer as a CTE?",
+      "status": "pass"
+    },
+    "r08": {
+      "at": "2026-11-09T15:31:19+00:00",
+      "evidence": "5 tests passed (data + singular + unit)",
+      "question": "Do generic data tests, singular tests, and unit tests run?",
+      "status": "pass"
+    },
+    "r09": {
+      "at": "2026-11-09T15:31:21+00:00",
+      "evidence": "(rows, closed rows): (4, 1) (expected (4, 1))",
+      "question": "Does a YAML-defined `check` snapshot close the old row on change?",
+      "status": "pass"
+    },
+    "r10": {
+      "at": "2026-11-09T15:31:22+00:00",
+      "evidence": "(rows, amount of id 2) after pass 2: (8, 25.0) (expected (8, 25.0))",
+      "question": "Incremental `append`: second pass appends only new rows?",
+      "status": "pass"
+    },
+    "r11": {
+      "at": "2026-11-09T15:31:24+00:00",
+      "evidence": "(rows, amount of id 2) after pass 2: (7, 25.0) (expected (7, 25.0))",
+      "question": "Incremental `merge` on `unique_key`: second pass upserts?",
+      "status": "pass"
+    },
+    "r12": {
+      "at": "2026-11-09T15:31:25+00:00",
+      "evidence": "(rows, amount of id 2) after pass 2: (7, 25.0) (expected (7, 25.0))",
+      "question": "Incremental `delete+insert` on `unique_key`: second pass replaces matching keys?",
+      "status": "pass"
+    },
+    "r13": {
+      "at": "2026-11-09T15:31:27+00:00",
+      "evidence": "(rows, amount of id 2) after pass 2: (5, 25.0) (expected (5, 25.0))",
+      "question": "Incremental `insert_overwrite` by `partition_by`: only touched partitions replaced?",
+      "status": "pass"
+    },
+    "r14": {
+      "at": "2026-11-09T15:31:28+00:00",
+      "evidence": "(rows, amount of id 2) after pass 2: (7, 20.0) (expected (7, 20.0))",
+      "question": "Incremental `replace_where` with `incremental_predicates`?",
+      "status": "pass"
+    },
+    "r15": {
+      "at": "2026-11-09T15:31:29+00:00",
+      "evidence": "(rows, batches run) after Jan\u2013Apr backfill at batch 2: (8, 4) (expected (8, 4))",
+      "question": "Incremental `microbatch`: per-batch runs, and a targeted `--event-time-start/end` backfill?",
+      "status": "pass"
+    },
+    "r16": {
+      "at": "2026-11-09T15:31:29+00:00",
+      "evidence": "(rows after file 1, rows after file 2): (3, 5) (expected (3, 5))",
+      "question": "`streaming_table` reading CSVs from a UC volume with `read_files`: picks up new files?",
+      "status": "pass"
+    },
+    "r17": {
+      "at": "2026-11-09T15:31:30+00:00",
+      "evidence": "orders counted by the MV after the second build: 5 (expected 5)",
+      "question": "`materialized_view` builds and refreshes on re-run?",
+      "status": "pass"
+    },
+    "r18": {
+      "at": "2026-11-09T15:31:31+00:00",
+      "evidence": "(clustering columns, clusterByAuto): (['customer_id', 'event_date'], 'true') (expected (['customer_id', 'event_date'], 'true'))",
+      "question": "Liquid clustering: `liquid_clustered_by` and `auto_liquid_cluster`?",
+      "status": "pass"
+    },
+    "r19": {
+      "at": "2026-11-09T15:31:32+00:00",
+      "evidence": "provider: 'iceberg' (expected 'iceberg')",
+      "question": "`table_format='iceberg'` creates a managed Iceberg table?",
+      "status": "pass"
+    },
+    "r20": {
+      "at": "2026-11-09T15:31:34+00:00",
+      "evidence": "(table comment, column comment, table tag, column tags, tblproperty): (True, True, 'r20', [['dbt_v2_compat_column', 'r20']], 'r20') (expected (True, True, 'r20', [['dbt_v2_compat_column', 'r20']], 'r20'))",
+      "question": "`persist_docs`, `databricks_tags` (table + column), and `tblproperties` land in UC?",
+      "status": "pass"
+    },
+    "r21": {
+      "at": "2026-11-09T15:31:36+00:00",
+      "evidence": "(primary keys, customer_id nullable): (1, False) (expected (1, False))",
+      "question": "Model contracts with `not_null` + `primary_key` constraints?",
+      "status": "pass"
+    },
+    "r22": {
+      "at": "2026-11-09T15:31:37+00:00",
+      "evidence": "r22_python_model rows after build 2: 3 (expected 3)",
+      "question": "Python model with `submission_method: serverless_cluster`?",
+      "status": "pass"
+    },
+    "r23": {
+      "at": "2026-11-09T15:31:37+00:00",
+      "evidence": "table type: 'METRIC_VIEW' (expected 'METRIC_VIEW')",
+      "question": "`metric_view` materialization creates a UC metric view?",
+      "status": "pass"
+    },
+    "r24": {
+      "at": "2026-11-09T15:31:38+00:00",
+      "evidence": "r24_dbt_utils_package rows after build 2: 8 (expected 8)",
+      "question": "Hub package macros (`dbt_utils.generate_surrogate_key`)?",
+      "status": "pass"
+    },
+    "r25": {
+      "at": "2026-11-09T15:31:38+00:00",
+      "evidence": "static site (index.html) + 38 Parquet artifacts under target/info_schema/; no catalog.json \u2014 tools that read v1's catalog.json need a change",
+      "question": "`dbt docs generate` builds the docs site (and v1's `catalog.json`)?",
+      "status": "partial"
+    },
+    "r26": {
+      "at": "2026-11-09T15:31:38+00:00",
+      "evidence": "source freshness passed",
+      "question": "`dbt source freshness` against a UC table?",
+      "status": "pass"
+    }
+  }
+}

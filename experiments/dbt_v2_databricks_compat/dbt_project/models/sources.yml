@@ -1,0 +1,11 @@
+sources:
+  - name: experiment
+    schema: "{{ target.schema }}"
+    tables:
+      - name: heartbeat
+        description: Created by scripts/setup.py; loaded_at is now() at setup time.
+        config:
+          loaded_at_field: loaded_at
+          freshness:
+            warn_after: {count: 7, period: day}
+            error_after: {count: 30, period: day}

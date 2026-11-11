@@ -1,0 +1,17 @@
+.env
+.venv/
+.dbt-v2/
+.databricks/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+dbt_project/package-lock.yml
+dbt_project/.user.yml
+
+# Deliberate deviation from the repo's commit-the-lock convention: this lock
+# resolves through an internal package mirror no external reader can reach.
+uv.lock
