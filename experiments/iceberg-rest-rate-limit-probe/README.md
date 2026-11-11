@@ -50,6 +50,24 @@ per-workspace 429s never reach the service that writes audit rows.
 | Legacy endpoint ~5/s | ✅ 5/s, and every call also returns `400 … Legacy Iceberg endpoints … are deprecated` |
 | ~720/s total per workspace; 600/s or "6,000 CU/s" per metastore | Not isolated (see open questions). The shared ceiling seen here was ~400 `loadTable`/s on a metastore that other tenants also use. |
 
+## Diagrams
+
+Interactive versions are standalone HTML files (dark/light themes, step-through, export). Download one and open it locally, because GitHub shows HTML as source. They were built with [Archify](https://github.com/tt-a1i/archify) from the sources next to each file.
+
+| Diagram | Static | Interactive | Source |
+|---|---|---|---|
+| Where the limits bind on the Snowflake read path | [PNG](docs/diagrams/architecture.png) | [HTML](docs/diagrams/architecture.html) | [`architecture.candidate.json`](docs/diagrams/architecture.candidate.json) |
+| What happens on a 429: normal, per-workspace and shared limits | [PNG](docs/diagrams/refresh-throttling-sequence.png) | [HTML](docs/diagrams/refresh-throttling-sequence.html) | [`refresh-throttling-sequence.candidate.json`](docs/diagrams/refresh-throttling-sequence.candidate.json) |
+| Production readiness: sizing, risks, rollout, checklist | [PNG](docs/diagrams/production-readiness.png) | [HTML](docs/diagrams/production-readiness.html) | [`production-readiness.archify.md`](docs/diagrams/production-readiness.archify.md) |
+
+![Where the rate limits bind](docs/diagrams/architecture.png)
+
+**Snowflake Just-in-Time refresh.** Snowflake has a private-preview feature, [JIT refresh](https://docs.snowflake.com/en/LIMITEDACCESS/iceberg/just-in-time-refresh). It refreshes table metadata at query time, on top of background polling, whenever the cached metadata is older than `ICEBERG_METADATA_CACHE_SECONDS` (default 300 s).
+- **Defaults:** with 30 s polling and the 300 s cache, the `tables ÷ interval` estimate below still holds on average.
+- **Shorter cache window:** if the cache window is shorter than the poll interval, each query adds `loadTable` calls.
+- **Writes:** these always refresh.
+- **Failures:** a failed JIT refresh, such as a 429 after retries, can block the query. Size for peak load, not average.
+
 ## Sizing worksheet
 
 Estimate the steady-state call rate and compare it with the **lowest** measured limit in the

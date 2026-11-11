@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Snowflake reading Unity Catalog Iceberg tables: where the rate limits bind",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "views": [
+      {
+        "id": "read-path",
+        "label": "Snowflake read path",
+        "focus": [
+          "analysts",
+          "cldb",
+          "irc",
+          "ucm",
+          "tables",
+          "extvol",
+          "adls"
+        ],
+        "note": "Each refresh calls loadTable through the Iceberg REST edge; Snowflake reads data files from storage via its external volume."
+      },
+      {
+        "id": "limits",
+        "label": "Where 429s come from",
+        "focus": [
+          "irc",
+          "ucm",
+          "other",
+          "audit"
+        ],
+        "note": "Per-workspace edge limit (~300/s clean) plus a shared ~400/s budget. Per-workspace 429s never reach the audit log."
+      },
+      {
+        "id": "write-path",
+        "label": "Write path",
+        "focus": [
+          "adf",
+          "jobs",
+          "tables",
+          "adls"
+        ],
+        "note": "An orchestrator triggers Databricks jobs; UniForm writes Iceberg metadata asynchronously after each Delta commit."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "analysts",
+      "type": "external",
+      "label": "Snowflake consumers",
+      "sublabel": "read-only SQL workloads",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "cldb",
+      "type": "external",
+      "label": "Catalog-linked DB",
+      "sublabel": "polls every 30s by default",
+      "pos": [
+        40,
+        210
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "extvol",
+      "type": "external",
+      "label": "External volume",
+      "sublabel": "direct file reads, no UC creds",
+      "pos": [
+        40,
+        550
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "irc",
+      "type": "security",
+      "label": "Iceberg REST edge",
+      "sublabel": "429 at ~350 loadTable/s per ws",
+      "pos": [
+        330,
+        210
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "ucm",
+      "type": "security",
+      "label": "Shared UC budget",
+      "sublabel": "~400/s combined, all workspaces",
+      "pos": [
+        620,
+        210
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "audit",
+      "type": "database",
+      "label": "system.access.audit",
+      "sublabel": "~10-15 min lag; no per-ws 429s",
+      "pos": [
+        330,
+        380
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "other",
+      "type": "backend",
+      "label": "Other workspaces",
+      "sublabel": "+ DBR jobs, same metastore",
+      "pos": [
+        620,
+        380
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "adf",
+      "type": "cloud",
+      "label": "Orchestrator",
+      "sublabel": "ADF, Airflow, Lakeflow Jobs",
+      "pos": [
+        620,
+        40
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "jobs",
+      "type": "backend",
+      "label": "Databricks jobs",
+      "sublabel": "transformations",
+      "pos": [
+        910,
+        40
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "tables",
+      "type": "database",
+      "label": "UC managed tables",
+      "sublabel": "UniForm/Iceberg v3, async meta",
+      "pos": [
+        910,
+        210
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "adls",
+      "type": "database",
+      "label": "Cloud object storage",
+      "sublabel": "Parquet + Iceberg metadata",
+      "pos": [
+        910,
+        550
+      ],
+      "size": [
+        180,
+        72
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Snowflake",
+      "wraps": [
+        "analysts",
+        "cldb",
+        "extvol"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Databricks control plane (shared metastore)",
+      "wraps": [
+        "irc",
+        "ucm",
+        "audit",
+        "other"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "query",
+      "from": "analysts",
+      "to": "cldb",
+      "label": "query"
+    },
+    {
+      "id": "loadtable",
+      "from": "cldb",
+      "to": "irc",
+      "label": "loadTable",
+      "variant": "emphasis"
+    },
+    {
+      "id": "uc-rpc",
+      "from": "irc",
+      "to": "ucm",
+      "label": "UC RPCs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "metadata",
+      "from": "ucm",
+      "to": "tables",
+      "label": "table meta",
+      "variant": "emphasis"
+    },
+    {
+      "id": "trigger",
+      "from": "adf",
+      "to": "jobs",
+      "label": "trigger"
+    },
+    {
+      "id": "commit",
+      "from": "jobs",
+      "to": "tables",
+      "label": "Delta commit"
+    },
+    {
+      "id": "files",
+      "from": "tables",
+      "to": "adls",
+      "label": "data + metadata"
+    },
+    {
+      "id": "paths",
+      "from": "cldb",
+      "to": "extvol",
+      "label": "file paths"
+    },
+    {
+      "id": "read",
+      "from": "extvol",
+      "to": "adls",
+      "label": "read Parquet",
+      "variant": "emphasis"
+    },
+    {
+      "id": "logs",
+      "from": "irc",
+      "to": "audit",
+      "label": "audit events",
+      "variant": "dashed"
+    },
+    {
+      "id": "shared",
+      "from": "other",
+      "to": "ucm",
+      "label": "same budget"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Measured (sandbox, Nov 2026)",
+      "items": [
+        "loadTable: clean to 300/s, 429 at 350/s per workspace",
+        "config 429 at 200/s; /credentials at 50/s",
+        "listTables ~50/s, then slows (117ms to 8s), no 429",
+        "2 workspaces: ~400/s combined, not 300 each",
+        "Recovery 0-1s; per-workspace 429 sends Retry-After: 1"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Production risks",
+      "items": [
+        "30s refresh x large estate exceeds the edge limit",
+        "Snowflake JIT refresh (preview) adds query-time calls",
+        "Azure: no Entra sign-in over Private Link",
+        "Per-workspace 429s are invisible in the audit log",
+        "Shared-limit 429s send no Retry-After"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Sizing rule",
+      "items": [
+        "loadTable/s ~ active tables / refresh seconds",
+        "10k tables @ 30s = 333/s (over); @ 120s = 83/s",
+        "Size for peak: keep it under ~300/s per workspace, ~400/s per metastore"
+      ]
+    }
+  ]
+}
