@@ -1,0 +1,1620 @@
+{
+  "environment": {
+    "cloud": "AWS",
+    "external_clients": "DuckDB (iceberg + unity_catalog extensions), PyIceberg",
+    "principal": "one workspace user via OAuth U2M (identity redacted)",
+    "spark": "classic single-node job cluster pinned to DBR 19.x (version recorded per row)",
+    "sql": "serverless SQL warehouse (DBSQL version recorded per row where relevant)",
+    "tables": [
+      "Managed Delta (Liquid, catalog commits, Iceberg v3 reads, row tracking)",
+      "Managed Iceberg v3 (Liquid)"
+    ],
+    "workspace": "one real Databricks workspace (host redacted)"
+  },
+  "rows": {
+    "01_duckdb_dml": {
+      "cells": {
+        "delta": {
+          "finding": "Reads work via: unity_catalog READ_ONLY attach, Iceberg REST, skip-puffin-verification. No write landed. unity_catalog read-write attach: IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request Response body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The  | Iceberg REST path: HTTP Error: HTTP PUT error uploading to 's3://experiment-bucket/<path>' (HTTP 403 Forbidden)  AccessDenied: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:a",
+          "status": "partial"
+        },
+        "iceberg": {
+          "finding": "DuckDB INSERT/UPDATE/DELETE/MERGE all commit and Databricks reads back exactly the expected rows -- on a table Databricks has only appended to. Once Databricks itself runs UPDATE/DELETE (writing Iceberg v3 deletion vectors), DuckDB's default reader rejects the table: Puffin file 's3://experiment-bucket/<path>' has invalid trailing magic. Older versions of DuckDB wrote deletion vector files as bare blobs. To read those files, run \"SET iceberg_unsafe_skip_puffin_verification = true\". With iceberg_unsafe_skip_puffin_verification, the same DML succeeds and Databricks reads the expected rows.",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "delta_databricks_after": [
+          [
+            "1",
+            "a",
+            "11"
+          ],
+          [
+            "3",
+            "c",
+            "30"
+          ]
+        ],
+        "delta_uc_custom_user_agent": {
+          "attach": {
+            "ok": true,
+            "value": null
+          },
+          "insert": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 shareables-uc-delta-vs-iceberg/0.1 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id=<id>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          }
+        },
+        "delta_uc_read_only": {
+          "attach": {
+            "ok": true,
+            "value": null
+          },
+          "read": {
+            "ok": true,
+            "value": [
+              [
+                1,
+                "a",
+                11
+              ],
+              [
+                3,
+                "c",
+                30
+              ]
+            ]
+          },
+          "secret_aws_region": "us-east-1"
+        },
+        "delta_uc_readwrite": {
+          "attach": {
+            "ok": true,
+            "value": null
+          },
+          "delete": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id: 032f99fb-57c4-4e56-a0ad-<aws-account>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          },
+          "insert": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id=<id>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          },
+          "merge": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id=<id>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          },
+          "read_before": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id=<id>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          },
+          "update": {
+            "error": "IO Error: Request to 'https://workspace.example.com' failed (HTTP 400): Bad Request\nResponse body: {\"error\":{\"message\":\"The UC Delta API requires clients to identify the calling application in the User-Agent header. The provided User-Agent 'duckdb/v2.0.0(osx_arm64) python/3.14 d54cbbe3df' is insufficient. Please set an explicit User-Agent to ensure data safety and auditability. If you are developing a connector and need help with access, please contact Databricks support. [ErrorCode: UNKNOWN] (request_id=<id>)\",\"type\":\"BadRequestException\",\"code\":400}}",
+            "error_class": "IOException",
+            "ok": false
+          }
+        },
+        "delta_via_iceberg_rest_permissive": {
+          "delete": {
+            "error": "HTTP Error: HTTP PUT error uploading to 's3://experiment-bucket/<path>' (HTTP 403 Forbidden)\n\nAccessDenied: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action\n\nAuthentication Failure - this is usually caused by invalid or missing credentials.\n* Credentials are provided, but they did not work.\n* See https://workspace.example.com",
+            "error_class": "HTTPException",
+            "ok": false
+          },
+          "insert": {
+            "error": "HTTP Error: HTTP PUT error uploading to 's3://experiment-bucket/<path>' (HTTP 403 Forbidden)\n\nAccessDenied: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action\n\nAuthentication Failure - this is usually caused by invalid or missing credentials.\n* Credentials are provided, but they did not work.\n* See https://workspace.example.com",
+            "error_class": "HTTPException",
+            "ok": false
+          },
+          "merge": {
+            "error": "HTTP Error: HTTP PUT error uploading to 's3://experiment-bucket/<path>' (HTTP 403 Forbidden)\n\nAccessDenied: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action\n\nAuthentication Failure - this is usually caused by invalid or missing credentials.\n* Credentials are provided, but they did not work.\n* See https://workspace.example.com",
+            "error_class": "HTTPException",
+            "ok": false
+          },
+          "read_before": {
+            "ok": true,
+            "value": [
+              [
+                1,
+                "a",
+                11
+              ],
+              [
+                3,
+                "c",
+                30
+              ]
+            ]
+          },
+          "update": {
+            "error": "HTTP Error: HTTP PUT error uploading to 's3://experiment-bucket/<path>' (HTTP 403 Forbidden)\n\nAccessDenied: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action\n\nAuthentication Failure - this is usually caused by invalid or missing credentials.\n* Credentials are provided, but they did not work.\n* See https://workspace.example.com",
+            "error_class": "HTTPException",
+            "ok": false
+          }
+        },
+        "delta_via_iceberg_rest_strict_read": {
+          "error": "Puffin file 's3://experiment-bucket/<path>' has invalid trailing magic. Older versions of DuckDB wrote deletion vector files as bare blobs. To read those files, run \"SET iceberg_unsafe_skip_puffin_verification = true\"",
+          "error_class": "Error",
+          "ok": false
+        },
+        "duckdb_version": "2.0.0",
+        "iceberg_clean_databricks_after": [
+          [
+            "1",
+            "a",
+            "110"
+          ],
+          [
+            "2",
+            "b",
+            "20"
+          ],
+          [
+            "4",
+            "d",
+            "44"
+          ],
+          [
+            "5",
+            "e",
+            "50"
+          ]
+        ],
+        "iceberg_clean_strict": {
+          "delete": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          },
+          "insert": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          },
+          "merge": {
+            "ok": true,
+            "value": [
+              [
+                2
+              ]
+            ]
+          },
+          "read_before": {
+            "ok": true,
+            "value": [
+              [
+                1,
+                "a",
+                10
+              ],
+              [
+                2,
+                "b",
+                20
+              ],
+              [
+                3,
+                "c",
+                30
+              ]
+            ]
+          },
+          "update": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        "iceberg_databricks_after": [
+          [
+            "1",
+            "a",
+            "111"
+          ],
+          [
+            "4",
+            "d",
+            "44"
+          ],
+          [
+            "5",
+            "e",
+            "50"
+          ]
+        ],
+        "iceberg_permissive": {
+          "delete": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          },
+          "insert": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          },
+          "merge": {
+            "ok": true,
+            "value": [
+              [
+                2
+              ]
+            ]
+          },
+          "read_before": {
+            "ok": true,
+            "value": [
+              [
+                1,
+                "a",
+                11
+              ],
+              [
+                3,
+                "c",
+                30
+              ]
+            ]
+          },
+          "update": {
+            "ok": true,
+            "value": [
+              [
+                1
+              ]
+            ]
+          }
+        },
+        "iceberg_rest_attach": {
+          "ok": true,
+          "value": null
+        },
+        "iceberg_via_iceberg_rest_strict_read": {
+          "error": "Puffin file 's3://experiment-bucket/<path>' has invalid trailing magic. Older versions of DuckDB wrote deletion vector files as bare blobs. To read those files, run \"SET iceberg_unsafe_skip_puffin_verification = true\"",
+          "error_class": "Error",
+          "ok": false
+        }
+      },
+      "question": "Can DuckDB read and INSERT/UPDATE/DELETE/MERGE a UC managed Liquid table?",
+      "recorded_at": "2026-11-03T00:00:54+00:00"
+    },
+    "02_change_data_feed": {
+      "cells": {
+        "delta": {
+          "finding": "DBR job: batch=ok, table_changes=ok, streaming=ok | DBSQL warehouse table_changes: ok",
+          "status": "pass"
+        },
+        "iceberg": {
+          "finding": "DBR job: batch=ok, table_changes=ok, streaming=ok | DBSQL warehouse table_changes: ok | DuckDB-written changes present in CDF: [('1', '111', 'update_postimage'), ('4', '44', 'update_postimage'), ('5', '50', 'insert')] of [('1', '111', 'update_postimage'), ('4', '44', 'update_postimage'), ('5', '50', 'insert')]",
+          "status": "pass"
+        }
+      },
+      "evidence": {
+        "dbr": "19.x-scala2.13",
+        "delta": {
+          "batch": {
+            "ok": true,
+            "seconds": 9.2,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ]
+            ]
+          },
+          "dbsql_table_changes": {
+            "error": null,
+            "ok": true,
+            "rows": [
+              [
+                "2",
+                "20",
+                "delete",
+                "3"
+              ],
+              [
+                "1",
+                "11",
+                "update_postimage",
+                "2"
+              ],
+              [
+                "1",
+                "10",
+                "insert",
+                "1"
+              ],
+              [
+                "2",
+                "20",
+                "insert",
+                "1"
+              ],
+              [
+                "3",
+                "30",
+                "insert",
+                "1"
+              ],
+              [
+                "1",
+                "10",
+                "update_preimage",
+                "2"
+              ]
+            ]
+          },
+          "history": {
+            "ok": true,
+            "seconds": 10.2,
+            "value": [
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "DELETE",
+                "version": "3"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "UPDATE",
+                "version": "2"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "WRITE",
+                "version": "1"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "CREATE TABLE",
+                "version": "0"
+              }
+            ]
+          },
+          "sql": {
+            "ok": true,
+            "seconds": 2.5,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ]
+            ]
+          },
+          "stream": {
+            "ok": true,
+            "seconds": 17.7,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ]
+            ]
+          }
+        },
+        "iceberg": {
+          "batch": {
+            "ok": true,
+            "seconds": 7.9,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ],
+              [
+                4,
+                40,
+                "insert",
+                4
+              ],
+              [
+                1,
+                111,
+                "update_postimage",
+                5
+              ],
+              [
+                1,
+                11,
+                "update_preimage",
+                5
+              ],
+              [
+                3,
+                30,
+                "delete",
+                6
+              ],
+              [
+                4,
+                44,
+                "update_postimage",
+                7
+              ],
+              [
+                4,
+                40,
+                "update_preimage",
+                7
+              ],
+              [
+                5,
+                50,
+                "insert",
+                7
+              ]
+            ]
+          },
+          "dbsql_table_changes": {
+            "error": null,
+            "ok": true,
+            "rows": [
+              [
+                "2",
+                "20",
+                "delete",
+                "3"
+              ],
+              [
+                "3",
+                "30",
+                "delete",
+                "6"
+              ],
+              [
+                "1",
+                "11",
+                "update_postimage",
+                "2"
+              ],
+              [
+                "1",
+                "111",
+                "update_postimage",
+                "5"
+              ],
+              [
+                "4",
+                "44",
+                "update_postimage",
+                "7"
+              ],
+              [
+                "1",
+                "10",
+                "insert",
+                "1"
+              ],
+              [
+                "2",
+                "20",
+                "insert",
+                "1"
+              ],
+              [
+                "3",
+                "30",
+                "insert",
+                "1"
+              ],
+              [
+                "4",
+                "40",
+                "insert",
+                "4"
+              ],
+              [
+                "5",
+                "50",
+                "insert",
+                "7"
+              ],
+              [
+                "1",
+                "11",
+                "update_preimage",
+                "5"
+              ],
+              [
+                "1",
+                "10",
+                "update_preimage",
+                "2"
+              ],
+              [
+                "4",
+                "40",
+                "update_preimage",
+                "7"
+              ]
+            ]
+          },
+          "history": {
+            "ok": true,
+            "seconds": 1.4,
+            "value": [
+              {
+                "engineInfo": "Kernel-4.4.1/Iceberg REST Catalog",
+                "operation": "WRITE",
+                "version": "7"
+              },
+              {
+                "engineInfo": "Kernel-4.4.1/Iceberg REST Catalog",
+                "operation": "WRITE",
+                "version": "6"
+              },
+              {
+                "engineInfo": "Kernel-4.4.1/Iceberg REST Catalog",
+                "operation": "WRITE",
+                "version": "5"
+              },
+              {
+                "engineInfo": "Kernel-4.4.1/Iceberg REST Catalog",
+                "operation": "WRITE",
+                "version": "4"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "DELETE",
+                "version": "3"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "UPDATE",
+                "version": "2"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "WRITE",
+                "version": "1"
+              },
+              {
+                "engineInfo": "Databricks-Runtime/19.11.x-aarch64-photon-scala2.13",
+                "operation": "CREATE TABLE",
+                "version": "0"
+              }
+            ]
+          },
+          "sql": {
+            "ok": true,
+            "seconds": 5.7,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ],
+              [
+                4,
+                40,
+                "insert",
+                4
+              ],
+              [
+                1,
+                111,
+                "update_postimage",
+                5
+              ],
+              [
+                1,
+                11,
+                "update_preimage",
+                5
+              ],
+              [
+                3,
+                30,
+                "delete",
+                6
+              ],
+              [
+                4,
+                44,
+                "update_postimage",
+                7
+              ],
+              [
+                4,
+                40,
+                "update_preimage",
+                7
+              ],
+              [
+                5,
+                50,
+                "insert",
+                7
+              ]
+            ]
+          },
+          "stream": {
+            "ok": true,
+            "seconds": 13.1,
+            "value": [
+              [
+                1,
+                10,
+                "insert",
+                1
+              ],
+              [
+                2,
+                20,
+                "insert",
+                1
+              ],
+              [
+                3,
+                30,
+                "insert",
+                1
+              ],
+              [
+                1,
+                11,
+                "update_postimage",
+                2
+              ],
+              [
+                1,
+                10,
+                "update_preimage",
+                2
+              ],
+              [
+                2,
+                20,
+                "delete",
+                3
+              ],
+              [
+                4,
+                40,
+                "insert",
+                4
+              ],
+              [
+                1,
+                111,
+                "update_postimage",
+                5
+              ],
+              [
+                1,
+                11,
+                "update_preimage",
+                5
+              ],
+              [
+                3,
+                30,
+                "delete",
+                6
+              ],
+              [
+                4,
+                44,
+                "update_postimage",
+                7
+              ],
+              [
+                4,
+                40,
+                "update_preimage",
+                7
+              ],
+              [
+                5,
+                50,
+                "insert",
+                7
+              ]
+            ]
+          }
+        },
+        "spark_version": "4.2.0"
+      },
+      "question": "Does automatic CDF (batch, table_changes, streaming readChangeFeed) work, including on externally written commits?",
+      "recorded_at": "2026-11-03T01:07:33+00:00"
+    },
+    "03_structured_streaming": {
+      "cells": {
+        "delta": {
+          "finding": "sink (Delta source -> Delta sink, control): \u2705 3 -> 5 rows",
+          "status": "pass"
+        },
+        "iceberg": {
+          "finding": "sink, default writer (Delta source -> Iceberg): \u274c failed: [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta streaming writes.; sink, .format('iceberg') (Delta source -> Iceberg): \u2705 3 -> 5 rows; plain source (Iceberg -> Delta): \u2705 3 -> 5 rows; source + sink, .format('iceberg') (Iceberg -> Iceberg): \u2705 3 -> 5 rows",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "dbr": "19.x-scala2.13",
+        "delta": {
+          "sink (Delta source -> Delta sink, control)": {
+            "first": {
+              "ok": true,
+              "seconds": 6.7,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ]
+                ]
+              }
+            },
+            "incremental": {
+              "ok": true,
+              "seconds": 6.1,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ],
+                  [
+                    4,
+                    "d",
+                    40
+                  ],
+                  [
+                    5,
+                    "e",
+                    50
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        "iceberg": {
+          "plain source (Iceberg -> Delta)": {
+            "first": {
+              "ok": true,
+              "seconds": 6.0,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ]
+                ]
+              }
+            },
+            "incremental": {
+              "ok": true,
+              "seconds": 6.8,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ],
+                  [
+                    4,
+                    "d",
+                    40
+                  ],
+                  [
+                    5,
+                    "e",
+                    50
+                  ]
+                ]
+              }
+            }
+          },
+          "sink, .format('iceberg') (Delta source -> Iceberg)": {
+            "first": {
+              "ok": true,
+              "seconds": 8.6,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ]
+                ]
+              }
+            },
+            "incremental": {
+              "ok": true,
+              "seconds": 9.3,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ],
+                  [
+                    4,
+                    "d",
+                    40
+                  ],
+                  [
+                    5,
+                    "e",
+                    50
+                  ]
+                ]
+              }
+            }
+          },
+          "sink, default writer (Delta source -> Iceberg)": {
+            "first": {
+              "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta streaming writes.",
+              "error_class": "UnsupportedOperationException",
+              "ok": false,
+              "seconds": 0.4,
+              "trace_tail": "\", line 2009, in toTable\n    return self._sq(self._jwrite.toTable(tableName))\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/lib/py4j-0.10.9.9-src.zip/py4j/java_gateway.py\", line 1362, in __call__\n    return_value = get_return_value(\n                   ^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/pyspark/errors/exceptions/captured.py\", line 309, in deco\n    raise converted from None\npyspark.errors.exceptions.captured.UnsupportedOperationException: [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta streaming writes.\n"
+            },
+            "incremental": null
+          },
+          "source + sink, .format('iceberg') (Iceberg -> Iceberg)": {
+            "first": {
+              "ok": true,
+              "seconds": 6.4,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ]
+                ]
+              }
+            },
+            "incremental": {
+              "ok": true,
+              "seconds": 8.8,
+              "value": {
+                "sink_rows": [
+                  [
+                    1,
+                    "a",
+                    10
+                  ],
+                  [
+                    2,
+                    "b",
+                    20
+                  ],
+                  [
+                    3,
+                    "c",
+                    30
+                  ],
+                  [
+                    4,
+                    "d",
+                    40
+                  ],
+                  [
+                    5,
+                    "e",
+                    50
+                  ]
+                ]
+              }
+            }
+          }
+        }
+      },
+      "question": "Does each format work as a Structured Streaming sink and as a plain streaming source?",
+      "recorded_at": "2026-11-03T01:07:34+00:00"
+    },
+    "04_dataframe_writers": {
+      "cells": {
+        "delta": {
+          "finding": "v1_saveAsTable_no_format: \u2705; v1_saveAsTable_format_delta: \u2705; v1_saveAsTable_format_iceberg: \u2705; v1_insertInto: \u2705; v2_writeTo_append: \u2705; DeltaTable_merge: \u2705",
+          "status": "pass"
+        },
+        "iceberg": {
+          "finding": "v1_saveAsTable_no_format: \u274c [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.; v1_saveAsTable_format_delta: \u274c [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.; v1_saveAsTable_format_iceberg: \u2705; v1_insertInto: \u2705; v2_writeTo_append: \u2705; DeltaTable_merge: \u2705 || creates: create_v1_format_iceberg: {'format': 'iceberg', 'provider': 'iceberg'}; create_v2_using_iceberg: {'format': 'iceberg', 'provider': 'iceberg'}; create_v1_no_format: {'format': 'delta', 'provider': 'delta'}",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "creates": {
+          "create_v1_format_iceberg": {
+            "ok": true,
+            "seconds": 8.6,
+            "value": {
+              "provider": {
+                "format": "iceberg",
+                "provider": "iceberg"
+              },
+              "rows": 2
+            }
+          },
+          "create_v1_no_format": {
+            "ok": true,
+            "seconds": 6.9,
+            "value": {
+              "provider": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows": 2
+            }
+          },
+          "create_v2_using_iceberg": {
+            "ok": true,
+            "seconds": 7.0,
+            "value": {
+              "provider": {
+                "format": "iceberg",
+                "provider": "iceberg"
+              },
+              "rows": 2
+            }
+          }
+        },
+        "dbr": "19.x-scala2.13",
+        "delta": {
+          "DeltaTable_merge": {
+            "ok": true,
+            "seconds": 9.6,
+            "value": {
+              "has_999": true
+            }
+          },
+          "v1_insertInto": {
+            "ok": true,
+            "seconds": 6.8,
+            "value": {
+              "provider_after": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v1_saveAsTable_format_delta": {
+            "ok": true,
+            "seconds": 4.8,
+            "value": {
+              "provider_after": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v1_saveAsTable_format_iceberg": {
+            "ok": true,
+            "seconds": 6.4,
+            "value": {
+              "provider_after": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v1_saveAsTable_no_format": {
+            "ok": true,
+            "seconds": 6.3,
+            "value": {
+              "provider_after": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v2_writeTo_append": {
+            "ok": true,
+            "seconds": 5.0,
+            "value": {
+              "provider_after": {
+                "format": "delta",
+                "provider": "delta"
+              },
+              "rows_landed": 2
+            }
+          }
+        },
+        "iceberg": {
+          "DeltaTable_merge": {
+            "ok": true,
+            "seconds": 10.5,
+            "value": {
+              "has_999": true
+            }
+          },
+          "v1_insertInto": {
+            "ok": true,
+            "seconds": 5.7,
+            "value": {
+              "provider_after": {
+                "format": "iceberg",
+                "provider": "iceberg"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v1_saveAsTable_format_delta": {
+            "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.",
+            "error_class": "UnsupportedOperationException",
+            "ok": false,
+            "seconds": 0.5,
+            "trace_tail": "^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/pyspark/sql/readwriter.py\", line 2043, in saveAsTable\n    self._jwrite.saveAsTable(name)\n  File \"/databricks/spark/python/lib/py4j-0.10.9.9-src.zip/py4j/java_gateway.py\", line 1362, in __call__\n    return_value = get_return_value(\n                   ^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/pyspark/errors/exceptions/captured.py\", line 309, in deco\n    raise converted from None\npyspark.errors.exceptions.captured.UnsupportedOperationException: [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.\n"
+          },
+          "v1_saveAsTable_format_iceberg": {
+            "ok": true,
+            "seconds": 7.0,
+            "value": {
+              "provider_after": {
+                "format": "iceberg",
+                "provider": "iceberg"
+              },
+              "rows_landed": 2
+            }
+          },
+          "v1_saveAsTable_no_format": {
+            "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.",
+            "error_class": "UnsupportedOperationException",
+            "ok": false,
+            "seconds": 0.4,
+            "trace_tail": "^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/pyspark/sql/readwriter.py\", line 2043, in saveAsTable\n    self._jwrite.saveAsTable(name)\n  File \"/databricks/spark/python/lib/py4j-0.10.9.9-src.zip/py4j/java_gateway.py\", line 1362, in __call__\n    return_value = get_return_value(\n                   ^^^^^^^^^^^^^^^^^\n  File \"/databricks/spark/python/pyspark/errors/exceptions/captured.py\", line 309, in deco\n    raise converted from None\npyspark.errors.exceptions.captured.UnsupportedOperationException: [MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support Delta writes.\n"
+          },
+          "v2_writeTo_append": {
+            "ok": true,
+            "seconds": 6.0,
+            "value": {
+              "provider_after": {
+                "format": "iceberg",
+                "provider": "iceberg"
+              },
+              "rows_landed": 2
+            }
+          }
+        }
+      },
+      "question": "Do V1 saveAsTable / insertInto, V2 writeTo, and DeltaTable.merge work on each format?",
+      "recorded_at": "2026-11-03T01:07:35+00:00"
+    },
+    "05_pyiceberg_writes": {
+      "cells": {
+        "delta": {
+          "finding": "[Delta with Iceberg v3 reads] ops={'read': False, 'append': False, 'delete': False, 'overwrite_filter': False, 'upsert': False}; databricks reads [['1', 'a', '11'], ['3', 'c', '30']]; errors={'read': \"Incorrect magic bytes, expected b'PFA1', got b'\\\\x01\\\\x00\\\\x00\\\\x00'\", 'append': \"When initiating multiple part upload for key 'uc_delta_vs_iceberg_experiment/__unitystorage/catalogs/<uuid>/tables/<uuid>/data/00000-0-<uuid>.parquet' in bucket 'experiment-bucket'delete': \"Incorrect magic bytes, expected b'PFA1', got b'\\\\x01\\\\x00\\\\x00\\\\x00'\", 'overwrite_filter': 'Cannot write manifest for table version: 3', 'upsert': \"When initiating multiple part upload for key 'uc_delta_vs_iceberg_experiment/__unitystorage/catalogs/<uuid>/tables/<uuid>/data/00000-0-<uuid>.parquet' in bucket 'experiment-bucket'",
+          "status": "fail"
+        },
+        "iceberg": {
+          "finding": "[v3] fail: ops={'read': False, 'append': False, 'delete': False, 'overwrite_filter': False, 'upsert': False}; databricks reads [['1', 'a', '11'], ['3', 'c', '30']]; errors={'read': \"Incorrect magic bytes, expected b'PFA1', got b'\\\\x01\\\\x00\\\\x00\\\\x00'\", 'append': 'Cannot write manifest for table version: 3', 'delete': \"Incorrect magic bytes, expected b'PFA1', got b'\\\\x01\\\\x00\\\\x00\\\\x00'\", 'overwrite_filter': 'Cannot write manifest for table version: 3', 'upsert': 'Cannot write manifest for table version: 3'} || [v2 control] partial: ops={'read': True, 'append': True, 'delete': True, 'overwrite_filter': False, 'upsert': False}; databricks reads [['1', 'a', '11'], ['4', 'd', '40']]; errors={'overwrite_filter': 'CommitFailedException: Failed to commit to the table, requirement failed: Adding multiple snapshots in a single update is not supported. (request_id=<id>)', 'upsert': 'CommitFailedException: Failed to commit to the table, requirement failed: Adding multiple snapshots in a single update is not supported. (request_id=<id>)'}",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "py_delta": {
+          "append": {
+            "error": "When initiating multiple part upload for key 'uc_delta_vs_iceberg_experiment/__unitystorage/catalogs/<uuid>/tables/<uuid>/data/00000-0-<uuid>.parquet' in bucket 'experiment-bucket': AWS Error ACCESS_DENIED during CreateMultipartUpload operation: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action (Request ID: <id>)",
+            "error_class": "OSError",
+            "ok": false
+          },
+          "databricks_after": [
+            [
+              "1",
+              "a",
+              "11"
+            ],
+            [
+              "3",
+              "c",
+              "30"
+            ]
+          ],
+          "delete": {
+            "error": "Incorrect magic bytes, expected b'PFA1', got b'\\x01\\x00\\x00\\x00'",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "format_version": {
+            "ok": true,
+            "value": 3
+          },
+          "load": {
+            "error": null,
+            "ok": true
+          },
+          "overwrite_filter": {
+            "error": "Cannot write manifest for table version: 3",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "read": {
+            "error": "Incorrect magic bytes, expected b'PFA1', got b'\\x01\\x00\\x00\\x00'",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "upsert": {
+            "error": "When initiating multiple part upload for key 'uc_delta_vs_iceberg_experiment/__unitystorage/catalogs/<uuid>/tables/<uuid>/data/00000-0-<uuid>.parquet' in bucket 'experiment-bucket': AWS Error ACCESS_DENIED during CreateMultipartUpload operation: User: arn:aws:<redacted>,<sts-session> is not authorized to perform: s3:PutObject on resource: \"arn:aws:<redacted>\" because no session policy allows the s3:PutObject action (Request ID: <id>)",
+            "error_class": "OSError",
+            "ok": false
+          }
+        },
+        "py_iceberg_v2": {
+          "append": {
+            "ok": true,
+            "value": null
+          },
+          "databricks_after": [
+            [
+              "1",
+              "a",
+              "11"
+            ],
+            [
+              "4",
+              "d",
+              "40"
+            ]
+          ],
+          "delete": {
+            "ok": true,
+            "value": null
+          },
+          "format_version": {
+            "ok": true,
+            "value": 2
+          },
+          "load": {
+            "error": null,
+            "ok": true
+          },
+          "overwrite_filter": {
+            "error": "CommitFailedException: Failed to commit to the table, requirement failed: Adding multiple snapshots in a single update is not supported. (request_id=<id>)",
+            "error_class": "CommitFailedException",
+            "ok": false
+          },
+          "read": {
+            "ok": true,
+            "value": [
+              {
+                "cat": "a",
+                "id": 1,
+                "v": 11
+              },
+              {
+                "cat": "c",
+                "id": 3,
+                "v": 30
+              }
+            ]
+          },
+          "upsert": {
+            "error": "CommitFailedException: Failed to commit to the table, requirement failed: Adding multiple snapshots in a single update is not supported. (request_id=<id>)",
+            "error_class": "CommitFailedException",
+            "ok": false
+          }
+        },
+        "py_iceberg_v3": {
+          "append": {
+            "error": "Cannot write manifest for table version: 3",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "databricks_after": [
+            [
+              "1",
+              "a",
+              "11"
+            ],
+            [
+              "3",
+              "c",
+              "30"
+            ]
+          ],
+          "delete": {
+            "error": "Incorrect magic bytes, expected b'PFA1', got b'\\x01\\x00\\x00\\x00'",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "format_version": {
+            "ok": true,
+            "value": 3
+          },
+          "load": {
+            "error": null,
+            "ok": true
+          },
+          "overwrite_filter": {
+            "error": "Cannot write manifest for table version: 3",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "read": {
+            "error": "Incorrect magic bytes, expected b'PFA1', got b'\\x01\\x00\\x00\\x00'",
+            "error_class": "ValueError",
+            "ok": false
+          },
+          "upsert": {
+            "error": "Cannot write manifest for table version: 3",
+            "error_class": "ValueError",
+            "ok": false
+          }
+        },
+        "pyiceberg_version": "0.12.0",
+        "read_dml_iceberg_mixed_dvs": {
+          "ok": true,
+          "value": 3
+        }
+      },
+      "question": "Can PyIceberg read/append/delete/overwrite/upsert through the UC Iceberg REST catalog?",
+      "recorded_at": "2026-11-03T00:04:44+00:00"
+    },
+    "06_iceberg_dv_off_mitigation": {
+      "cells": {
+        "delta": {
+          "finding": "Iceberg-only mitigation.",
+          "status": "not_applicable"
+        },
+        "iceberg": {
+          "finding": "[DVs off] partial: DuckDB strict read=ok; DuckDB UPDATE=TransactionContext Error: Failed to commit: Failed to commit Iceberg transaction: Request returned HTTP 500 for HTTP POST to 'https://workspace.example.com'; PyIceberg read=ok; automatic CDF (DBSQL)=ok || [DVs + row tracking off] fail: CREATE rejected: [DELTA_ICEBERG_COMPAT_VIOLATION.WRONG_REQUIRED_TABLE_PROPERTY] The validation of IcebergCompatV3 has failed. IcebergCompatV3 requires table property 'delta.enableRowTracking' to be set to 'true'. Current value: 'false'.",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "duckdb_version": "2.0.0",
+        "dv_and_rt_off": {
+          "create": {
+            "error": "[DELTA_ICEBERG_COMPAT_VIOLATION.WRONG_REQUIRED_TABLE_PROPERTY] The validation of IcebergCompatV3 has failed. IcebergCompatV3 requires table property 'delta.enableRowTracking' to be set to 'true'. Current value: 'false'.",
+            "ok": false
+          }
+        },
+        "dv_off": {
+          "create": {
+            "error": null,
+            "ok": true
+          },
+          "dbsql_table_changes": {
+            "error": null,
+            "ok": true,
+            "rows": [
+              [
+                "2",
+                "20",
+                "delete",
+                "3"
+              ],
+              [
+                "1",
+                "11",
+                "update_postimage",
+                "2"
+              ],
+              [
+                "1",
+                "10",
+                "insert",
+                "1"
+              ],
+              [
+                "2",
+                "20",
+                "insert",
+                "1"
+              ],
+              [
+                "3",
+                "30",
+                "insert",
+                "1"
+              ],
+              [
+                "1",
+                "10",
+                "update_preimage",
+                "2"
+              ]
+            ]
+          },
+          "duckdb_strict_read": {
+            "ok": true,
+            "value": [
+              [
+                1,
+                "a",
+                11
+              ],
+              [
+                3,
+                "c",
+                30
+              ]
+            ]
+          },
+          "duckdb_update": {
+            "error": "TransactionContext Error: Failed to commit: Failed to commit Iceberg transaction: Request returned HTTP 500 for HTTP POST to 'https://workspace.example.com'",
+            "error_class": "TransactionException",
+            "ok": false
+          },
+          "props": {
+            "format-version": "3",
+            "iceberg.enableDeletionVectors": "false",
+            "iceberg.enableRowTracking": "true"
+          },
+          "pyiceberg_read": {
+            "ok": true,
+            "value": 2
+          },
+          "seed": [
+            {
+              "error": null,
+              "ok": true
+            },
+            {
+              "error": null,
+              "ok": true
+            },
+            {
+              "error": null,
+              "ok": true
+            }
+          ]
+        },
+        "pyiceberg_version": "0.12.0"
+      },
+      "question": "Does turning off deletion vectors on Liquid Iceberg v3 restore strict external reads, and at what cost?",
+      "recorded_at": "2026-11-03T01:12:37+00:00"
+    }
+  }
+}

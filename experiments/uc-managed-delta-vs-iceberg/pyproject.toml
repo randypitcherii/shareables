@@ -1,0 +1,28 @@
+[project]
+name = "uc-managed-delta-vs-iceberg"
+version = "0.1.0"
+description = "Experiment: what managed Delta vs managed Iceberg actually unlock under Unity Catalog"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-sdk>=0.60.0",
+    "duckdb>=2.0.0",
+    "pyiceberg[pyarrow]>=0.12.0",
+    "requests>=2.32",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+pythonpath = ["scripts"]
+markers = ["infrastructure: tests requiring live Databricks infrastructure"]
+
+[tool.ruff]
+line-length = 110
+
+[[tool.uv.index]]
+# Public repo: pin the lockfile to public PyPI regardless of local uv config.
+url = "https://pypi.org/simple/"
+default = true

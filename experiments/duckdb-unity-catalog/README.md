@@ -1,5 +1,12 @@
 # DuckDB + Unity Catalog Experiment
 
+> **Superseded (2026-11-02):** these results were taken on DuckDB 1.x in March 2026. DuckDB 2.0
+> against UC managed tables is re-tested in
+> [`uc-managed-delta-vs-iceberg`](../uc-managed-delta-vs-iceberg/) (row 01): managed Iceberg
+> INSERT/UPDATE/DELETE/MERGE now work through the Iceberg REST catalog (with a caveat for tables
+> carrying Databricks-written deletion vectors), and managed Delta is read-only from DuckDB.
+> Kept for history.
+
 This experiment tests DuckDB's read/write capabilities against Databricks Unity Catalog across two connection paths and two table formats, to understand what actually works today.
 
 ## Expectations
