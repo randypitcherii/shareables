@@ -1,0 +1,8 @@
+.state/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.databricks/
+uv.lock
