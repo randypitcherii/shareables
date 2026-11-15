@@ -6,6 +6,8 @@
 - **Databricks features no longer rule Iceberg out.** Automatic CDF, streaming reads and streaming writes all work on managed Iceberg v3. The code changes involved are small and listed below.
 - **Iceberg is the only format outside engines can write.** Managed Delta is read-only from DuckDB and PyIceberg.
 - **The real catch is cross-engine deletion vectors.** Once *Databricks* runs `UPDATE`/`DELETE`/`MERGE` on an Iceberg v3 table, DuckDB and PyIceberg refuse to read it under their default settings ([research note](docs/research/2026-11-02-iceberg-v3-deletion-vector-files.md)).
+- **The choice is not cheap to reverse (2026-11-14).** Neither direction has a zero-copy switch today. Dropping a managed table and re-registering its files is blocked, so changing format later means a full rewrite (CTAS) that restarts table history.
+- **Older jobs can read but not write v3 (2026-11-14).** DBR 16.4 LTS reads every shape tested, including Iceberg v3 with deletion vectors, but can't write to any Iceberg v3 shape (managed Iceberg *or* Delta with Iceberg v3 reads). DBR 17.3 LTS reads, writes and runs `table_changes()` on all of them.
 
 Setup: one real AWS workspace, an isolated UC catalog in a customer-owned S3 prefix, synthetic 3-row tables, all clustered with `CLUSTER BY (cat)`.
 - **Delta column:** managed Delta with catalog commits, Iceberg v3 reads (UniForm) and row tracking.
@@ -29,6 +31,8 @@ Every cell traces to a numbered script and an entry in [`results/matrix_results.
 | 04 | DataFrame writers into an existing table | ✅ | ◑ `saveAsTable` w/o `format("iceberg")` fails | `04_dataframe_writers.py` |
 | 05 | PyIceberg read/append/delete/overwrite/upsert via Iceberg REST catalog | ❌ | ◑ v2 only, partial | `05_pyiceberg_writes.py` |
 | 06 | Mitigation: Liquid Iceberg v3 with deletion vectors **off** | n/a | ◑ external reads restored; DuckDB DML lost | `06_iceberg_dv_off_mitigation.py` |
+| 07 | Switch format later without copying data | ❌ CTAS rewrite only | ❌ CTAS rewrite only | `07_format_reversibility.py` |
+| 08 | DBR 16.4 LTS jobs read + write the table | ◑ read-only (v3 reads shape) | ◑ read-only | `08_older_dbr_access.py` |
 
 Legend:
 - ✅ every operation tested worked
@@ -90,6 +94,37 @@ Creating tables: `format("iceberg").saveAsTable` and `writeTo().using("iceberg")
 - **What it costs:** DuckDB `UPDATE` on that table fails at commit with **HTTP 500** from the Iceberg REST catalog, because DuckDB only writes merge-on-read deletes.
 - **Row tracking stays on:** v3 can't turn it off (`IcebergCompatV3 requires … 'delta.enableRowTracking' … 'true'`).
 
+### 07: Switching format later (2026-11-14)
+
+A managed Iceberg table is Delta underneath: `DESCRIBE DETAIL` lists Delta protocol features (`catalogManaged`, `v2Checkpoint`, `deletionVectors`, `rowTracking`, …) next to its live Iceberg metadata. The hoped-for zero-copy exit was to drop the table from UC, keep its files, and re-register them as the other format. That doesn't work today:
+
+| Attempt (Iceberg v3 → Delta) | Result |
+|---|---|
+| `ALTER TABLE … SET TBLPROPERTIES ('delta.universalFormat…')` | ❌ `MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED` |
+| `SHALLOW CLONE` | ❌ `MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED` |
+| `DEEP CLONE` | ✅ but the copy is still Iceberg |
+| `DROP TABLE`, then `CREATE TABLE … USING DELTA\|ICEBERG LOCATION '<old path>'` | ❌ `LOCATION_OVERLAP`: the path stays reserved as managed storage during the `UNDROP` window |
+| `UNDROP TABLE` | ✅ table back, rows intact |
+| CTAS into a managed Delta table | ✅ rows match, but every file is rewritten and history restarts (1 version vs 3) |
+
+The reverse direction (Delta → Iceberg) is the same: `DEEP CLONE` stays Delta, and CTAS works only with `'format-version' = '3'` on Liquid (the v2 default hits the setup-time error below). The Delta → managed conversion path, `SET MANAGED`, only applies to external and foreign tables, and it copies files.
+
+### 08: Older DBR LTS jobs (2026-11-14)
+
+Each table was seeded from DBSQL (insert → update → delete, so v3 shapes carry deletion vectors), then one job ran the same checks on DBR 16.4 LTS, 17.3 LTS and 18 LTS in sequence.
+
+| Table shape | 16.4 LTS | 17.3 LTS | 18 LTS |
+|---|---|---|---|
+| Managed Iceberg v3 (Liquid) | read ✅ · write ❌ | read, write, `table_changes` ✅ | ✅ |
+| Managed Delta, Iceberg v3 reads + catalog commits | read ✅ · write ❌ | ✅ | ✅ |
+| Managed Iceberg v2 (Liquid, DVs + row tracking off) | read, write ✅ | read, write ✅ · `table_changes` ❌ (no row tracking) | same as 17.3 |
+| Managed Delta, Iceberg v2 reads | read, write ✅ | ✅ | ✅ |
+| Managed Delta, no Iceberg reads | read, write ✅ | ✅ | ✅ |
+
+- **16.4 writes to v3 shapes** fail with `DELTA_UNIVERSAL_FORMAT_VIOLATION: … Requires IcebergCompat to be explicitly enabled`. Reading through the Delta side doesn't help: managed Delta with Iceberg v3 reads fails the same way.
+- **`table_changes()` fails on 16.4** for every shape (`DELTA_MISSING_CHANGE_DATA`), and works from 17.3 on every row-tracked shape.
+- **Practical upshot:** a fleet still on 16.4 can read Iceberg v3 tables during a migration. Writers need 17.3+. Iceberg v2 keeps 16.4 writers working, but costs row-level concurrency and CDF (DVs and row tracking off).
+
 ### Setup-time finding
 
 Liquid clustering on a managed Iceberg **v2** table is rejected unless deletion vectors and row tracking are both off (`MANAGED_ICEBERG_ATTEMPTED_TO_ENABLE_CLUSTERING_WITHOUT_DISABLING_DVS_OR_ROW_TRACKING`). The error says this reduces concurrency control.
@@ -102,6 +137,8 @@ Liquid clustering on a managed Iceberg **v2** table is rejected unless deletion 
   - turn deletion vectors off and give up DuckDB DML (row 06)
 - **CDF and streaming no longer favor Delta**, provided you're on DBR 19+ or DBSQL and your streaming writes use `.format("iceberg")`.
 - **Expect to touch every `saveAsTable` that lacks `format("iceberg")`.** `insertInto`, `writeTo().append()` and `DeltaTable.merge` work unchanged.
+- **Choose once.** There is no zero-copy format switch today (row 07), so picking the format that keeps external writes open avoids a later rewrite.
+- **Plan the runtime floor.** Readers can stay on DBR 16.4 LTS; anything that writes v3 tables needs 17.3 LTS+ (row 08).
 - **Pick Delta (with Iceberg reads) if outside engines only read,** and you want Delta-only features this experiment didn't test (generated columns, CHECK constraints, shallow clone). Outside readers still hit the deletion-vector problem on tables Databricks has updated.
 
 ## Not tested
@@ -114,12 +151,12 @@ Liquid clustering on a managed Iceberg **v2** table is rejected unless deletion 
 
 ## Run it
 
-Copy `.env.example` to `.env`. You need an OAuth profile, a serverless SQL warehouse, metastore external data access turned on, a writable external-location path (not Default Storage), and permission to run DBR 19 job clusters.
+Copy `.env.example` to `.env`. You need an OAuth profile, a serverless SQL warehouse, metastore external data access turned on, a writable external-location path (not Default Storage), and permission to run DBR 16.4 / 17.3 / 18 / 19 job clusters.
 
 ```bash
 make sync
 make verify
-make matrix     # setup -> 01 -> spark job (~15 min) -> 02 -> 03 -> 04 -> 05 -> 06
+make matrix     # setup -> 01 -> spark job (~15 min) -> 02 -> 03 -> 04 -> 05 -> 06 -> 07 -> 08 (~25 min, 3 DBRs)
 make check
 make cleanup
 ```
@@ -129,4 +166,4 @@ See [`scripts/README.md`](scripts/README.md) for what each script does.
 Safety:
 - OAuth only; PATs are refused.
 - Hosts, identities, buckets, account ids, table ids and request ids are scrubbed before evidence is written.
-- `results/.spark_raw.json` (unscrubbed) is gitignored.
+- `results/.spark_raw.json` and `results/.legacy_dbr_raw.json` (unscrubbed) are gitignored.

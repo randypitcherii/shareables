@@ -1615,6 +1615,261 @@
       },
       "question": "Does turning off deletion vectors on Liquid Iceberg v3 restore strict external reads, and at what cost?",
       "recorded_at": "2026-11-03T01:12:37+00:00"
+    },
+    "07_format_reversibility": {
+      "cells": {
+        "delta": {
+          "finding": "Delta -> Iceberg: No zero-copy path. DEEP CLONE stays delta. CTAS to Iceberg works only with 'format-version' = '3' on Liquid (v2 default: MANAGED_ICEBERG_ATTEMPTED_TO_ENABLE_CLUSTERING_WITHOUT_DISABLING_DVS_OR_ROW_TRACKING); it rewrites all data and starts history over.",
+          "status": "fail"
+        },
+        "iceberg": {
+          "finding": "Iceberg -> Delta: No zero-copy path. Re-registering the dropped table's files: INVALID_PARAMETER_VALUE.LOCATION_OVERLAP (the path stays reserved as managed storage); UNDROP restores the table (rows intact). SHALLOW CLONE and provider-level ALTER are rejected; DEEP CLONE stays iceberg. CTAS to Delta works (rows match) but rewrites all data and starts history over (1 vs 3 versions).",
+          "status": "fail"
+        }
+      },
+      "evidence": {
+        "delta_to_iceberg": {
+          "ctas_history_versions": 2,
+          "ctas_iceberg_default": {
+            "error": "[MANAGED_ICEBERG_ATTEMPTED_TO_ENABLE_CLUSTERING_WITHOUT_DISABLING_DVS_OR_ROW_TRACKING] Attempted to enable Liquid clustering on a Managed Iceberg table without disabling both deletion vectors and row tracking. Deletion vectors and row tracking are not supported for Managed Iceberg tables, but are required for row-level concurrency with Liquid tables. To enable Liquid clustering on a Managed Iceber",
+            "error_code": "MANAGED_ICEBERG_ATTEMPTED_TO_ENABLE_CLUSTERING_WITHOUT_DISABLING_DVS_OR_ROW_TRACKING",
+            "ok": false
+          },
+          "ctas_iceberg_v3": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          },
+          "ctas_result_format": "iceberg",
+          "ctas_rows_match": true,
+          "deep_clone": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          },
+          "deep_clone_result_format": "delta",
+          "source_format": "delta",
+          "source_history_versions": 3
+        },
+        "iceberg_to_delta": {
+          "after_undrop_rows_intact": true,
+          "alter_to_delta_property": {
+            "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support set/change table property 'delta.universalFormat.enabledFormats'.",
+            "error_code": "MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED",
+            "ok": false
+          },
+          "ctas_history_versions": 1,
+          "ctas_result_format": "delta",
+          "ctas_rows_match": true,
+          "ctas_to_delta": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          },
+          "deep_clone": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          },
+          "deep_clone_result_format": "iceberg",
+          "drop": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          },
+          "reregister_as_delta": {
+            "error": "[request_id=<id> ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/<path>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+            "error_code": "INVALID_PARAMETER_VALUE.LOCATION_OVERLAP",
+            "ok": false
+          },
+          "reregister_as_iceberg": {
+            "error": "[request_id=<id> ErrorClass=INVALID_PARAMETER_VALUE.LOCATION_OVERLAP] Input path url 's3://experiment-bucket/<path>' overlaps with managed storage within 'GenerateTemporaryPathCredential' call. .",
+            "error_code": "INVALID_PARAMETER_VALUE.LOCATION_OVERLAP",
+            "ok": false
+          },
+          "shallow_clone": {
+            "error": "[MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED] Managed Iceberg tables do not support SHALLOW CLONE.",
+            "error_code": "MANAGED_ICEBERG_OPERATION_NOT_SUPPORTED",
+            "ok": false
+          },
+          "source_format": "iceberg",
+          "source_history_versions": 3,
+          "undrop": {
+            "error": null,
+            "error_code": null,
+            "ok": true
+          }
+        }
+      },
+      "question": "Can you switch a managed table between Delta and Iceberg later without copying data?",
+      "recorded_at": "2026-11-15T01:40:40+00:00"
+    },
+    "08_older_dbr_access": {
+      "cells": {
+        "dbr_delta_plain": {
+          "finding": "16.4.x: read ok, write ok, table_changes FAIL; 17.3.x: read ok, write ok, table_changes ok; 18.x: read ok, write ok, table_changes ok",
+          "label": "Managed Delta (Liquid, no Iceberg reads)",
+          "status": "pass"
+        },
+        "dbr_delta_v2reads": {
+          "finding": "16.4.x: read ok, write ok, table_changes FAIL; 17.3.x: read ok, write ok, table_changes ok; 18.x: read ok, write ok, table_changes ok",
+          "label": "Managed Delta, Iceberg v2 reads (UniForm, no catalog commits)",
+          "status": "pass"
+        },
+        "dbr_delta_v3reads": {
+          "finding": "16.4.x: read ok, write FAIL, table_changes FAIL; 17.3.x: read ok, write ok, table_changes ok; 18.x: read ok, write ok, table_changes ok",
+          "label": "Managed Delta, Iceberg v3 reads + catalog commits (this experiment's Delta shape)",
+          "status": "partial"
+        },
+        "dbr_ice_v2": {
+          "finding": "16.4.x: read ok, write ok, table_changes FAIL; 17.3.x: read ok, write ok, table_changes FAIL; 18.x: read ok, write ok, table_changes FAIL",
+          "label": "Managed Iceberg v2 (Liquid, DVs + row tracking off)",
+          "status": "pass"
+        },
+        "dbr_ice_v3": {
+          "finding": "16.4.x: read ok, write FAIL, table_changes FAIL; 17.3.x: read ok, write ok, table_changes ok; 18.x: read ok, write ok, table_changes ok",
+          "label": "Managed Iceberg v3 (Liquid)",
+          "status": "partial"
+        }
+      },
+      "evidence": {
+        "by_dbr": {
+          "dbr_delta_plain": {
+            "16.4.x-scala2.12": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_CHANGE_DATA] Error getting change data for range [0 , 5] as change data was not recorded for version [0]. If you've enabled change data feed on this table, use `DESCRIBE HISTORY` to see",
+              "update": "ok"
+            },
+            "17.3.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            },
+            "18.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            }
+          },
+          "dbr_delta_v2reads": {
+            "16.4.x-scala2.12": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_CHANGE_DATA] Error getting change data for range [0 , 5] as change data was not recorded for version [0]. If you've enabled change data feed on this table, use `DESCRIBE HISTORY` to see",
+              "update": "ok"
+            },
+            "17.3.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            },
+            "18.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            }
+          },
+          "dbr_delta_v3reads": {
+            "16.4.x-scala2.12": {
+              "insert": "[DELTA_UNIVERSAL_FORMAT_VIOLATION] The validation of Universal Format (iceberg) has failed: Requires IcebergCompat to be explicitly enabled in order for Universal Format (Iceberg) to be enabled on an ",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_CHANGE_DATA] Error getting change data for range [0 , 3] as change data was not recorded for version [0]. If you've enabled change data feed on this table, use `DESCRIBE HISTORY` to see",
+              "update": "[DELTA_UNIVERSAL_FORMAT_VIOLATION] The validation of Universal Format (iceberg) has failed: Requires IcebergCompat to be explicitly enabled in order for Universal Format (Iceberg) to be enabled on an "
+            },
+            "17.3.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            },
+            "18.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            }
+          },
+          "dbr_ice_v2": {
+            "16.4.x-scala2.12": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_CHANGE_DATA] Error getting change data for range [0 , 5] as change data was not recorded for version [0]. If you've enabled change data feed on this table, use `DESCRIBE HISTORY` to see",
+              "update": "ok"
+            },
+            "17.3.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_ROW_TRACKING_FOR_CDC] Error getting change data for s3://experiment-bucket/<path> as row tracking was not enabled. To enable row tracking, use `ALTER TABLE table_name SET TBLPROPERTIES ",
+              "update": "ok"
+            },
+            "18.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_ROW_TRACKING_FOR_CDC] Error getting change data for uc_delta_vs_iceberg_experiment.matrix.dbr_ice_v2 as row tracking was not enabled. To enable row tracking, use `ALTER TABLE table_name",
+              "update": "ok"
+            }
+          },
+          "dbr_ice_v3": {
+            "16.4.x-scala2.12": {
+              "insert": "[DELTA_UNIVERSAL_FORMAT_VIOLATION] The validation of Universal Format (iceberg) has failed: Requires IcebergCompat to be explicitly enabled in order for Universal Format (Iceberg) to be enabled on an ",
+              "read": "ok",
+              "table_changes": "[DELTA_MISSING_CHANGE_DATA] Error getting change data for range [0 , 3] as change data was not recorded for version [0]. If you've enabled change data feed on this table, use `DESCRIBE HISTORY` to see",
+              "update": "[DELTA_UNIVERSAL_FORMAT_VIOLATION] The validation of Universal Format (iceberg) has failed: Requires IcebergCompat to be explicitly enabled in order for Universal Format (Iceberg) to be enabled on an "
+            },
+            "17.3.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            },
+            "18.x-scala2.13": {
+              "insert": "ok",
+              "read": "ok",
+              "table_changes": "ok",
+              "update": "ok"
+            }
+          }
+        },
+        "seed": {
+          "dbr_delta_plain": {
+            "create": true,
+            "error": null,
+            "features": "[\"appendOnly\",\"clustering\",\"deletionVectors\",\"domainMetadata\",\"invariants\",\"rowTracking\",\"v2Checkpoint\"]",
+            "format": "delta"
+          },
+          "dbr_delta_v2reads": {
+            "create": true,
+            "error": null,
+            "features": "[\"appendOnly\",\"clustering\",\"columnMapping\",\"domainMetadata\",\"icebergCompatV2\",\"invariants\",\"rowTracking\",\"v2Checkpoint\"]",
+            "format": "delta"
+          },
+          "dbr_delta_v3reads": {
+            "create": true,
+            "error": null,
+            "features": "[\"appendOnly\",\"catalogManaged\",\"clustering\",\"columnMapping\",\"deletionVectors\",\"domainMetadata\",\"icebergCompatV3\",\"inCommitTimestamp\",\"invariants\",\"rowTracking\",\"v2Checkpoint\",\"vacuumProtocolCheck\"]",
+            "format": "delta"
+          },
+          "dbr_ice_v2": {
+            "create": true,
+            "error": null,
+            "features": "[\"appendOnly\",\"catalogManaged\",\"clustering\",\"columnMapping\",\"domainMetadata\",\"icebergCompatV2\",\"icebergWriterCompatV1\",\"inCommitTimestamp\",\"invariants\",\"timestampNtz\",\"typeWidening\",\"v2Checkpoint\",\"vacuumProtocolCheck\"]",
+            "format": "iceberg"
+          },
+          "dbr_ice_v3": {
+            "create": true,
+            "error": null,
+            "features": "[\"appendOnly\",\"catalogManaged\",\"clustering\",\"columnMapping\",\"deletionVectors\",\"domainMetadata\",\"icebergCompatV3\",\"icebergWriterCompatV3\",\"inCommitTimestamp\",\"invariants\",\"rowTracking\",\"timestampNtz\",\"typeWidening\",\"v2Checkpoint\",\"vacuumProtocolCheck\"]",
+            "format": "iceberg"
+          }
+        }
+      },
+      "question": "Can DBR 16.4 / 17.3 LTS jobs read and write each managed table shape (vs DBR 18 LTS)?",
+      "recorded_at": "2026-11-15T01:57:08+00:00"
     }
   }
 }
