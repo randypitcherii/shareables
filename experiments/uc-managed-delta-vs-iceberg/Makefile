@@ -11,7 +11,7 @@ AWS_REGION ?= us-east-1
 EXPERIMENT_SPARK_VERSION ?= 19.x-scala2.13
 EXPERIMENT_NODE_TYPE ?= m5d.xlarge
 
-.PHONY: help sync auth-check verify setup duckdb spark cdf streaming writers pyiceberg mitigation matrix cleanup test lint check
+.PHONY: help sync auth-check verify setup duckdb spark cdf streaming writers pyiceberg mitigation reversibility older-dbr matrix cleanup test lint check
 
 help: ## Show targets and active non-secret configuration
 	@awk 'BEGIN {FS = ":.*## "; printf "Targets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -52,7 +52,13 @@ pyiceberg: ## Row 05: PyIceberg writes through the UC Iceberg REST catalog
 mitigation: ## Row 06: Liquid Iceberg v3 with deletion vectors off
 	uv run python scripts/06_iceberg_dv_off_mitigation.py
 
-matrix: setup duckdb spark cdf streaming writers pyiceberg mitigation ## Full run, in order (row 02 depends on row 01's commits)
+reversibility: ## Row 07: switch a managed table between Delta and Iceberg without copying data?
+	uv run python scripts/07_format_reversibility.py
+
+older-dbr: ## Row 08: DBR 16.4 / 17.3 / 18 LTS read + write each table shape (~25 min)
+	uv run python scripts/08_older_dbr_access.py
+
+matrix: setup duckdb spark cdf streaming writers pyiceberg mitigation reversibility older-dbr ## Full run, in order (row 02 depends on row 01's commits)
 
 cleanup: auth-check ## Drop the experiment catalog (CASCADE)
 	uv run python scripts/cleanup.py

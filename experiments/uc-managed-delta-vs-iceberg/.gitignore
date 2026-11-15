@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 results/.spark_raw.json
+results/.legacy_dbr_raw.json

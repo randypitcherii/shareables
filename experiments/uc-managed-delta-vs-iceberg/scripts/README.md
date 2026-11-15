@@ -7,7 +7,7 @@
 - An OAuth/SSO Databricks CLI profile (PATs are refused) and a serverless SQL warehouse.
 - **External data access** enabled on the metastore. `setup.py` grants `EXTERNAL USE SCHEMA` to the caller, because owning a schema does not include it.
 - A writable path under a UC external location in your own bucket (`EXPERIMENT_STORAGE_ROOT`). It becomes the catalog's managed location. Default Storage won't work, because external engines need credential vending.
-- Permission to create classic job clusters on DBR 19+ (automatic CDF needs DBR 19), and to create and drop a catalog.
+- Permission to create classic job clusters on DBR 19+ (rows 02-04) and on DBR 16.4 / 17.3 / 18 LTS (row 08), and to create and drop a catalog.
 
 ## Lifecycle
 
@@ -21,6 +21,9 @@
 | `03_structured_streaming.py` | Row 03. Each format as a streaming sink (default writer and `.format('iceberg')`) and as a plain streaming source. Every stream runs twice with `availableNow`, with an append in between. |
 | `04_dataframe_writers.py` | Row 04. V1 `saveAsTable` (no format, `format('delta')`, `format('iceberg')`), `insertInto`, V2 `writeTo().append()`, `DeltaTable.forName().merge()`, plus which format the create-style writers produce. |
 | `05_pyiceberg_writes.py` | Row 05. PyIceberg read/append/delete/overwrite/upsert against Iceberg v3, an Iceberg v2 control, and Delta with Iceberg reads. |
+| `06_iceberg_dv_off_mitigation.py` | Row 06. Liquid Iceberg v3 with deletion vectors off (and with row tracking also off): strict external reads, DuckDB DML, CDF. |
+| `07_format_reversibility.py` | Row 07. Every SQL-level way to switch a managed table between Delta and Iceberg: provider-level ALTER, SHALLOW/DEEP CLONE, DROP + re-register the files, UNDROP, CTAS. Both directions, from DBSQL. |
+| `08_older_dbr_access.py` | Row 08. Seeds five table shapes, then runs `spark/legacy_dbr_job.py` on DBR 16.4, 17.3 and 18 LTS in sequence (read, INSERT, UPDATE, `table_changes()`). Raw evidence goes to `results/.legacy_dbr_raw.json` (gitignored). |
 | `cleanup.py` | Drops the experiment catalog (CASCADE). |
 
 Statuses per cell: `pass` means every operation tested worked. `partial` means some did, and the finding says which. `fail` means none did. `inconclusive` is reserved for infrastructure failures that never reached the capability under test.
