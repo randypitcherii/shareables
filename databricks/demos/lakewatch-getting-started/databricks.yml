@@ -1,0 +1,64 @@
+# Lakewatch getting started: safely turn on Lakewatch (Beta) and deploy starter
+# security-posture detections into YOUR workspace.
+#
+#   databricks bundle deploy                       # as a workspace admin
+#   databricks bundle run rpw_lakewatch_getting_started
+#
+# Everything this bundle creates is prefixed rpw_ so it never overwrites existing objects.
+bundle:
+  name: lakewatch-getting-started
+
+sync:
+  include:
+    - src/**
+    - rules/**
+  exclude:
+    - .venv/**
+    - tests/**
+    - "**/__pycache__/**"
+    - .pytest_cache/**
+    - uv.lock
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: >
+      Lakewatch environment catalog. If Lakewatch is not set up yet, the job creates this catalog on the
+      metastore's default storage. If Lakewatch is already set up, set this to that environment's catalog.
+    default: rpw_lakewatch
+  schema:
+    description: Lakewatch folder (schema) for this bundle's posture tables and rules.
+    default: rpw_security_posture
+  rules_enabled:
+    description: Schedule the rpw_ detection rules when registering them ("true"/"false"). Tune first.
+    default: "false"
+  allow_with_prior_preview:
+    description: >
+      Set up the Beta even if an earlier Lakewatch preview configuration exists ("true"/"false").
+      Preview resources are never modified either way.
+    default: "false"
+  dry_run:
+    description: Only inspect and print the plan; change nothing ("true"/"false").
+    default: "false"
+  error_beacon:
+    description: >
+      Report only the setup outcome code (e.g. RPW-LW-E201 or ok) in the user agent of one API call, so the
+      bundle's maintainers can see which setup errors are common and fix them. No error text or data. "true"/"false".
+    default: "true"
+  long_running_days:
+    description: A cluster up longer than this many days fails the cluster-restart (patching) control.
+    default: "30"
+  max_token_days:
+    description: Personal access tokens living longer than this many days fail credential hygiene.
+    default: "90"
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+    variables:
+      rules_enabled: "true"

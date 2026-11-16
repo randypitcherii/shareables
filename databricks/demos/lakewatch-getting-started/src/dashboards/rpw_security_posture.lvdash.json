@@ -1,0 +1,506 @@
+{
+ "datasets": [
+  {
+   "name": "latest",
+   "displayName": "Latest findings",
+   "queryLines": [
+    "SELECT workspace_id, control_name, tier, domain, status, round(adoption_pct, 1) AS adoption_pct, source, detail, snapshot_ts\n",
+    "FROM rpw_posture_latest\n",
+    "ORDER BY CASE status WHEN 'FAIL' THEN 1 WHEN 'PARTIAL' THEN 2 WHEN 'UNKNOWN' THEN 3 ELSE 4 END, tier, control_name, workspace_id\n"
+   ]
+  },
+  {
+   "name": "summary",
+   "displayName": "Summary",
+   "queryLines": [
+    "SELECT count(DISTINCT workspace_id) AS workspaces,\n",
+    "       count_if(tier = 'essential' AND status = 'FAIL') AS failing_essentials,\n",
+    "       count(DISTINCT CASE WHEN tier = 'essential' AND status = 'FAIL' THEN workspace_id END) AS workspaces_with_failing,\n",
+    "       count_if(tier = 'credential_hygiene' AND status IN ('FAIL', 'PARTIAL')) AS hygiene_gaps,\n",
+    "       max(snapshot_ts) AS snapshot_ts\n",
+    "FROM rpw_posture_latest\n"
+   ]
+  },
+  {
+   "name": "by_control",
+   "displayName": "By control",
+   "queryLines": [
+    "SELECT control_name, tier,\n",
+    "       CASE status WHEN 'PASS' THEN '1 In place' WHEN 'PARTIAL' THEN '2 Partial' WHEN 'FAIL' THEN '3 Needs attention'\n",
+    "                   WHEN 'NOT_APPLICABLE' THEN '5 Not applicable' ELSE '4 Not evaluated' END AS status,\n",
+    "       count(DISTINCT workspace_id) AS workspaces\n",
+    "FROM rpw_posture_latest GROUP BY ALL\n"
+   ]
+  },
+  {
+   "name": "trend",
+   "displayName": "Trend",
+   "queryLines": [
+    "SELECT date_trunc('DAY', snapshot_ts) AS day, control_name,\n",
+    "       count(DISTINCT CASE WHEN status = 'FAIL' THEN workspace_id END) AS failing_workspaces\n",
+    "FROM rpw_posture_findings WHERE tier = 'essential' GROUP BY ALL\n"
+   ]
+  },
+  {
+   "name": "changes",
+   "displayName": "Changes",
+   "queryLines": [
+    "SELECT snapshot_ts, workspace_id, control_name, prev_status, status, detail FROM rpw_posture_changes ORDER BY snapshot_ts DESC\n"
+   ]
+  }
+ ],
+ "pages": [
+  {
+   "name": "posture",
+   "displayName": "Posture",
+   "layout": [
+    {
+     "widget": {
+      "name": "hdr",
+      "multilineTextboxSpec": {
+       "lines": [
+        "## Security posture (rpw starter)\n",
+        "Essential controls and credential hygiene for every workspace in this account. Source: `rpw_posture_findings` written daily by the rpw_lakewatch_getting_started job. Lakewatch rules alert on regressions."
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 0,
+      "width": 6,
+      "height": 2
+     }
+    },
+    {
+     "widget": {
+      "name": "c_ws",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "summary",
+         "fields": [
+          {
+           "name": "workspaces",
+           "expression": "`workspaces`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "workspaces",
+         "displayName": "Workspaces evaluated"
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Workspaces evaluated"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 2,
+      "width": 2,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "c_fail",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "summary",
+         "fields": [
+          {
+           "name": "failing_essentials",
+           "expression": "`failing_essentials`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "failing_essentials",
+         "displayName": "Failing essential controls"
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Failing essential controls"
+       }
+      }
+     },
+     "position": {
+      "x": 2,
+      "y": 2,
+      "width": 2,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "c_hyg",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "summary",
+         "fields": [
+          {
+           "name": "hygiene_gaps",
+           "expression": "`hygiene_gaps`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "hygiene_gaps",
+         "displayName": "Credential hygiene gaps"
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Credential hygiene gaps"
+       }
+      }
+     },
+     "position": {
+      "x": 4,
+      "y": 2,
+      "width": 2,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "bar",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "by_control",
+         "fields": [
+          {
+           "name": "control_name",
+           "expression": "`control_name`"
+          },
+          {
+           "name": "status",
+           "expression": "`status`"
+          },
+          {
+           "name": "sum(workspaces)",
+           "expression": "SUM(`workspaces`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "bar",
+       "encodings": {
+        "x": {
+         "fieldName": "sum(workspaces)",
+         "scale": {
+          "type": "quantitative"
+         },
+         "displayName": "Workspaces"
+        },
+        "y": {
+         "fieldName": "control_name",
+         "scale": {
+          "type": "categorical"
+         },
+         "displayName": "Control"
+        },
+        "color": {
+         "fieldName": "status",
+         "scale": {
+          "type": "categorical",
+          "mappings": [
+           {
+            "value": "1 In place",
+            "color": "#1B8A5A"
+           },
+           {
+            "value": "2 Partial",
+            "color": "#E3A21A"
+           },
+           {
+            "value": "3 Needs attention",
+            "color": "#C0392B"
+           },
+           {
+            "value": "4 Not evaluated",
+            "color": "#9AA5B1"
+           },
+           {
+            "value": "5 Not applicable",
+            "color": "#D5DBE1"
+           }
+          ]
+         },
+         "displayName": "Status"
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Workspaces by control and status"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 5,
+      "width": 3,
+      "height": 7
+     }
+    },
+    {
+     "widget": {
+      "name": "trend",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "trend",
+         "fields": [
+          {
+           "name": "day",
+           "expression": "`day`"
+          },
+          {
+           "name": "control_name",
+           "expression": "`control_name`"
+          },
+          {
+           "name": "sum(failing_workspaces)",
+           "expression": "SUM(`failing_workspaces`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "line",
+       "encodings": {
+        "x": {
+         "fieldName": "day",
+         "scale": {
+          "type": "temporal"
+         },
+         "displayName": "Day"
+        },
+        "y": {
+         "fieldName": "sum(failing_workspaces)",
+         "scale": {
+          "type": "quantitative"
+         },
+         "displayName": "Workspaces failing"
+        },
+        "color": {
+         "fieldName": "control_name",
+         "scale": {
+          "type": "categorical"
+         },
+         "displayName": "Control"
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Failing essential controls over time"
+       }
+      }
+     },
+     "position": {
+      "x": 3,
+      "y": 5,
+      "width": 3,
+      "height": 7
+     }
+    },
+    {
+     "widget": {
+      "name": "t_latest",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "latest",
+         "fields": [
+          {
+           "name": "workspace_id",
+           "expression": "`workspace_id`"
+          },
+          {
+           "name": "control_name",
+           "expression": "`control_name`"
+          },
+          {
+           "name": "status",
+           "expression": "`status`"
+          },
+          {
+           "name": "adoption_pct",
+           "expression": "`adoption_pct`"
+          },
+          {
+           "name": "source",
+           "expression": "`source`"
+          },
+          {
+           "name": "detail",
+           "expression": "`detail`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "table",
+       "encodings": {
+        "columns": [
+         {
+          "fieldName": "workspace_id",
+          "displayName": "workspace id"
+         },
+         {
+          "fieldName": "control_name",
+          "displayName": "control name"
+         },
+         {
+          "fieldName": "status",
+          "displayName": "status"
+         },
+         {
+          "fieldName": "adoption_pct",
+          "displayName": "adoption pct"
+         },
+         {
+          "fieldName": "source",
+          "displayName": "source"
+         },
+         {
+          "fieldName": "detail",
+          "displayName": "detail"
+         }
+        ]
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Latest findings"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 12,
+      "width": 6,
+      "height": 9
+     }
+    },
+    {
+     "widget": {
+      "name": "t_changes",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "changes",
+         "fields": [
+          {
+           "name": "snapshot_ts",
+           "expression": "`snapshot_ts`"
+          },
+          {
+           "name": "workspace_id",
+           "expression": "`workspace_id`"
+          },
+          {
+           "name": "control_name",
+           "expression": "`control_name`"
+          },
+          {
+           "name": "prev_status",
+           "expression": "`prev_status`"
+          },
+          {
+           "name": "status",
+           "expression": "`status`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "table",
+       "encodings": {
+        "columns": [
+         {
+          "fieldName": "snapshot_ts",
+          "displayName": "snapshot ts"
+         },
+         {
+          "fieldName": "workspace_id",
+          "displayName": "workspace id"
+         },
+         {
+          "fieldName": "control_name",
+          "displayName": "control name"
+         },
+         {
+          "fieldName": "prev_status",
+          "displayName": "prev status"
+         },
+         {
+          "fieldName": "status",
+          "displayName": "status"
+         }
+        ]
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Status changes"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 21,
+      "width": 6,
+      "height": 6
+     }
+    }
+   ],
+   "pageType": "PAGE_TYPE_CANVAS"
+  }
+ ]
+}

@@ -1,0 +1,5 @@
+.venv/
+.databricks/
+uv.lock
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,176 @@
+# Lakewatch getting started
+
+A Databricks Asset Bundle that turns on **Lakewatch (Beta)** in your workspace
+only when that is safe. It then deploys a starter set of security-posture
+detections. One command deploys it and one job sets it up. Every object it
+creates is prefixed `rpw_`, so nothing you already have is overwritten.
+
+> Lakewatch is in Beta. Review the detections here with your security team
+> before you enable them. Rules are registered **disabled** by default.
+
+## What it does
+
+The job `rpw_lakewatch_getting_started` runs as one serverless task. Every step
+is idempotent, so re-running it is always safe.
+
+| Step | What happens |
+| --- | --- |
+| 1. Preflight | Checks that the job runs as a workspace admin and that Unity Catalog is enabled. |
+| 2. Observe | Reads the Lakewatch preview toggle, any existing Lakewatch environments, and any earlier preview setup. |
+| 3. Decide | Picks one of the paths below. A stop path changes nothing and explains why. |
+| 4. Environment | Only if Lakewatch is not set up yet: turns the Beta on, creates the catalog on your metastore's default storage, and registers and initializes it. |
+| 5. Folder | Creates the Lakewatch folder (schema) `rpw_security_posture`. |
+| 6. Content | Writes a posture snapshot. At the same time it registers the audit-log rules, then registers the posture rules. |
+
+### How it decides
+
+| Your workspace today | What the job does |
+| --- | --- |
+| Lakewatch has never been set up | Turns on the Lakewatch Beta preview, creates catalog `rpw_lakewatch`, and sets it up as the Lakewatch environment. |
+| Lakewatch Beta is already set up on the catalog you deploy with | Reuses it and changes no Lakewatch settings. |
+| Lakewatch Beta is set up on another catalog | Stops (`RPW-LW-E104`) and prints the exact redeploy command. |
+| An earlier Lakewatch preview is set up, but the Beta is not | Stops (`RPW-LW-E101`). Moving from the preview to the Beta is your decision. The job never modifies preview resources. To set up the Beta alongside the preview, opt in with `--var allow_with_prior_preview=true`. |
+
+## What gets deployed
+
+| Object | Name |
+| --- | --- |
+| Job (serverless, performance optimized) | `rpw_lakewatch_getting_started` (daily 06:15 UTC; paused in the `dev` target) |
+| SQL warehouse (serverless, 2X-Small, auto-stop 5 min) | `rpw_lakewatch_wh` (runs the rules and the dashboard) |
+| Dashboard | `rpw Security Posture` |
+| Catalog (only if Lakewatch is not set up yet) | `rpw_lakewatch` |
+| Lakewatch folder (schema) | `<catalog>.rpw_security_posture` |
+| Tables and views | `rpw_posture_findings`, `rpw_posture_latest`, `rpw_posture_changes` |
+| Lakewatch rules (disabled) | the 7 `rpw_*` rules listed below |
+
+### Posture controls (`rpw_posture_findings`)
+
+| Control | Evidence |
+| --- | --- |
+| Restricted inbound (IP access lists or Private Link) | API for this workspace. IP access denials in audit logs for other workspaces. |
+| Restricted outbound for serverless | Serverless network-policy events |
+| No public IP (Azure) | Reported as needing a manual check |
+| Unity Catalog adoption | Share of the last 30 days of compute on Unity Catalog access modes |
+| Restrict workspace admins | API for this workspace. Settings changes in audit logs for others. |
+| Cluster restart (patch hygiene) | Clusters up longer than `long_running_days` |
+| PAT maximum lifetime, long-lived tokens, service principals holding admin, verbose audit logs | API |
+
+The API checks cover the workspace the job runs in. The system-table checks
+cover every workspace in the account that the run-as identity can see in
+`system.*`.
+
+### Detection rules (`rules/*.yml`, same YAML as Lakewatch's "Edit as YAML")
+
+| Rule | Detects |
+| --- | --- |
+| `rpw_credential_use_from_denied_ip` | A credential is used from an IP address that your IP access lists rejected. |
+| `rpw_service_principal_new_source_ip` | A service principal authenticates from an IP address not seen in its baseline. |
+| `rpw_ip_access_list_weakened` | An IP access list is deleted, disabled, or widened. |
+| `rpw_restrict_workspace_admins_disabled` | The restrict-workspace-admins setting is relaxed. |
+| `rpw_pat_created_long_lived` | A personal access token is created with no expiry or a lifetime over 90 days. |
+| `rpw_posture_control_regressed` | An essential control that passed is now failing. |
+| `rpw_posture_control_failing` | An essential control is still failing (a weekly reminder). |
+
+## Prerequisites
+
+- **Workspace admin.** The job runs as the deployer in `dev`.
+- **Unity Catalog** enabled for the workspace.
+- **Serverless compute** for jobs and SQL. It is on by default for accounts created after 2024-12-16.
+- **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore with default storage.
+- **For the account-wide checks,** read access to `system.access`, `system.billing` and `system.compute`.
+- **A recent Databricks CLI** (tested with v1.26), authenticated to the workspace.
+
+## Deploy and run
+
+```bash
+databricks bundle deploy                                   # dev target, as you
+databricks bundle run rpw_lakewatch_getting_started --var dry_run=true   # optional: print the plan only
+databricks bundle run rpw_lakewatch_getting_started
+```
+
+If Lakewatch is already set up on catalog `security`:
+
+```bash
+databricks bundle deploy --var catalog=security
+databricks bundle run rpw_lakewatch_getting_started --var catalog=security
+```
+
+When the run finishes, open Lakewatch from the app switcher (the grid icon at
+the top left) and look in the `rpw_security_posture` folder. Tune each rule, then
+enable it there, or redeploy with `--var rules_enabled=true`. The `prod`
+target enables the rules and unpauses the schedule:
+`databricks bundle deploy -t prod`.
+
+### Variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `catalog` | `rpw_lakewatch` | The Lakewatch environment catalog. It is created only if Lakewatch is not set up. |
+| `schema` | `rpw_security_posture` | The Lakewatch folder for this bundle's tables and rules. |
+| `rules_enabled` | `false` | Schedule the rules when they are registered. |
+| `allow_with_prior_preview` | `false` | Set up the Beta next to an earlier preview setup. |
+| `dry_run` | `false` | Print the plan and change nothing. |
+| `error_beacon` | `true` | Report only the outcome code. See [Telemetry](#telemetry). |
+| `long_running_days` / `max_token_days` | `30` / `90` | Posture thresholds. |
+
+## When something goes wrong
+
+Every known failure stops with a code, for example `RPW-LW-E201`. The task
+output contains a block between `COPY FROM HERE` and `COPY TO HERE`. Paste that
+whole block into your AI assistant: Genie Code in the workspace, Claude,
+ChatGPT, Codex or another tool. The block explains what happened, the likely
+cause, the next steps and the relevant environment facts, so the assistant can
+walk you through the fix. In the Databricks UI, open the failed run and click
+the task to see its output. Fix the issue, then re-run the job.
+
+| Code | Meaning |
+| --- | --- |
+| `RPW-LW-E001` | The job is not running as a workspace admin. |
+| `RPW-LW-E002` | Unity Catalog is not enabled. |
+| `RPW-LW-E101` | An earlier preview is set up and the Beta is not. The job stopped on purpose. |
+| `RPW-LW-E102` | The Beta preview could not be turned on. It may not be offered for this cloud, region or tier. |
+| `RPW-LW-E103` | The Beta is on, but the Lakewatch service is not reachable yet. |
+| `RPW-LW-E104` | Lakewatch is set up on a different catalog. |
+| `RPW-LW-E201` | There is no default storage for a new catalog. Create the catalog with a `MANAGED LOCATION`. |
+| `RPW-LW-E202` | The catalog could not be created. This is usually a missing `CREATE CATALOG` permission. |
+| `RPW-LW-E203` / `E204` / `E205` | Environment registration, initialization, or folder creation failed. |
+| `RPW-LW-E301` | The posture tables could not be written. |
+| `RPW-LW-E401` | Some rules failed to register. Rules that succeeded are kept. |
+| `RPW-LW-E999` | An unexpected error. The block includes the failing step. |
+
+## Telemetry
+
+API calls from the job identify themselves in the HTTP user agent as
+`rpw-lakewatch-getting-started/<version>`. With `error_beacon=true`, the
+default, the job makes one more call at the end of each run. That call's user
+agent carries only the outcome code, `ok` or `RPW-LW-E###`. This lets the
+bundle's maintainers see which setup errors are common and fix them. No error
+text, names or data are sent. To turn it off, deploy with
+`--var error_beacon=false`.
+
+## Removing it
+
+`databricks bundle destroy` removes the job, the warehouse and the dashboard.
+Lakewatch content stays, so you don't lose detection history. To remove it,
+delete the `rpw_*` rules and the `rpw_security_posture` folder in Lakewatch. If
+this bundle created the `rpw_lakewatch` catalog, you can drop that too.
+
+## Development
+
+```bash
+uv run --group dev pytest        # offline tests: state machine, error rendering, rule lint, API mapping
+databricks bundle validate
+```
+
+The setup logic lives in `src/rpw_lakewatch/`:
+
+| File | Role |
+| --- | --- |
+| `state.py` | The pure decision policy |
+| `platform.py` | API calls and error mapping |
+| `rules.py` | Rule upsert |
+| `posture.py` | Posture collection |
+
+Lakewatch rules and environments are not yet bundle resource types. When they
+are, `rules/*.yml` and the environment step should move into `resources/`,
+and the matching Python can be deleted.

@@ -1,0 +1,39 @@
+rule_name: rpw_restrict_workspace_admins_disabled
+description: The Restrict Workspace Admins setting was changed away from RESTRICT_TOKENS_AND_JOB_RUN_AS or deleted.
+severity: Medium
+category: Static Signature
+fidelity: FIDELITY_HIGH
+objective: >
+  Restrict Workspace Admins stops a compromised admin from minting tokens for, or running jobs as, other principals.
+runbook: >
+  Confirm the change with the actor. If unapproved, re-enable the setting and review tokens and job run-as changes
+  made since.
+schedule:
+  at_least_every: 1h
+batch:
+  sql:
+    query: |
+      SELECT event_time, workspace_id, user_identity.email AS actor, source_ip_address AS src_ip, action_name,
+             request_params.settingValueForAudit AS new_value
+      FROM system.access.audit
+      WHERE IN_TIMERANGE(event_time)
+        AND action_name IN ('setSetting', 'deleteSetting')
+        AND request_params.settingTypeName ILIKE '%restrict_workspace_admins%'
+        AND response.status_code = 200
+        AND (action_name = 'deleteSetting'
+             OR coalesce(request_params.settingValueForAudit, '') NOT LIKE '%RESTRICT_TOKENS_AND_JOB_RUN_AS%')
+output:
+  event_time_column: event_time
+  summary: "Restrict Workspace Admins disabled by {actor} in workspace {workspace_id}"
+  context:
+    workspace_id: "{workspace_id}"
+    actor: "{actor}"
+    src_ip: "{src_ip}"
+    new_value: "{new_value}"
+deduplication: DEDUPLICATION_DEFAULT
+deduplication_time_window: automatic
+mitre:
+  - taxonomy: Enterprise
+    tactic: Privilege Escalation
+    technique_id: T1098
+    technique: Account Manipulation

@@ -1,0 +1,8 @@
+resources:
+  dashboards:
+    rpw_security_posture:
+      display_name: rpw Security Posture
+      file_path: ../src/dashboards/rpw_security_posture.lvdash.json
+      warehouse_id: ${resources.sql_warehouses.rpw_lakewatch_wh.id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}

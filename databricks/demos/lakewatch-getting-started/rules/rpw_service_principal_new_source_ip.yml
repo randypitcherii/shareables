@@ -1,0 +1,55 @@
+rule_name: rpw_service_principal_new_source_ip
+description: A service principal authenticated successfully from a source IP not seen for it in the prior 30 days.
+severity: Medium
+category: Behavioral
+fidelity: FIDELITY_INVESTIGATIVE
+objective: >
+  Service principals run from stable infrastructure. A first-seen source IP for a service principal is the pattern of
+  a stolen client secret or token being used from attacker infrastructure.
+runbook: >
+  Confirm with the service principal's owner whether the IP is new legitimate infrastructure. If not, rotate its OAuth
+  secrets and tokens, review its actions since first use of the IP, and restrict inbound access.
+schedule:
+  at_least_every: 1h
+batch:
+  sql:
+    query: |
+      WITH cur AS (
+        SELECT event_time, workspace_id, user_identity.email AS principal, source_ip_address AS src_ip, action_name, user_agent
+        FROM system.access.audit
+        WHERE IN_TIMERANGE(event_time)
+          AND action_name IN ('tokenLogin', 'oidcTokenAuthorization', 'mintOAuthToken')
+          AND response.status_code = 200
+          AND user_identity.email RLIKE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND source_ip_address IS NOT NULL AND source_ip_address <> ''
+      ),
+      base AS (
+        SELECT DISTINCT user_identity.email AS principal, source_ip_address AS src_ip
+        FROM system.access.audit
+        WHERE event_date >= current_date() - 31 AND event_time < (SELECT min(event_time) FROM cur)
+          AND user_identity.email IN (SELECT principal FROM cur)
+      ),
+      known AS (SELECT DISTINCT principal FROM base)
+      SELECT min(c.event_time) AS event_time, c.workspace_id, c.principal, c.src_ip,
+             count(*) AS auth_events, collect_set(c.action_name) AS actions, any_value(c.user_agent) AS user_agent
+      FROM cur c
+      JOIN known k ON c.principal = k.principal
+      LEFT ANTI JOIN base b ON c.principal = b.principal AND c.src_ip = b.src_ip
+      GROUP BY c.workspace_id, c.principal, c.src_ip
+output:
+  event_time_column: event_time
+  summary: "Service principal {principal} authenticated from new IP {src_ip}"
+  context:
+    workspace_id: "{workspace_id}"
+    principal: "{principal}"
+    src_ip: "{src_ip}"
+    user_agent: "{user_agent}"
+deduplication: DEDUPLICATION_ENABLED
+deduplication_time_window: 7 days
+mitre:
+  - taxonomy: Enterprise
+    tactic: Initial Access
+    technique_id: T1078
+    technique: Valid Accounts
+    sub_technique_id: T1078.004
+    sub_technique: Cloud Accounts
