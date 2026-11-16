@@ -127,9 +127,10 @@ walk you through the fix. `bundle run` prints the block in your terminal, and
 the failed run's page in the Databricks UI shows it too. Fix the issue, then
 re-run the job.
 
-**Brand-new workspace, `Input/output error` reading `/Workspace/...`:** files
-deployed in a workspace's first minutes can be unreadable by serverless
-compute. Delete the deployed files and redeploy:
+**Brand-new workspace, `Input/output error` reading `/Workspace/...`:** in a
+workspace's first minutes, serverless compute can briefly fail to read deployed
+files. The job retries twice, 45 seconds apart. If it keeps failing, delete the
+deployed files and redeploy:
 `databricks workspace delete /Workspace/Users/<you>/.bundle/lakewatch-getting-started/dev/files --recursive && databricks bundle deploy`.
 
 | Code | Meaning |
@@ -139,7 +140,7 @@ compute. Delete the deployed files and redeploy:
 | `LWGS-E101` | An earlier preview is set up and the Beta is not. The job stopped on purpose. |
 | `LWGS-E102` | The Beta preview could not be turned on. It may not be offered for this cloud, region or tier. |
 | `LWGS-E103` | The Beta is on, but the Lakewatch service is not reachable yet. |
-| `LWGS-E104` | Lakewatch is set up on a different catalog. |
+| `LWGS-E104` | Lakewatch is set up on a different catalog. The block prints the redeploy command for each existing environment. |
 | `LWGS-E201` | The API can't create a catalog on your metastore without a location. Create the catalog in Catalog Explorer (choose Default Storage if offered) or with `--storage-root`, then re-run. Nothing has been turned on yet. |
 | `LWGS-E202` | The catalog could not be created. This is usually a missing `CREATE CATALOG` permission. |
 | `LWGS-E203` | The catalog couldn't be registered as the Lakewatch environment. On a new Lakewatch workspace, wait 10 minutes and re-run. |

@@ -248,8 +248,8 @@ def collect(spark, w, catalog: str, schema: str, long_running_days: int, max_tok
             what_happened=f"Writing {catalog}.{schema}.rpw_security_infra_findings failed: {type(e).__name__}: {str(e)[:300]}",
             likely_cause="The run-as identity lacks CREATE TABLE/USE SCHEMA on the folder, or serverless compute "
                          "cannot reach the catalog's storage.",
-            next_steps=[f"GRANT USE CATALOG ON CATALOG {catalog} TO `<run-as>`; "
-                        f"GRANT USE SCHEMA, CREATE TABLE ON SCHEMA {catalog}.{schema} TO `<run-as>`.",
+            next_steps=[f"GRANT USE CATALOG ON CATALOG {catalog} TO `RUN_AS_IDENTITY`; "
+                        f"GRANT USE SCHEMA, CREATE TABLE ON SCHEMA {catalog}.{schema} TO `RUN_AS_IDENTITY`.",
                         "Re-run the job."],
             context=ctx) from e
     by_control: dict = {}

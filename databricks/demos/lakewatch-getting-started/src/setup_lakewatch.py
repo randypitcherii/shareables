@@ -46,7 +46,7 @@ def log(step: str, **kv):
     print(json.dumps({"step": step, **kv}, default=str), flush=True)
 
 
-def stop_error(code: str, plan_notes: list[str], a, ctx: dict) -> SetupError:
+def stop_error(code: str, plan_notes: list[str], a, ctx: dict, envs: list[str] | None = None) -> SetupError:
     if code == "LWGS-E101":
         return SetupError(
             code,
@@ -58,20 +58,22 @@ def stop_error(code: str, plan_notes: list[str], a, ctx: dict) -> SetupError:
             next_steps=["Talk to whoever set up the preview (and your Databricks account team) about moving to "
                         "the Beta. Preview resources keep working while the Beta is set up alongside.",
                         "When ready, set up the Beta from the app switcher > Lakewatch, then re-run this job. It "
-                        "reuses that environment if you deploy with --var catalog=<that catalog>.",
+                        "reuses that environment if you deploy with --var catalog=THAT_CATALOG.",
                         "Or, to have this job set up the Beta next to the preview, redeploy with "
                         "--var allow_with_prior_preview=true."],
             context=ctx)
     if code == "LWGS-E104":
+        envs = sorted(envs or [])
+        cmds = [f"databricks bundle deploy --var catalog={c} && databricks bundle run rpw_lakewatch_getting_started"
+                for c in envs] or ["databricks api get /api/2.0/lakewatch/environments   # find the catalog first"]
         return SetupError(
             code,
             what_happened=f"Lakewatch is already set up, but on another catalog. {'; '.join(plan_notes)}. "
                           "The bundle made no changes.",
             likely_cause="The bundle's `catalog` variable (default rpw_lakewatch) must name the catalog of the "
                          "existing Lakewatch environment so the dashboard and rules land in it.",
-            next_steps=["Redeploy pointing at the existing environment, then re-run: "
-                        "databricks bundle deploy --var catalog=<existing catalog> && "
-                        "databricks bundle run rpw_lakewatch_getting_started"],
+            next_steps=[("Redeploy pointing at the existing environment, then re-run:" if len(cmds) == 1 else
+                         "Pick the environment this bundle should use, then run the matching command:")] + cmds,
             context=ctx)
     raise ValueError(code)
 
@@ -104,7 +106,7 @@ def run(a) -> dict:
         ctx["plan"] = {"action": plan.action.value, "enable_beta": plan.enable_beta, "notes": plan.notes}
         log(step, **ctx["plan"])
         if plan.action is Action.STOP:
-            raise stop_error(plan.error_code, plan.notes, a, ctx)
+            raise stop_error(plan.error_code, plan.notes, a, ctx, obs.environments)
         if a.dry_run:
             log("dry_run", message="No changes made.")
             return {"dry_run": True, **ctx["plan"]}
@@ -121,7 +123,7 @@ def run(a) -> dict:
             envs = p.wait_for_environments_api(ctx)
             if a.catalog not in envs:
                 if envs:  # someone set it up while we waited; do not create a second one
-                    raise stop_error("LWGS-E104", [f"existing environments: {sorted(envs)}"], a, ctx)
+                    raise stop_error("LWGS-E104", [f"existing environments: {sorted(envs)}"], a, ctx, envs)
                 p.register_environment(a.catalog, a.warehouse_id, ctx)
                 created["environment"] = a.catalog
             p.ensure_initialized(a.catalog, a.warehouse_id, ctx)

@@ -57,3 +57,13 @@ def test_prior_preview_with_explicit_opt_in_proceeds():
 
 def test_unknown_prior_preview_does_not_block():
     assert decide(obs(prior_preview_setup=None)).action is Action.CREATE_ENVIRONMENT
+
+
+def test_e104_prints_one_concrete_command_per_environment():
+    """Placeholders like <catalog> get stripped by some UIs; E104 must print real catalog names."""
+    import argparse
+    import setup_lakewatch
+    e = setup_lakewatch.stop_error("LWGS-E104", ["x"], argparse.Namespace(), {}, ["lakewatch", "rpw_lakewatch"])
+    text = e.render()
+    assert "--var catalog=lakewatch &&" in text and "--var catalog=rpw_lakewatch &&" in text
+    assert "--var catalog= " not in text and "<" not in text

@@ -25,7 +25,11 @@ resources:
       tasks:
         - task_key: setup_lakewatch
           environment_key: default
-          max_retries: 0
+          # Brand-new workspaces can fail to read /Workspace files for the first ~30s of a serverless task
+          # (before any bundle code runs). Every step is idempotent, so a delayed retry is safe.
+          max_retries: 2
+          min_retry_interval_millis: 45000
+          retry_on_timeout: false
           spark_python_task:
             python_file: ../src/setup_lakewatch.py
             parameters:

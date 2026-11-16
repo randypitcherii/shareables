@@ -19,6 +19,11 @@ LEGACY_CONFIG = "/api/2.0/dasl-apiserver/apis/workspace/v1/config"
 _ABSENT_MARKERS = ("not found", "no api found", "does not exist", "feature_disabled", "not enabled", "not_implemented")
 
 
+def _storage_example(cloud: str | None) -> str:
+    return {"azure": "abfss://CONTAINER@STORAGE_ACCOUNT.dfs.core.windows.net/rpw_lakewatch",
+            "gcp": "gs://YOUR_BUCKET/rpw_lakewatch"}.get(cloud or "", "s3://YOUR_BUCKET/rpw_lakewatch")
+
+
 def _absent(e: Exception) -> bool:
     return isinstance(e, NotFound) or any(m in str(e).lower() for m in _ABSENT_MARKERS)
 
@@ -151,7 +156,7 @@ class Platform:
                     next_steps=[f"Easiest: in Catalog Explorer click + > Create a catalog, name it '{catalog}', "
                                 "choose Default Storage (if offered), and create it.",
                                 f"Or with a location you own: databricks catalogs create {catalog} --storage-root "
-                                "'s3://<bucket>/<path>' (or abfss:// / gs://; needs an external location with "
+                                f"'{_storage_example(ctx.get('cloud'))}' (needs an external location with "
                                 "CREATE MANAGED STORAGE).",
                                 "Or ask a metastore admin to set a metastore storage root.",
                                 "Then re-run the job; it reuses an existing catalog with this name."],
@@ -160,7 +165,7 @@ class Platform:
                 "LWGS-E202",
                 what_happened=f"CREATE CATALOG {catalog} failed: {msg[:300]}",
                 likely_cause="The run-as identity lacks CREATE CATALOG on the metastore.",
-                next_steps=["Grant it: GRANT CREATE CATALOG ON METASTORE TO `<run-as user or SP>` (metastore admin).",
+                next_steps=["Grant it: GRANT CREATE CATALOG ON METASTORE TO `RUN_AS_USER_OR_SP` (metastore admin).",
                             f"Or create the catalog '{catalog}' yourself and grant the run-as identity MANAGE and "
                             "CREATE SCHEMA on it, then re-run."],
                 context=ctx) from e
@@ -208,8 +213,11 @@ class Platform:
                           "The run-as identity needs MANAGE and CREATE SCHEMA on the catalog, or the catalog "
                           "uses the legacy Hive metastore."),
             next_steps=(["Wait 10 minutes and re-run the job. It picks up where it left off.",
-                         "If it still fails: open the app switcher > Lakewatch once in the UI (this initializes "
-                         "the metastore), then re-run the job."] if not_ready else
+                         "If it still fails, initialize Lakewatch on the metastore, then re-run: databricks api post "
+                         "/api/2.0/lakewatch/metastore:ensureInitialized --json "
+                         f"'{{\"warehouse_id\": \"{warehouse_id}\"}}'",
+                         "Avoid the Lakewatch UI setup here: it creates its own `lakewatch` catalog, which leaves "
+                         "a second, unused environment."] if not_ready else
                         ["Confirm the catalog is a Unity Catalog managed catalog you own.",
                          "Alternatively run the Lakewatch setup once in the UI (app switcher > Lakewatch) "
                          "choosing this catalog, then re-run the job; it will reuse it."]),
@@ -272,7 +280,7 @@ class Platform:
                 "LWGS-E205",
                 what_happened=f"Creating Lakewatch folder {catalog}.{schema} failed: {str(err)[:300]}",
                 likely_cause="The run-as identity lacks CREATE SCHEMA on the catalog.",
-                next_steps=[f"GRANT CREATE SCHEMA, USE CATALOG ON CATALOG {catalog} TO `<run-as identity>`.",
+                next_steps=[f"GRANT CREATE SCHEMA, USE CATALOG ON CATALOG {catalog} TO `RUN_AS_IDENTITY`.",
                             f"If a schema named {schema} already exists and is not a Lakewatch folder, rename it or "
                             "set the bundle variable `schema` to a new name.", "Re-run the job."],
                 context=ctx) from err
