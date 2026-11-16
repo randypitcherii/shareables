@@ -83,7 +83,7 @@ def test_no_default_storage_maps_to_e201():
     c = Catalogs(create_error=Exception("Metastore storage root URL does not exist. Please provide a storage location"))
     with pytest.raises(SetupError) as e:
         platform(catalogs=c).ensure_catalog("x", {})
-    assert e.value.code == "LWGS-E201" and "MANAGED LOCATION" in e.value.render()
+    assert e.value.code == "LWGS-E201" and "--storage-root" in e.value.render() and "Default Storage" in e.value.render()
 
 
 def test_permission_maps_to_e202():
@@ -112,3 +112,36 @@ def test_folder_registers_existing_schema():
     p = platform({("GET", "/api/2.0/lakewatch/folders"): {"folders": []},
                   ("POST", "/api/2.0/lakewatch/folders"): {}}, schemas=Schemas(exists=True))
     assert p.ensure_folder("c", "rpw_databricks_security_infra", {}) is True
+
+
+def test_register_environment_initializes_metastore_then_retries(monkeypatch):
+    """Fresh workspaces: 'parent of environment does not exist' until the metastore is initialized."""
+    from databricks.sdk.errors import InvalidParameterValue
+    monkeypatch.setattr("rpw_lakewatch.platform.time.sleep", lambda s: None)
+    state = {"init": False}
+
+    def env():
+        if not state["init"]:
+            raise InvalidParameterValue("parent of environment does not exist")
+        return {}
+
+    def init():
+        state["init"] = True
+        return {"state": "SUCCEEDED"}
+
+    p = platform({("POST", "/api/2.0/lakewatch/environments"): env,
+                  ("POST", "/api/2.0/lakewatch/metastore:ensureInitialized"): init})
+    p.register_environment("c", "wh", {})
+    paths = [c[1] for c in p.w.api_client.calls]
+    assert paths == ["/api/2.0/lakewatch/environments", "/api/2.0/lakewatch/metastore:ensureInitialized",
+                     "/api/2.0/lakewatch/environments"]
+
+
+def test_register_environment_not_ready_explains(monkeypatch):
+    from databricks.sdk.errors import InvalidParameterValue
+    monkeypatch.setattr("rpw_lakewatch.platform.time.sleep", lambda s: None)
+    p = platform({("POST", "/api/2.0/lakewatch/environments"): InvalidParameterValue("parent of environment does not exist"),
+                  ("POST", "/api/2.0/lakewatch/metastore:ensureInitialized"): {"state": "PENDING"}})
+    with pytest.raises(SetupError) as ei:
+        p.register_environment("c", "wh", {}, timeout_s=0)
+    assert ei.value.code == "LWGS-E203" and "not initialized" in ei.value.likely_cause

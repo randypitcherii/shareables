@@ -9,15 +9,9 @@ bundle:
   name: lakewatch-getting-started
 
 sync:
-  include:
-    - src/**
-    - rules/**
+  # Gitignored files (.venv, __pycache__, uv.lock) are never synced.
   exclude:
-    - .venv/**
     - tests/**
-    - "**/__pycache__/**"
-    - .pytest_cache/**
-    - uv.lock
 
 include:
   - resources/*.yml

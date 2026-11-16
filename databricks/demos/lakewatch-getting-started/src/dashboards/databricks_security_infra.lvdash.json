@@ -60,7 +60,7 @@
       "multilineTextboxSpec": {
        "lines": [
         "## Databricks security infrastructure\n",
-        "Essential controls and credential hygiene for every workspace in this account. Source: `rpw_security_infra_findings` written daily by the rpw_lakewatch_getting_started job. Lakewatch rules alert on regressions."
+        "Essential controls and credential hygiene for every workspace in this account, refreshed daily by the Lakewatch Getting Started job. The trend chart fills in from the second day. Lakewatch rules alert on regressions."
        ]
       }
      },

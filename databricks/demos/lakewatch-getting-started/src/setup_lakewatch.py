@@ -4,7 +4,7 @@ Order of operations (each step is idempotent, so the job is safe to re-run):
   1. preflight      workspace admin, Unity Catalog
   2. observe        Beta preview toggle, existing Lakewatch environments, earlier preview setup   (parallel)
   3. decide         pure policy in rpw_lakewatch/state.py; STOP states explain and exit unchanged
-  4. environment    turn on the Beta, create catalog on default storage, register + initialize     (only if new)
+  4. environment    create catalog on default storage, turn on the Beta, register + initialize     (only if new)
   5. folder         Lakewatch folder (schema) for this bundle's tables and rules
   6. content        security infra snapshot || audit-log rules, then findings rules                     (parallel)
 """
@@ -113,6 +113,8 @@ def run(a) -> dict:
         step = "environment"
         created = {}
         if plan.action is Action.CREATE_ENVIRONMENT:
+            # Catalog first: if it can't be created (E201/E202), nothing has been turned on yet.
+            created["catalog"] = p.ensure_catalog(a.catalog, ctx)
             if plan.enable_beta:
                 p.enable_beta(ctx)
                 created["beta_preview"] = "turned on"
@@ -120,8 +122,7 @@ def run(a) -> dict:
             if a.catalog not in envs:
                 if envs:  # someone set it up while we waited; do not create a second one
                     raise stop_error("LWGS-E104", [f"existing environments: {sorted(envs)}"], a, ctx)
-                created["catalog"] = p.ensure_catalog(a.catalog, ctx)
-                p.register_environment(a.catalog, ctx)
+                p.register_environment(a.catalog, a.warehouse_id, ctx)
                 created["environment"] = a.catalog
             p.ensure_initialized(a.catalog, a.warehouse_id, ctx)
         log(step, **created)
@@ -173,13 +174,12 @@ def main(argv=None):
     try:
         result = run(a)
     except SetupError as e:
-        print(e.render(), flush=True)
         print("LAKEWATCH_GETTING_STARTED_RESULT " + json.dumps({"ok": False, "code": e.code}), flush=True)
         if a.error_beacon:
             beacon(e.code)
-        # The run's error message starts with the code so it is searchable and shows on the run page.
-        raise RuntimeError(f"{e.code}: {e.title}. Copy the block between the COPY markers in this task's "
-                           "output into your AI assistant for step-by-step help.") from None
+        # The full, AI-pasteable block is the run's error message, so `bundle run` prints it in the terminal and
+        # the run page shows it. It starts with the code so it is searchable.
+        raise RuntimeError(f"{e.code}: {e.title}\n\n{e.render()}") from None
     print("LAKEWATCH_GETTING_STARTED_RESULT " + json.dumps({"ok": True}), flush=True)
     if a.error_beacon:
         beacon("ok")

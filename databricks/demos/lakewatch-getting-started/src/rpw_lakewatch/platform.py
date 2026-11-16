@@ -145,13 +145,16 @@ class Platform:
                 raise SetupError(
                     "LWGS-E201",
                     what_happened=f"CREATE CATALOG {catalog} failed: {msg[:300]}",
-                    likely_cause="The metastore has no default storage (no metastore storage root and Default "
-                                 "Storage is not available), so a catalog needs an explicit managed location.",
-                    next_steps=[f"Create the catalog yourself with a managed location you own, e.g. in SQL: "
-                                f"CREATE CATALOG {catalog} MANAGED LOCATION 's3://<bucket>/<path>' "
-                                f"(needs an external location and CREATE MANAGED STORAGE on it).",
+                    likely_cause="The metastore has no storage root, so the API cannot create a catalog without an "
+                                 "explicit location. (If your account has Default Storage, only the UI can create a "
+                                 "catalog on it.) Lakewatch has not been turned on yet; nothing was changed.",
+                    next_steps=[f"Easiest: in Catalog Explorer click + > Create a catalog, name it '{catalog}', "
+                                "choose Default Storage (if offered), and create it.",
+                                f"Or with a location you own: databricks catalogs create {catalog} --storage-root "
+                                "'s3://<bucket>/<path>' (or abfss:// / gs://; needs an external location with "
+                                "CREATE MANAGED STORAGE).",
                                 "Or ask a metastore admin to set a metastore storage root.",
-                                "Re-run the job; it reuses an existing catalog with this name."],
+                                "Then re-run the job; it reuses an existing catalog with this name."],
                     context=ctx) from e
             raise SetupError(
                 "LWGS-E202",
@@ -162,23 +165,55 @@ class Platform:
                             "CREATE SCHEMA on it, then re-run."],
                 context=ctx) from e
 
-    def register_environment(self, catalog: str, ctx: dict) -> None:
+    def _init_metastore(self, catalog: str | None, warehouse_id: str) -> str | None:
+        """Best-effort metastore-level Lakewatch initialization. Returns the reported state, or None on error."""
+        body = {"warehouse_id": warehouse_id, **({"catalog": catalog} if catalog else {})}
         try:
-            self.w.api_client.do("POST", "/api/2.0/lakewatch/environments", body={"catalog_name": catalog})
-        except ResourceAlreadyExists:
-            return
-        except DatabricksError as e:
-            if "already exists" in str(e).lower():
+            return (self.w.api_client.do("POST", "/api/2.0/lakewatch/metastore:ensureInitialized", body=body) or {}).get("state")
+        except DatabricksError:
+            return None
+
+    def register_environment(self, catalog: str, warehouse_id: str, ctx: dict, timeout_s: int = 600) -> None:
+        """Register the catalog as the Lakewatch environment.
+
+        On a workspace where Lakewatch was never used, registration can fail with "parent of environment does not
+        exist" until the metastore is initialized for Lakewatch and the Beta toggle has propagated (minutes). So on
+        that error: initialize the metastore, then retry with backoff.
+        """
+        deadline, delay, err = time.time() + timeout_s, 10, None
+        while True:
+            try:
+                self.w.api_client.do("POST", "/api/2.0/lakewatch/environments", body={"catalog_name": catalog})
                 return
-            raise SetupError(
-                "LWGS-E203",
-                what_happened=f"Registering catalog '{catalog}' as a Lakewatch environment failed: {str(e)[:300]}",
-                likely_cause="The run-as identity needs MANAGE and CREATE SCHEMA on the catalog, or the catalog "
-                             "uses the legacy Hive metastore.",
-                next_steps=["Confirm the catalog is a Unity Catalog managed catalog you own.",
-                            "Alternatively run the Lakewatch setup once in the UI (app switcher > Lakewatch) "
-                            "choosing this catalog, then re-run the job; it will reuse it."],
-                context=ctx) from e
+            except ResourceAlreadyExists:
+                return
+            except DatabricksError as e:
+                err = e
+                msg = str(e).lower()
+                if "already exists" in msg:
+                    return
+                if "parent of environment does not exist" not in msg or time.time() > deadline:
+                    break
+                if self._init_metastore(None, warehouse_id) != "SUCCEEDED":
+                    self._init_metastore(catalog, warehouse_id)
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+        not_ready = "parent of environment does not exist" in str(err).lower()
+        raise SetupError(
+            "LWGS-E203",
+            what_happened=f"Registering catalog '{catalog}' as a Lakewatch environment failed: {str(err)[:300]}",
+            likely_cause=("Lakewatch is not initialized on this metastore yet. On a workspace where Lakewatch was "
+                          "never used, this clears within about 10 minutes of turning on the Beta; the job retried "
+                          f"for {timeout_s // 60} minutes." if not_ready else
+                          "The run-as identity needs MANAGE and CREATE SCHEMA on the catalog, or the catalog "
+                          "uses the legacy Hive metastore."),
+            next_steps=(["Wait 10 minutes and re-run the job. It picks up where it left off.",
+                         "If it still fails: open the app switcher > Lakewatch once in the UI (this initializes "
+                         "the metastore), then re-run the job."] if not_ready else
+                        ["Confirm the catalog is a Unity Catalog managed catalog you own.",
+                         "Alternatively run the Lakewatch setup once in the UI (app switcher > Lakewatch) "
+                         "choosing this catalog, then re-run the job; it will reuse it."]),
+            context=ctx) from err
 
     def ensure_initialized(self, catalog: str, warehouse_id: str, ctx: dict, timeout_s: int = 600) -> None:
         deadline = time.time() + timeout_s

@@ -18,7 +18,7 @@ is idempotent, so re-running it is always safe.
 | 1. Preflight | Checks that the job runs as a workspace admin and that Unity Catalog is enabled. |
 | 2. Observe | Reads the Lakewatch preview toggle, any existing Lakewatch environments, and any earlier preview setup. |
 | 3. Decide | Picks one of the paths below. A stop path changes nothing and explains why. |
-| 4. Environment | Only if Lakewatch is not set up yet: turns the Beta on, creates the catalog on your metastore's default storage, and registers and initializes it. |
+| 4. Environment | Only if Lakewatch is not set up yet: creates the catalog on your metastore's default storage, then turns the Beta on and registers and initializes the catalog. On a workspace that has never used Lakewatch, registration can take a few minutes after the Beta is turned on; the job waits and retries. |
 | 5. Folder | Creates the Lakewatch folder (schema) `rpw_databricks_security_infra`. |
 | 6. Content | Writes a Databricks security infrastructure snapshot. At the same time it registers the audit-log rules, then registers the rules that read the snapshot. |
 
@@ -76,7 +76,7 @@ cover every workspace in the account that the run-as identity can see in
 - **Workspace admin.** The job runs as the deployer in `dev`.
 - **Unity Catalog** enabled for the workspace.
 - **Serverless compute** for jobs and SQL. It is on by default for accounts created after 2024-12-16.
-- **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore with default storage.
+- **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore storage root. Without one, create the catalog yourself first (see `LWGS-E201`).
 - **For the account-wide checks,** read access to `system.access`, `system.billing` and `system.compute`.
 - **A recent Databricks CLI** (tested with v1.26), authenticated to the workspace.
 
@@ -88,7 +88,8 @@ databricks bundle run rpw_lakewatch_getting_started --params dry_run=true   # op
 databricks bundle run rpw_lakewatch_getting_started
 ```
 
-If Lakewatch is already set up on catalog `security`:
+If Lakewatch is already set up, find its catalog with
+`databricks api get /api/2.0/lakewatch/environments`, then deploy with it. For example, for catalog `security`:
 
 ```bash
 databricks bundle deploy --var catalog=security
@@ -122,8 +123,14 @@ output contains a block between `COPY FROM HERE` and `COPY TO HERE`. Paste that
 whole block into your AI assistant: Genie Code in the workspace, Claude,
 ChatGPT, Codex or another tool. The block explains what happened, the likely
 cause, the next steps and the relevant environment facts, so the assistant can
-walk you through the fix. In the Databricks UI, open the failed run and click
-the task to see its output. Fix the issue, then re-run the job.
+walk you through the fix. `bundle run` prints the block in your terminal, and
+the failed run's page in the Databricks UI shows it too. Fix the issue, then
+re-run the job.
+
+**Brand-new workspace, `Input/output error` reading `/Workspace/...`:** files
+deployed in a workspace's first minutes can be unreadable by serverless
+compute. Delete the deployed files and redeploy:
+`databricks workspace delete /Workspace/Users/<you>/.bundle/lakewatch-getting-started/dev/files --recursive && databricks bundle deploy`.
 
 | Code | Meaning |
 | --- | --- |
@@ -133,9 +140,10 @@ the task to see its output. Fix the issue, then re-run the job.
 | `LWGS-E102` | The Beta preview could not be turned on. It may not be offered for this cloud, region or tier. |
 | `LWGS-E103` | The Beta is on, but the Lakewatch service is not reachable yet. |
 | `LWGS-E104` | Lakewatch is set up on a different catalog. |
-| `LWGS-E201` | There is no default storage for a new catalog. Create the catalog with a `MANAGED LOCATION`. |
+| `LWGS-E201` | The API can't create a catalog on your metastore without a location. Create the catalog in Catalog Explorer (choose Default Storage if offered) or with `--storage-root`, then re-run. Nothing has been turned on yet. |
 | `LWGS-E202` | The catalog could not be created. This is usually a missing `CREATE CATALOG` permission. |
-| `LWGS-E203` / `E204` / `E205` | Environment registration, initialization, or folder creation failed. |
+| `LWGS-E203` | The catalog couldn't be registered as the Lakewatch environment. On a new Lakewatch workspace, wait 10 minutes and re-run. |
+| `LWGS-E204` / `E205` | Initialization or folder creation failed. |
 | `LWGS-E301` | The security infrastructure tables could not be written. |
 | `LWGS-E401` | Some rules failed to register. Rules that succeeded are kept. |
 | `LWGS-E999` | An unexpected error. The block includes the failing step. |
