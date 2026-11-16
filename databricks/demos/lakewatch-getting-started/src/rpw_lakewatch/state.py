@@ -5,7 +5,7 @@ Observed facts -> one Plan. The policy is opinionated but never destructive:
   1. Lakewatch Beta already set up (an environment exists)  -> reuse it, change nothing.
   2. Nothing set up and no earlier preview                   -> turn on the Beta, create the environment.
   3. An earlier (pre-Beta) Lakewatch preview setup exists,
-     but no Beta environment                                  -> STOP and explain (RPW-LW-E101). Moving a
+     but no Beta environment                                  -> STOP and explain (LWGS-E101). Moving a
                                                                  preview workspace onto the Beta is the
                                                                  customer's decision, not this bundle's.
 """
@@ -50,12 +50,12 @@ def decide(o: Observed) -> Plan:
                 notes.append("Lakewatch environment exists but the Beta preview toggle is off; leaving it off. "
                              "Turn it on under Settings > Previews to see Lakewatch in the app switcher.")
             return Plan(Action.USE_EXISTING, catalog=o.target_catalog, notes=notes)
-        return Plan(Action.STOP, error_code="RPW-LW-E104",
+        return Plan(Action.STOP, error_code="LWGS-E104",
                     notes=[f"existing environments: {sorted(envs)}; bundle catalog: {o.target_catalog}"])
 
     # State 3: an earlier preview is configured and the Beta is not. Do not push it onto the Beta.
     if o.prior_preview_setup and not o.allow_with_prior_preview:
-        return Plan(Action.STOP, error_code="RPW-LW-E101")
+        return Plan(Action.STOP, error_code="LWGS-E101")
 
     # State 2: fresh. Turn the Beta on if needed, then create the environment.
     notes = []

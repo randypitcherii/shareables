@@ -1,4 +1,4 @@
-rule_name: rpw_pat_created_long_lived
+rule_name: databricks_security_infra_pat_created_long_lived
 description: A personal access token was created with no expiry or a lifetime over 90 days.
 severity: Low
 category: Credential Hygiene

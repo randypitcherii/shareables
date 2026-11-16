@@ -1,7 +1,7 @@
-rule_name: rpw_posture_control_failing
+rule_name: databricks_security_infra_control_failing
 description: An essential security control is failing in a workspace (weekly reminder until remediated).
 severity: Medium
-category: Posture
+category: Security Infrastructure
 fidelity: FIDELITY_MEDIUM
 objective: >
   Keeps open Essential gaps visible to the security team. One signal per workspace and control per week.
@@ -15,7 +15,7 @@ batch:
   sql:
     query: |
       SELECT snapshot_ts, workspace_id, control_key, control_name, status, adoption_pct, source, detail
-      FROM ${catalog}.${schema}.rpw_posture_findings
+      FROM ${catalog}.${schema}.rpw_security_infra_findings
       WHERE IN_TIMERANGE(snapshot_ts)
         AND tier = 'essential' AND status = 'FAIL'
 output:

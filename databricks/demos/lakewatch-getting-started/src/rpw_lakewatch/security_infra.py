@@ -1,8 +1,8 @@
-"""Security posture collector.
+"""Databricks security infrastructure checks.
 
 Evaluates six essential workspace security controls plus credential-hygiene
 checks and appends one row per (workspace, control) to
-<catalog>.<schema>.rpw_posture_findings.
+<catalog>.<schema>.rpw_security_infra_findings.
 
 Two evidence sources, recorded in the `source` column:
   api           authoritative settings for the workspace this job runs in (needs workspace admin)
@@ -234,18 +234,18 @@ def collect(spark, w, catalog: str, schema: str, long_running_days: int, max_tok
     rows = Collector(spark, w, args).run()
     try:
         df = spark.createDataFrame(rows, _schema())
-        df.write.mode("append").option("mergeSchema", "true").saveAsTable(f"{fq}.rpw_posture_findings")
-        spark.sql(f"""CREATE OR REPLACE VIEW {fq}.rpw_posture_latest AS
-            SELECT * FROM {fq}.rpw_posture_findings
+        df.write.mode("append").option("mergeSchema", "true").saveAsTable(f"{fq}.rpw_security_infra_findings")
+        spark.sql(f"""CREATE OR REPLACE VIEW {fq}.rpw_security_infra_latest AS
+            SELECT * FROM {fq}.rpw_security_infra_findings
             QUALIFY dense_rank() OVER (ORDER BY snapshot_ts DESC) = 1""")
-        spark.sql(f"""CREATE OR REPLACE VIEW {fq}.rpw_posture_changes AS
+        spark.sql(f"""CREATE OR REPLACE VIEW {fq}.rpw_security_infra_changes AS
             WITH s AS (SELECT *, lag(status) OVER (PARTITION BY workspace_id, control_key ORDER BY snapshot_ts) AS prev_status
-                       FROM {fq}.rpw_posture_findings)
+                       FROM {fq}.rpw_security_infra_findings)
             SELECT * FROM s WHERE prev_status IS NOT NULL AND prev_status <> status""")
     except Exception as e:  # noqa: BLE001
         raise SetupError(
-            "RPW-LW-E301",
-            what_happened=f"Writing {catalog}.{schema}.rpw_posture_findings failed: {type(e).__name__}: {str(e)[:300]}",
+            "LWGS-E301",
+            what_happened=f"Writing {catalog}.{schema}.rpw_security_infra_findings failed: {type(e).__name__}: {str(e)[:300]}",
             likely_cause="The run-as identity lacks CREATE TABLE/USE SCHEMA on the folder, or serverless compute "
                          "cannot reach the catalog's storage.",
             next_steps=[f"GRANT USE CATALOG ON CATALOG {catalog} TO `<run-as>`; "

@@ -17,7 +17,7 @@ from databricks.sdk.service.lakewatch import Rule
 
 from .errors import SetupError
 
-PREFIX = "rpw_"
+PREFIX = "databricks_security_infra_"
 MUTABLE = ["description", "severity", "category", "fidelity", "objective", "mitre", "schedule", "batch", "output",
            "deduplication", "deduplication_time_window", "annotations", "timerange", "runbook", "references"]
 
@@ -30,7 +30,7 @@ def load_specs(rules_dir: str, subs: dict[str, str]) -> list[dict]:
             text = text.replace("${" + k + "}", v)
         spec = yaml.safe_load(text)
         if not str(spec.get("rule_name", "")).startswith(PREFIX):
-            raise ValueError(f"{path}: rule_name must start with '{PREFIX}' so existing rules are never overwritten")
+            raise ValueError(f"{path}: rule_name must start with '{PREFIX}' so this bundle's rules are easy to identify in Lakewatch")
         specs.append(spec)
     return specs
 
@@ -56,9 +56,9 @@ def upsert(w: WorkspaceClient, spec: dict) -> dict:
     return {"rule": spec["rule_name"], "action": "created", "name": out.name}
 
 
-def uses_posture_tables(spec: dict) -> bool:
-    """Rules over the bundle's posture tables must wait for the first snapshot."""
-    return "rpw_posture_" in str(spec.get("batch", {}).get("sql", {}).get("query", ""))
+def uses_findings_tables(spec: dict) -> bool:
+    """Rules over the bundle's security infrastructure tables must wait for the first snapshot."""
+    return "rpw_security_infra_" in str(spec.get("batch", {}).get("sql", {}).get("query", ""))
 
 
 def register_all(w: WorkspaceClient, rules_dir: str, catalog: str, schema: str, warehouse_id: str,
@@ -80,7 +80,7 @@ def register_all(w: WorkspaceClient, rules_dir: str, catalog: str, schema: str, 
     failed = [r for r in results if r["action"] == "failed"]
     if failed:
         raise SetupError(
-            "RPW-LW-E401",
+            "LWGS-E401",
             what_happened=f"{len(failed)} of {len(results)} detection rules failed to register: {failed}",
             likely_cause="A rule's SQL references a table the warehouse cannot read (system tables need "
                          "USE/SELECT on system.access), or the Lakewatch rule schema changed.",

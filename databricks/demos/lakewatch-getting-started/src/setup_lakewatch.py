@@ -5,8 +5,8 @@ Order of operations (each step is idempotent, so the job is safe to re-run):
   2. observe        Beta preview toggle, existing Lakewatch environments, earlier preview setup   (parallel)
   3. decide         pure policy in rpw_lakewatch/state.py; STOP states explain and exit unchanged
   4. environment    turn on the Beta, create catalog on default storage, register + initialize     (only if new)
-  5. folder         rpw_ folder (schema) for this bundle's tables and rules
-  6. content        posture snapshot  ||  audit-log rules, then posture rules                      (parallel)
+  5. folder         Lakewatch folder (schema) for this bundle's tables and rules
+  6. content        security infra snapshot || audit-log rules, then findings rules                     (parallel)
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ PRODUCT = "rpw-lakewatch-getting-started"  # SDK user-agent; lets the bundle's A
 
 
 def beacon(result: str) -> None:
-    """One cheap authenticated call whose user agent carries only the outcome code (e.g. rpw-result/RPW-LW-E201).
+    """One cheap authenticated call whose user agent carries only the outcome code (e.g. rpw-result/LWGS-E201).
 
     Lets the bundle's maintainers count which setup errors happen in the field and fix the bundle.
     No error text, names or data are sent. Disable with --var error_beacon=false.
@@ -47,7 +47,7 @@ def log(step: str, **kv):
 
 
 def stop_error(code: str, plan_notes: list[str], a, ctx: dict) -> SetupError:
-    if code == "RPW-LW-E101":
+    if code == "LWGS-E101":
         return SetupError(
             code,
             what_happened="This workspace already has a Lakewatch configuration from an earlier preview, and no "
@@ -62,7 +62,7 @@ def stop_error(code: str, plan_notes: list[str], a, ctx: dict) -> SetupError:
                         "Or, to have this job set up the Beta next to the preview, redeploy with "
                         "--var allow_with_prior_preview=true."],
             context=ctx)
-    if code == "RPW-LW-E104":
+    if code == "LWGS-E104":
         return SetupError(
             code,
             what_happened=f"Lakewatch is already set up, but on another catalog. {'; '.join(plan_notes)}. "
@@ -119,7 +119,7 @@ def run(a) -> dict:
             envs = p.wait_for_environments_api(ctx)
             if a.catalog not in envs:
                 if envs:  # someone set it up while we waited; do not create a second one
-                    raise stop_error("RPW-LW-E104", [f"existing environments: {sorted(envs)}"], a, ctx)
+                    raise stop_error("LWGS-E104", [f"existing environments: {sorted(envs)}"], a, ctx)
                 created["catalog"] = p.ensure_catalog(a.catalog, ctx)
                 p.register_environment(a.catalog, ctx)
                 created["environment"] = a.catalog
@@ -131,21 +131,21 @@ def run(a) -> dict:
         created["folder"] = p.ensure_folder(a.catalog, a.schema, ctx)
         log(step, folder=f"{a.catalog}.{a.schema}", created=created["folder"])
 
-        # 6. content: posture snapshot in parallel with audit-log rules; posture rules last
+        # 6. content: security infra snapshot in parallel with audit-log rules; findings-based rules last
         step = "content"
-        from rpw_lakewatch import posture, rules
+        from rpw_lakewatch import security_infra, rules
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
         rules_dir = a.rules_dir if os.path.isdir(a.rules_dir) else a.rules_dir.replace("/Workspace", "", 1)
         kw = dict(w=w, rules_dir=rules_dir, catalog=a.catalog, schema=a.schema, warehouse_id=a.warehouse_id,
                   enabled=a.rules_enabled, ctx=ctx)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            f_post = pool.submit(posture.collect, spark, w, a.catalog, a.schema, a.long_running_days,
+            f_post = pool.submit(security_infra.collect, spark, w, a.catalog, a.schema, a.long_running_days,
                                  a.max_token_days, ctx)
-            f_audit = pool.submit(rules.register_all, **kw, select=lambda s: not rules.uses_posture_tables(s))
+            f_audit = pool.submit(rules.register_all, **kw, select=lambda s: not rules.uses_findings_tables(s))
             snapshot, audit_rules = f_post.result(), f_audit.result()
-        posture_rules = rules.register_all(**kw, select=rules.uses_posture_tables)
-        result = {"created": created, "posture": snapshot, "rules": audit_rules + posture_rules,
+        findings_rules = rules.register_all(**kw, select=rules.uses_findings_tables)
+        result = {"created": created, "findings": snapshot, "rules": audit_rules + findings_rules,
                   "rules_enabled": a.rules_enabled}
         log("done", **result)
         return result
@@ -174,13 +174,13 @@ def main(argv=None):
         result = run(a)
     except SetupError as e:
         print(e.render(), flush=True)
-        print("RPW_LW_RESULT " + json.dumps({"ok": False, "code": e.code}), flush=True)
+        print("LAKEWATCH_GETTING_STARTED_RESULT " + json.dumps({"ok": False, "code": e.code}), flush=True)
         if a.error_beacon:
             beacon(e.code)
         # The run's error message starts with the code so it is searchable and shows on the run page.
         raise RuntimeError(f"{e.code}: {e.title}. Copy the block between the COPY markers in this task's "
                            "output into your AI assistant for step-by-step help.") from None
-    print("RPW_LW_RESULT " + json.dumps({"ok": True}), flush=True)
+    print("LAKEWATCH_GETTING_STARTED_RESULT " + json.dumps({"ok": True}), flush=True)
     if a.error_beacon:
         beacon("ok")
     if a.dry_run:
@@ -189,7 +189,7 @@ def main(argv=None):
         return result
     print("\nLakewatch is ready. Open it from the app switcher (top-left grid icon) > Lakewatch. "
           + ("Rules are scheduled." if a.rules_enabled else
-             "The rpw_ rules are registered DISABLED: review and tune each one, then enable it in Lakewatch "
+             "The detection rules are registered DISABLED: review and tune each one, then enable it in Lakewatch "
              "or redeploy with --var rules_enabled=true."), flush=True)
     return result
 

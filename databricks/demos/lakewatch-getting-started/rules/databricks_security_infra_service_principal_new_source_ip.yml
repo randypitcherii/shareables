@@ -1,4 +1,4 @@
-rule_name: rpw_service_principal_new_source_ip
+rule_name: databricks_security_infra_service_principal_new_source_ip
 description: A service principal authenticated successfully from a source IP not seen for it in the prior 30 days.
 severity: Medium
 category: Behavioral

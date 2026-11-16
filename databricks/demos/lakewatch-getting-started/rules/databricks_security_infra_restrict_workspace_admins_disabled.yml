@@ -1,4 +1,4 @@
-rule_name: rpw_restrict_workspace_admins_disabled
+rule_name: databricks_security_infra_restrict_workspace_admins_disabled
 description: The Restrict Workspace Admins setting was changed away from RESTRICT_TOKENS_AND_JOB_RUN_AS or deleted.
 severity: Medium
 category: Static Signature

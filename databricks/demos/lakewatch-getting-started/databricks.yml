@@ -1,5 +1,5 @@
 # Lakewatch getting started: safely turn on Lakewatch (Beta) and deploy starter
-# security-posture detections into YOUR workspace.
+# Databricks security infrastructure detections into YOUR workspace.
 #
 #   databricks bundle deploy                       # as a workspace admin
 #   databricks bundle run rpw_lakewatch_getting_started
@@ -29,10 +29,10 @@ variables:
       metastore's default storage. If Lakewatch is already set up, set this to that environment's catalog.
     default: rpw_lakewatch
   schema:
-    description: Lakewatch folder (schema) for this bundle's posture tables and rules.
-    default: rpw_security_posture
+    description: Lakewatch folder (schema) for this bundle's security infrastructure tables and rules.
+    default: rpw_databricks_security_infra
   rules_enabled:
-    description: Schedule the rpw_ detection rules when registering them ("true"/"false"). Tune first.
+    description: Schedule the detection rules when registering them ("true"/"false"). Tune first.
     default: "false"
   allow_with_prior_preview:
     description: >
@@ -44,7 +44,7 @@ variables:
     default: "false"
   error_beacon:
     description: >
-      Report only the setup outcome code (e.g. RPW-LW-E201 or ok) in the user agent of one API call, so the
+      Report only the setup outcome code (e.g. LWGS-E201 or ok) in the user agent of one API call, so the
       bundle's maintainers can see which setup errors are common and fix them. No error text or data. "true"/"false".
     default: "true"
   long_running_days:

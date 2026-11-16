@@ -1,4 +1,4 @@
-rule_name: rpw_ip_access_list_weakened
+rule_name: databricks_security_infra_ip_access_list_weakened
 description: IP access lists were disabled, deleted, or edited in a workspace.
 severity: High
 category: Static Signature

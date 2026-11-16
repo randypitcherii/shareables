@@ -1,7 +1,7 @@
 resources:
   sql_warehouses:
     rpw_lakewatch_wh:
-      name: rpw_lakewatch_wh
+      name: Lakewatch Getting Started Warehouse
       cluster_size: 2X-Small
       enable_serverless_compute: true
       warehouse_type: PRO

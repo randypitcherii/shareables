@@ -12,7 +12,7 @@ def test_every_rule_is_prefixed_and_valid_sql_shape():
     assert len(specs) == 7
     for s in specs:
         q = s["batch"]["sql"]["query"]
-        assert s["rule_name"].startswith("rpw_")
+        assert s["rule_name"].startswith("databricks_security_infra_")
         assert re.search(r"\bFROM\b", q, re.I) and "IN_TIMERANGE(" in q
         assert "${" not in q, f"unsubstituted placeholder in {s['rule_name']}"
 
@@ -29,10 +29,10 @@ def test_prepare_disables_by_default_and_tags():
     assert spec["annotations"]["rpw.bundle"] == "lakewatch-getting-started"
 
 
-def test_posture_split():
+def test_findings_split():
     specs = rules.load_specs(str(RULES), SUBS)
-    posture = [s["rule_name"] for s in specs if rules.uses_posture_tables(s)]
-    assert sorted(posture) == ["rpw_posture_control_failing", "rpw_posture_control_regressed"]
+    findings = [s["rule_name"] for s in specs if rules.uses_findings_tables(s)]
+    assert sorted(findings) == ["databricks_security_infra_control_failing", "databricks_security_infra_control_regressed"]
 
 
 def test_unprefixed_rule_rejected(tmp_path):
@@ -40,6 +40,6 @@ def test_unprefixed_rule_rejected(tmp_path):
     try:
         rules.load_specs(str(tmp_path), SUBS)
     except ValueError as e:
-        assert "rpw_" in str(e)
+        assert "databricks_security_infra_" in str(e)
     else:
         raise AssertionError("expected ValueError")

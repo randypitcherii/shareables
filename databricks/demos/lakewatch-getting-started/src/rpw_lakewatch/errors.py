@@ -1,7 +1,7 @@
 """Structured, copy-pasteable setup errors.
 
 Every failure the setup job can explain becomes a SetupError with a stable code
-(RPW-LW-E###). The rendered message is written for an admin who will paste it
+(LWGS-E###). The rendered message is written for an admin who will paste it
 into an AI assistant (Genie Code, Claude, ChatGPT, Codex, ...). It is
 self-contained: what happened, the likely cause, the next steps, and the facts
 the assistant needs.
@@ -17,20 +17,20 @@ END = "=" * 30 + " COPY TO HERE " + "=" * 30
 
 # code -> short title. Codes are stable: docs and support searches key on them.
 CODES = {
-    "RPW-LW-E001": "Run as a workspace admin",
-    "RPW-LW-E002": "Unity Catalog is not enabled for this workspace",
-    "RPW-LW-E101": "An earlier Lakewatch preview setup was found; the Beta is not set up",
-    "RPW-LW-E102": "Could not turn on the Lakewatch Beta preview",
-    "RPW-LW-E103": "Lakewatch Beta is on, but the Lakewatch service is not reachable yet",
-    "RPW-LW-E104": "Lakewatch is already set up on a different catalog",
-    "RPW-LW-E201": "The metastore has no default storage for a new catalog",
-    "RPW-LW-E202": "Could not create the Lakewatch catalog",
-    "RPW-LW-E203": "Could not register the Lakewatch environment",
-    "RPW-LW-E204": "Lakewatch initialization did not complete",
-    "RPW-LW-E205": "Could not create the rpw_ folder (schema) for detections",
-    "RPW-LW-E301": "Posture collection could not write its tables",
-    "RPW-LW-E401": "Some detection rules could not be registered",
-    "RPW-LW-E999": "Unexpected error",
+    "LWGS-E001": "Run as a workspace admin",
+    "LWGS-E002": "Unity Catalog is not enabled for this workspace",
+    "LWGS-E101": "An earlier Lakewatch preview setup was found; the Beta is not set up",
+    "LWGS-E102": "Could not turn on the Lakewatch Beta preview",
+    "LWGS-E103": "Lakewatch Beta is on, but the Lakewatch service is not reachable yet",
+    "LWGS-E104": "Lakewatch is already set up on a different catalog",
+    "LWGS-E201": "The metastore has no default storage for a new catalog",
+    "LWGS-E202": "Could not create the Lakewatch catalog",
+    "LWGS-E203": "Could not register the Lakewatch environment",
+    "LWGS-E204": "Lakewatch initialization did not complete",
+    "LWGS-E205": "Could not create the Lakewatch folder (schema) for detections",
+    "LWGS-E301": "Security infrastructure checks could not write their tables",
+    "LWGS-E401": "Some detection rules could not be registered",
+    "LWGS-E999": "Unexpected error",
 }
 
 
@@ -81,7 +81,7 @@ page). The setup job is safe to re-run after each fix.
 
 def unexpected(step: str, exc: BaseException, context: dict | None = None) -> SetupError:
     return SetupError(
-        "RPW-LW-E999",
+        "LWGS-E999",
         what_happened=f"Step '{step}' raised {type(exc).__name__}: {str(exc)[:800]}",
         likely_cause="Not a case the bundle recognizes. It is often a permission, a workspace feature that is "
                      "turned off, or a temporary service error.",

@@ -44,7 +44,7 @@ class Platform:
         ctx["run_as"] = me.user_name
         if "admins" not in groups:
             raise SetupError(
-                "RPW-LW-E001",
+                "LWGS-E001",
                 what_happened=f"The job runs as '{me.user_name}', which is not in this workspace's 'admins' group.",
                 likely_cause="Turning on a preview and creating a Lakewatch environment need workspace admin. "
                              "Creating a catalog also needs CREATE CATALOG on the metastore.",
@@ -58,7 +58,7 @@ class Platform:
             m = self.w.metastores.summary()
         except Exception as e:  # noqa: BLE001
             raise SetupError(
-                "RPW-LW-E002",
+                "LWGS-E002",
                 what_happened=f"Reading the workspace's Unity Catalog metastore failed: {str(e)[:300]}",
                 likely_cause="Lakewatch requires Unity Catalog; this workspace has no metastore assigned.",
                 next_steps=["Ask an account admin to assign a Unity Catalog metastore to this workspace "
@@ -82,7 +82,7 @@ class Platform:
                 SETTING, Setting(name=SETTING, boolean_val=BooleanMessage(value=True)))
         except Exception as e:  # noqa: BLE001
             raise SetupError(
-                "RPW-LW-E102",
+                "LWGS-E102",
                 what_happened=f"Turning on the workspace preview '{SETTING}' failed: {str(e)[:300]}",
                 likely_cause="The Lakewatch Beta is not offered for this workspace's cloud, region or pricing tier, "
                              "or the caller lacks workspace admin.",
@@ -109,7 +109,7 @@ class Platform:
                 return envs
             if time.time() > deadline:
                 raise SetupError(
-                    "RPW-LW-E103",
+                    "LWGS-E103",
                     what_happened=f"The Lakewatch Beta preview is on, but GET /api/2.0/lakewatch/environments was "
                                   f"still unavailable after {timeout_s}s.",
                     likely_cause="A newly turned-on preview can take a few minutes to take effect, or Lakewatch is "
@@ -143,7 +143,7 @@ class Platform:
             msg = str(e)
             if any(k in msg.lower() for k in ("storage root", "managed location", "default storage", "storage location")):
                 raise SetupError(
-                    "RPW-LW-E201",
+                    "LWGS-E201",
                     what_happened=f"CREATE CATALOG {catalog} failed: {msg[:300]}",
                     likely_cause="The metastore has no default storage (no metastore storage root and Default "
                                  "Storage is not available), so a catalog needs an explicit managed location.",
@@ -154,7 +154,7 @@ class Platform:
                                 "Re-run the job; it reuses an existing catalog with this name."],
                     context=ctx) from e
             raise SetupError(
-                "RPW-LW-E202",
+                "LWGS-E202",
                 what_happened=f"CREATE CATALOG {catalog} failed: {msg[:300]}",
                 likely_cause="The run-as identity lacks CREATE CATALOG on the metastore.",
                 next_steps=["Grant it: GRANT CREATE CATALOG ON METASTORE TO `<run-as user or SP>` (metastore admin).",
@@ -171,7 +171,7 @@ class Platform:
             if "already exists" in str(e).lower():
                 return
             raise SetupError(
-                "RPW-LW-E203",
+                "LWGS-E203",
                 what_happened=f"Registering catalog '{catalog}' as a Lakewatch environment failed: {str(e)[:300]}",
                 likely_cause="The run-as identity needs MANAGE and CREATE SCHEMA on the catalog, or the catalog "
                              "uses the legacy Hive metastore.",
@@ -196,7 +196,7 @@ class Platform:
                 break
             time.sleep(10)
         raise SetupError(
-            "RPW-LW-E204",
+            "LWGS-E204",
             what_happened=f"Lakewatch initialization for '{catalog}' did not succeed: {last}",
             likely_cause="The SQL warehouse is stopped or below the minimum version, or the run-as identity "
                          "cannot use it.",
@@ -217,7 +217,7 @@ class Platform:
             # The folders API registers an existing schema, so create it first (no-op if present).
             try:
                 self.w.schemas.create(name=schema, catalog_name=catalog,
-                                      comment="rpw_ starter detections and posture tables (lakewatch-getting-started)")
+                                      comment="Databricks security infrastructure detections and findings (Lakewatch getting started)")
             except ResourceAlreadyExists:
                 pass
             except DatabricksError as e:
@@ -234,7 +234,7 @@ class Platform:
                 pass
         if err is not None:
             raise SetupError(
-                "RPW-LW-E205",
+                "LWGS-E205",
                 what_happened=f"Creating Lakewatch folder {catalog}.{schema} failed: {str(err)[:300]}",
                 likely_cause="The run-as identity lacks CREATE SCHEMA on the catalog.",
                 next_steps=[f"GRANT CREATE SCHEMA, USE CATALOG ON CATALOG {catalog} TO `<run-as identity>`.",

@@ -5,7 +5,7 @@
    "displayName": "Latest findings",
    "queryLines": [
     "SELECT workspace_id, control_name, tier, domain, status, round(adoption_pct, 1) AS adoption_pct, source, detail, snapshot_ts\n",
-    "FROM rpw_posture_latest\n",
+    "FROM rpw_security_infra_latest\n",
     "ORDER BY CASE status WHEN 'FAIL' THEN 1 WHEN 'PARTIAL' THEN 2 WHEN 'UNKNOWN' THEN 3 ELSE 4 END, tier, control_name, workspace_id\n"
    ]
   },
@@ -18,7 +18,7 @@
     "       count(DISTINCT CASE WHEN tier = 'essential' AND status = 'FAIL' THEN workspace_id END) AS workspaces_with_failing,\n",
     "       count_if(tier = 'credential_hygiene' AND status IN ('FAIL', 'PARTIAL')) AS hygiene_gaps,\n",
     "       max(snapshot_ts) AS snapshot_ts\n",
-    "FROM rpw_posture_latest\n"
+    "FROM rpw_security_infra_latest\n"
    ]
   },
   {
@@ -29,7 +29,7 @@
     "       CASE status WHEN 'PASS' THEN '1 In place' WHEN 'PARTIAL' THEN '2 Partial' WHEN 'FAIL' THEN '3 Needs attention'\n",
     "                   WHEN 'NOT_APPLICABLE' THEN '5 Not applicable' ELSE '4 Not evaluated' END AS status,\n",
     "       count(DISTINCT workspace_id) AS workspaces\n",
-    "FROM rpw_posture_latest GROUP BY ALL\n"
+    "FROM rpw_security_infra_latest GROUP BY ALL\n"
    ]
   },
   {
@@ -38,29 +38,29 @@
    "queryLines": [
     "SELECT date_trunc('DAY', snapshot_ts) AS day, control_name,\n",
     "       count(DISTINCT CASE WHEN status = 'FAIL' THEN workspace_id END) AS failing_workspaces\n",
-    "FROM rpw_posture_findings WHERE tier = 'essential' GROUP BY ALL\n"
+    "FROM rpw_security_infra_findings WHERE tier = 'essential' GROUP BY ALL\n"
    ]
   },
   {
    "name": "changes",
    "displayName": "Changes",
    "queryLines": [
-    "SELECT snapshot_ts, workspace_id, control_name, prev_status, status, detail FROM rpw_posture_changes ORDER BY snapshot_ts DESC\n"
+    "SELECT snapshot_ts, workspace_id, control_name, prev_status, status, detail FROM rpw_security_infra_changes ORDER BY snapshot_ts DESC\n"
    ]
   }
  ],
  "pages": [
   {
-   "name": "posture",
-   "displayName": "Posture",
+   "name": "security_infra",
+   "displayName": "Security infrastructure",
    "layout": [
     {
      "widget": {
       "name": "hdr",
       "multilineTextboxSpec": {
        "lines": [
-        "## Security posture (rpw starter)\n",
-        "Essential controls and credential hygiene for every workspace in this account. Source: `rpw_posture_findings` written daily by the rpw_lakewatch_getting_started job. Lakewatch rules alert on regressions."
+        "## Databricks security infrastructure\n",
+        "Essential controls and credential hygiene for every workspace in this account. Source: `rpw_security_infra_findings` written daily by the rpw_lakewatch_getting_started job. Lakewatch rules alert on regressions."
        ]
       }
      },

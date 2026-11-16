@@ -1,10 +1,10 @@
 resources:
   jobs:
     rpw_lakewatch_getting_started:
-      name: rpw_lakewatch_getting_started
+      name: Lakewatch Getting Started
       description: >
         Turns on Lakewatch (Beta) only when safe, reuses or creates the Lakewatch environment, then writes a daily
-        security-posture snapshot and registers the rpw_ starter detection rules. Idempotent: safe to re-run.
+        Databricks security infrastructure snapshot and registers the starter detection rules. Idempotent: safe to re-run.
       tags:
         rpw_bundle: lakewatch-getting-started
       schedule:

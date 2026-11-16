@@ -41,13 +41,13 @@ def test_existing_environment_with_toggle_off_is_not_toggled():
 
 def test_existing_environment_on_other_catalog_stops():
     p = decide(obs(beta_setting=True, environments=["corp_security"]))
-    assert p.action is Action.STOP and p.error_code == "RPW-LW-E104" and "corp_security" in p.notes[0]
+    assert p.action is Action.STOP and p.error_code == "LWGS-E104" and "corp_security" in p.notes[0]
 
 
 @pytest.mark.parametrize("setting", [True, False, None])
 def test_prior_preview_without_beta_stops(setting):
     p = decide(obs(beta_setting=setting, environments=[], prior_preview_setup=True))
-    assert p.action is Action.STOP and p.error_code == "RPW-LW-E101"
+    assert p.action is Action.STOP and p.error_code == "LWGS-E101"
 
 
 def test_prior_preview_with_explicit_opt_in_proceeds():

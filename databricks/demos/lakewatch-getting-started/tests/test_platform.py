@@ -83,19 +83,19 @@ def test_no_default_storage_maps_to_e201():
     c = Catalogs(create_error=Exception("Metastore storage root URL does not exist. Please provide a storage location"))
     with pytest.raises(SetupError) as e:
         platform(catalogs=c).ensure_catalog("x", {})
-    assert e.value.code == "RPW-LW-E201" and "MANAGED LOCATION" in e.value.render()
+    assert e.value.code == "LWGS-E201" and "MANAGED LOCATION" in e.value.render()
 
 
 def test_permission_maps_to_e202():
     c = Catalogs(create_error=PermissionDenied("User does not have CREATE CATALOG on Metastore"))
     with pytest.raises(SetupError) as e:
         platform(catalogs=c).ensure_catalog("x", {})
-    assert e.value.code == "RPW-LW-E202"
+    assert e.value.code == "LWGS-E202"
 
 
 def test_folder_idempotent():
-    p = platform({("GET", "/api/2.0/lakewatch/folders"): {"folders": [{"schema_name": "rpw_security_posture"}]}})
-    assert p.ensure_folder("c", "rpw_security_posture", {}) is False
+    p = platform({("GET", "/api/2.0/lakewatch/folders"): {"folders": [{"schema_name": "rpw_databricks_security_infra"}]}})
+    assert p.ensure_folder("c", "rpw_databricks_security_infra", {}) is False
     assert all(m == "GET" for m, _, _ in p.w.api_client.calls)
 
 
@@ -103,12 +103,12 @@ def test_folder_creates_schema_then_registers():
     sch = Schemas()
     p = platform({("GET", "/api/2.0/lakewatch/folders"): {"folders": []},
                   ("POST", "/api/2.0/lakewatch/folders"): {}}, schemas=sch)
-    assert p.ensure_folder("c", "rpw_security_posture", {}) is True
-    assert sch.created == ["c.rpw_security_posture"]
-    assert ("POST", "/api/2.0/lakewatch/folders", {"catalog_name": "c", "schema_name": "rpw_security_posture"}) in p.w.api_client.calls
+    assert p.ensure_folder("c", "rpw_databricks_security_infra", {}) is True
+    assert sch.created == ["c.rpw_databricks_security_infra"]
+    assert ("POST", "/api/2.0/lakewatch/folders", {"catalog_name": "c", "schema_name": "rpw_databricks_security_infra"}) in p.w.api_client.calls
 
 
 def test_folder_registers_existing_schema():
     p = platform({("GET", "/api/2.0/lakewatch/folders"): {"folders": []},
                   ("POST", "/api/2.0/lakewatch/folders"): {}}, schemas=Schemas(exists=True))
-    assert p.ensure_folder("c", "rpw_security_posture", {}) is True
+    assert p.ensure_folder("c", "rpw_databricks_security_infra", {}) is True
