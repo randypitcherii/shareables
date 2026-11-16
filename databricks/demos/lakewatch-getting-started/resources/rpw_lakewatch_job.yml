@@ -11,6 +11,9 @@ resources:
         quartz_cron_expression: "0 15 6 * * ?"
         timezone_id: UTC
       max_concurrent_runs: 1
+      parameters:
+        - name: dry_run
+          default: ${var.dry_run}
       performance_target: PERFORMANCE_OPTIMIZED
       environments:
         - environment_key: default
@@ -32,7 +35,7 @@ resources:
               - --rules-dir=${workspace.file_path}/rules
               - --rules-enabled=${var.rules_enabled}
               - --allow-with-prior-preview=${var.allow_with_prior_preview}
-              - --dry-run=${var.dry_run}
+              - --dry-run={{job.parameters.dry_run}}
               - --error-beacon=${var.error_beacon}
               - --long-running-days=${var.long_running_days}
               - --max-token-days=${var.max_token_days}

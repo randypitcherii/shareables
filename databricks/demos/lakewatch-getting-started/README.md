@@ -84,7 +84,7 @@ cover every workspace in the account that the run-as identity can see in
 
 ```bash
 databricks bundle deploy                                   # dev target, as you
-databricks bundle run rpw_lakewatch_getting_started --var dry_run=true   # optional: print the plan only
+databricks bundle run rpw_lakewatch_getting_started --params dry_run=true   # optional: print the plan only
 databricks bundle run rpw_lakewatch_getting_started
 ```
 
@@ -92,7 +92,7 @@ If Lakewatch is already set up on catalog `security`:
 
 ```bash
 databricks bundle deploy --var catalog=security
-databricks bundle run rpw_lakewatch_getting_started --var catalog=security
+databricks bundle run rpw_lakewatch_getting_started
 ```
 
 When the run finishes, open Lakewatch from the app switcher (the grid icon at
@@ -103,13 +103,15 @@ target enables the rules and unpauses the schedule:
 
 ### Variables
 
+Variables are set at deploy time (`databricks bundle deploy --var name=value`), then picked up by the next `bundle run`. `dry_run` can also be set per run.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `catalog` | `rpw_lakewatch` | The Lakewatch environment catalog. It is created only if Lakewatch is not set up. |
 | `schema` | `rpw_databricks_security_infra` | The Lakewatch folder for this bundle's tables and rules. |
 | `rules_enabled` | `false` | Schedule the rules when they are registered. |
 | `allow_with_prior_preview` | `false` | Set up the Beta next to an earlier preview setup. |
-| `dry_run` | `false` | Print the plan and change nothing. |
+| `dry_run` | `false` | Print the plan and change nothing. Also a job parameter, so you can set it per run: `bundle run ... --params dry_run=true`. |
 | `error_beacon` | `true` | Report only the outcome code. See [Telemetry](#telemetry). |
 | `long_running_days` / `max_token_days` | `30` / `90` | Check thresholds (cluster uptime, token lifetime). |
 

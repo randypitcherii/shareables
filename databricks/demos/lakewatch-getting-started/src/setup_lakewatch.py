@@ -185,7 +185,7 @@ def main(argv=None):
         beacon("ok")
     if a.dry_run:
         print("\nDry run complete: the plan is printed above and nothing was changed. "
-              "Redeploy without --var dry_run=true to apply it.", flush=True)
+              "Run again without --params dry_run=true to apply it.", flush=True)
         return result
     print("\nLakewatch is ready. Open it from the app switcher (top-left grid icon) > Lakewatch. "
           + ("Rules are scheduled." if a.rules_enabled else
