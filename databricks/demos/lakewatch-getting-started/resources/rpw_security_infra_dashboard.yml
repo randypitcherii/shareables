@@ -1,0 +1,8 @@
+resources:
+  dashboards:
+    rpw_databricks_security_infra:
+      display_name: Databricks Security Infrastructure
+      file_path: ../src/dashboards/databricks_security_infra.lvdash.json
+      warehouse_id: ${resources.sql_warehouses.rpw_lakewatch_wh.id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}

@@ -1,0 +1,17 @@
+[project]
+name = "rpw-lakewatch-getting-started"
+version = "0.1.0"
+description = "DABs bundle that safely turns on Lakewatch (Beta) and deploys starter Databricks security infrastructure detections"
+requires-python = ">=3.11"
+# Same runtime deps as the job's serverless environment (resources/rpw_lakewatch_job.yml).
+dependencies = ["databricks-sdk>=0.167.0", "pyyaml>=6"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false

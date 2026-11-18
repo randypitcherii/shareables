@@ -1,0 +1,45 @@
+resources:
+  jobs:
+    rpw_lakewatch_getting_started:
+      name: Lakewatch Getting Started
+      description: >
+        Turns on Lakewatch (Beta) only when safe, reuses or creates the Lakewatch environment, then writes a daily
+        Databricks security infrastructure snapshot and registers the starter detection rules. Idempotent: safe to re-run.
+      tags:
+        rpw_bundle: lakewatch-getting-started
+      schedule:
+        quartz_cron_expression: "0 15 6 * * ?"
+        timezone_id: UTC
+      max_concurrent_runs: 1
+      parameters:
+        - name: dry_run
+          default: ${var.dry_run}
+      performance_target: PERFORMANCE_OPTIMIZED
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - databricks-sdk>=0.167.0
+              - pyyaml>=6
+      tasks:
+        - task_key: setup_lakewatch
+          environment_key: default
+          # No retries: known failures are deterministic stops with a fix-it message; retrying only repeats them.
+          max_retries: 0
+          # Serverless otherwise retries failed tasks on its own, which repeats the stop and doubles its output.
+          disable_auto_optimization: true
+          spark_python_task:
+            python_file: ../src/setup_lakewatch.py
+            parameters:
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --catalog-storage-root=${var.catalog_storage_root}
+              - --warehouse-id=${resources.sql_warehouses.rpw_lakewatch_wh.id}
+              - --rules-dir=${workspace.file_path}/rules
+              - --rules-enabled=${var.rules_enabled}
+              - --allow-with-prior-preview=${var.allow_with_prior_preview}
+              - --dry-run={{job.parameters.dry_run}}
+              - --error-beacon=${var.error_beacon}
+              - --long-running-days=${var.long_running_days}
+              - --max-token-days=${var.max_token_days}

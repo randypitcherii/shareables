@@ -1,0 +1,39 @@
+rule_name: databricks_security_infra_control_regressed
+description: An essential security control that previously passed is now failing or partial in a workspace (security infrastructure drift).
+severity: High
+category: Security Infrastructure Drift
+fidelity: FIDELITY_HIGH
+objective: >
+  Essential controls (inbound/outbound network restriction, no public IP, Unity Catalog, restrict workspace admins,
+  cluster patch hygiene) block or contain credential-theft attacks. A regression silently removes that protection.
+runbook: >
+  Open the Databricks Security Infrastructure dashboard, compare detail for this control between snapshots, identify who changed
+  the setting (system.access.audit for the workspace), and restore the control or document an approved exception.
+schedule:
+  cron_expression: "0 0 7 * * ?"
+timerange:
+  extend_lookback: 26h
+batch:
+  sql:
+    query: |
+      SELECT snapshot_ts, workspace_id, control_key, control_name, prev_status, status, adoption_pct, source, detail
+      FROM ${catalog}.${schema}.rpw_security_infra_changes
+      WHERE IN_TIMERANGE(snapshot_ts)
+        AND tier = 'essential'
+        AND prev_status = 'PASS' AND status IN ('FAIL', 'PARTIAL')
+output:
+  event_time_column: snapshot_ts
+  summary: "Essential control regressed: {control_name} {prev_status} -> {status} in workspace {workspace_id}"
+  context:
+    workspace_id: "{workspace_id}"
+    control: "{control_key}"
+    prev_status: "{prev_status}"
+    status: "{status}"
+    detail: "{detail}"
+deduplication: DEDUPLICATION_ENABLED
+deduplication_time_window: 24 hours
+mitre:
+  - taxonomy: Enterprise
+    tactic: Defense Evasion
+    technique_id: T1562
+    technique: Impair Defenses

@@ -1,0 +1,44 @@
+rule_name: databricks_security_infra_pat_created_long_lived
+description: A personal access token was created with no expiry or a lifetime over 90 days.
+severity: Low
+category: Credential Hygiene
+fidelity: FIDELITY_MEDIUM
+objective: >
+  Long-lived PATs were among the credentials harvested in recent attacks. Short lifetimes limit the window a stolen
+  token is useful.
+runbook: >
+  Ask the owner to replace the token with a short-lived one or OAuth, and set maxTokenLifetimeDays on the workspace.
+schedule:
+  at_least_every: 1h
+batch:
+  sql:
+    query: |
+      SELECT event_time, workspace_id, user_identity.email AS actor, source_ip_address AS src_ip,
+             request_params.userId AS token_owner_id, request_params.tokenExpirationTime AS expiration_ms,
+             CASE WHEN request_params.tokenExpirationTime IS NULL OR request_params.tokenExpirationTime IN ('', '-1', '0')
+                  THEN NULL
+                  ELSE round((CAST(request_params.tokenExpirationTime AS BIGINT) - unix_millis(event_time)) / 86400000, 1)
+             END AS lifetime_days
+      FROM system.access.audit
+      WHERE IN_TIMERANGE(event_time)
+        AND action_name = 'generateDbToken'
+        AND response.status_code = 200
+        AND (request_params.tokenExpirationTime IS NULL OR request_params.tokenExpirationTime IN ('', '-1', '0')
+             OR CAST(request_params.tokenExpirationTime AS BIGINT) - unix_millis(event_time) > 7776000000)
+output:
+  event_time_column: event_time
+  summary: "Long-lived PAT created by {actor} (lifetime days: {coalesce(CAST(lifetime_days AS STRING), 'no expiry')})"
+  context:
+    workspace_id: "{workspace_id}"
+    actor: "{actor}"
+    token_owner_id: "{token_owner_id}"
+    src_ip: "{src_ip}"
+deduplication: DEDUPLICATION_DEFAULT
+deduplication_time_window: automatic
+mitre:
+  - taxonomy: Enterprise
+    tactic: Persistence
+    technique_id: T1098
+    technique: Account Manipulation
+    sub_technique_id: T1098.001
+    sub_technique: Additional Cloud Credentials

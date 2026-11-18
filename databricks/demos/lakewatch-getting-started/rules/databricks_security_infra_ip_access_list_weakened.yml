@@ -1,0 +1,45 @@
+rule_name: databricks_security_infra_ip_access_list_weakened
+description: IP access lists were disabled, deleted, or edited in a workspace.
+severity: High
+category: Static Signature
+fidelity: FIDELITY_HIGH
+objective: >
+  Restricted inbound access was the control that contained recent credential-theft attacks. Disabling or editing
+  the IP access list removes it, and attackers who obtain admin credentials do this first.
+runbook: >
+  Confirm the change with the actor and change ticket. If unapproved, restore the list, revoke the actor's sessions
+  and tokens, and review activity from new IPs since the change.
+schedule:
+  at_least_every: 15m
+batch:
+  sql:
+    query: |
+      SELECT event_time, workspace_id, user_identity.email AS actor, source_ip_address AS src_ip, action_name,
+             to_json(request_params) AS request, response.status_code AS status_code
+      FROM system.access.audit
+      WHERE IN_TIMERANGE(event_time)
+        AND response.status_code = 200
+        -- Tune: exclude approved automation, e.g. AND user_identity.email NOT IN ('<terraform-sp-app-id>')
+        AND (
+          action_name IN ('deleteIpAccessList', 'updateIpAccessList')
+          OR (action_name = 'workspaceConfEdit'
+              AND request_params.workspaceConfKeys = 'enableIpAccessLists'
+              AND lower(request_params.workspaceConfValues) = 'false')
+        )
+output:
+  event_time_column: event_time
+  summary: "IP access list weakened ({action_name}) by {actor} in workspace {workspace_id}"
+  context:
+    workspace_id: "{workspace_id}"
+    actor: "{actor}"
+    src_ip: "{src_ip}"
+    request: "{request}"
+deduplication: DEDUPLICATION_DEFAULT
+deduplication_time_window: automatic
+mitre:
+  - taxonomy: Enterprise
+    tactic: Defense Evasion
+    technique_id: T1562
+    technique: Impair Defenses
+    sub_technique_id: T1562.007
+    sub_technique: Disable or Modify Cloud Firewall

@@ -1,0 +1,30 @@
+rule_name: databricks_security_infra_control_failing
+description: An essential security control is failing in a workspace (weekly reminder until remediated).
+severity: Medium
+category: Security Infrastructure
+fidelity: FIDELITY_MEDIUM
+objective: >
+  Keeps open Essential gaps visible to the security team. One signal per workspace and control per week.
+runbook: >
+  Remediate using the control's guidance in the bundle README, or suppress with an approved exception annotation.
+schedule:
+  cron_expression: "0 30 7 * * ?"
+timerange:
+  extend_lookback: 26h
+batch:
+  sql:
+    query: |
+      SELECT snapshot_ts, workspace_id, control_key, control_name, status, adoption_pct, source, detail
+      FROM ${catalog}.${schema}.rpw_security_infra_findings
+      WHERE IN_TIMERANGE(snapshot_ts)
+        AND tier = 'essential' AND status = 'FAIL'
+output:
+  event_time_column: snapshot_ts
+  summary: "Essential control failing: {control_name} in workspace {workspace_id}"
+  context:
+    workspace_id: "{workspace_id}"
+    control: "{control_key}"
+    adoption_pct: "{adoption_pct}"
+    detail: "{detail}"
+deduplication: DEDUPLICATION_ENABLED
+deduplication_time_window: 7 days

@@ -1,0 +1,13 @@
+resources:
+  sql_warehouses:
+    rpw_lakewatch_wh:
+      name: Lakewatch Getting Started Warehouse
+      cluster_size: 2X-Small
+      enable_serverless_compute: true
+      warehouse_type: PRO
+      auto_stop_mins: 5
+      max_num_clusters: 1
+      tags:
+        custom_tags:
+          - key: rpw_bundle
+            value: lakewatch-getting-started
