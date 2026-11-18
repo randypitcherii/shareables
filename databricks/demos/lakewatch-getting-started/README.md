@@ -5,8 +5,10 @@ only when that is safe. It then deploys a starter set of Databricks security inf
 detections. One command deploys it and one job sets it up. Every object it
 creates has a unique `rpw_` internal name (catalog, schema, tables, bundle resource keys), so nothing you already have is overwritten. Display names are plain English.
 
-> Lakewatch is in Beta. Review the detections here with your security team
-> before you enable them. Rules are registered **disabled** by default.
+> Lakewatch is in Beta. The default (`prod`) deploy turns the detection rules
+> **on**, so they run on their schedules and raise detections right away. Review
+> them with your security team. To register them switched off, deploy with
+> `--var rules_enabled=false`. The `dev` target keeps them off.
 
 ## What it does
 
@@ -41,7 +43,7 @@ is idempotent, so re-running it is always safe.
 | Catalog (only if Lakewatch is not set up yet) | `rpw_lakewatch` |
 | Lakewatch folder (schema) | `<catalog>.rpw_databricks_security_infra` |
 | Tables and views | `rpw_security_infra_findings`, `rpw_security_infra_latest`, `rpw_security_infra_changes` |
-| Lakewatch rules (disabled) | the 7 `databricks_security_infra_*` rules listed below |
+| Lakewatch rules (on in `prod`, off in `dev`) | the 7 `databricks_security_infra_*` rules listed below |
 
 ### Security infrastructure checks (`rpw_security_infra_findings`)
 
@@ -73,7 +75,7 @@ cover every workspace in the account that the run-as identity can see in
 
 ## Prerequisites
 
-- **Workspace admin.** The job runs as the deployer in `dev`.
+- **Workspace admin.** The job runs as the person who deploys it.
 - **Unity Catalog** enabled for the workspace.
 - **Serverless compute** for jobs and SQL. It is on by default for accounts created after 2024-12-16.
 - **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore storage root. Without one, set `catalog_storage_root` (see `LWGS-E201`).
@@ -83,7 +85,7 @@ cover every workspace in the account that the run-as identity can see in
 ## Deploy and run
 
 ```bash
-databricks bundle deploy                                   # dev target, as you
+databricks bundle deploy                                   # prod target (the default)
 databricks bundle run rpw_lakewatch_getting_started --params dry_run=true   # optional: print the plan only
 databricks bundle run rpw_lakewatch_getting_started
 ```
@@ -97,10 +99,25 @@ databricks bundle run rpw_lakewatch_getting_started
 ```
 
 When the run finishes, open Lakewatch from the app switcher (the grid icon at
-the top left) and look in the `rpw_databricks_security_infra` folder. Tune each rule, then
-enable it there, or redeploy with `--var rules_enabled=true`. The `prod`
-target enables the rules and unpauses the schedule:
-`databricks bundle deploy -t prod`.
+the top left) and look in the `rpw_databricks_security_infra` folder. The rules
+are already running there. Tune or switch off any rule in Lakewatch, or redeploy
+with `--var rules_enabled=false` to switch them all off. The dashboard
+refreshes daily, because the job's schedule is on.
+
+### Prod or dev?
+
+**Use the default, `prod`, for your first run and for running this as-is.** It
+deploys one copy per workspace with plain names and turns on the daily
+schedule. Prod is the right choice when you are using the bundle as
+downloaded, not maintaining your own version.
+
+**Switch to `dev` once you keep this as an ongoing solution in your own git
+repository**, and several people change it. Each person then gets a private
+copy for testing (`databricks bundle deploy -t dev`). In that copy every name
+is prefixed with `[dev your_name]` and the schedule is paused. Changes reach
+the shared copy only through `databricks bundle deploy -t prod`, ideally from
+CI. Both targets use the same catalog and folder unless you set
+`--var schema=...` for dev.
 
 ### Variables
 
@@ -110,7 +127,7 @@ Variables are set at deploy time (`databricks bundle deploy --var name=value`), 
 | --- | --- | --- |
 | `catalog` | `rpw_lakewatch` | The Lakewatch environment catalog. It is created only if Lakewatch is not set up. |
 | `schema` | `rpw_databricks_security_infra` | The Lakewatch folder for this bundle's tables and rules. |
-| `rules_enabled` | `false` | Schedule the rules when they are registered. |
+| `rules_enabled` | `true` in `prod`, `false` in `dev` | Schedule the rules when they are registered. |
 | `allow_with_prior_preview` | `false` | Set up the Beta next to an earlier preview setup. |
 | `catalog_storage_root` | empty | Only if the job creates the catalog and your metastore has no storage root: a storage URL under an external location you can use. |
 | `dry_run` | `false` | Print the plan and change nothing. Also a job parameter, so you can set it per run: `bundle run ... --params dry_run=true`. |
@@ -136,8 +153,8 @@ fails, re-upload the files. Deploy only uploads what changed locally, so clear
 the local sync record too:
 
 ```bash
-databricks workspace delete /Workspace/Users/YOUR_USER/.bundle/lakewatch-getting-started/dev/files --recursive
-rm -rf .databricks/bundle/dev/sync-snapshots
+databricks workspace delete /Workspace/Users/YOUR_USER/.bundle/lakewatch-getting-started/prod/files --recursive
+rm -rf .databricks/bundle/prod/sync-snapshots
 databricks bundle deploy
 ```
 
@@ -169,7 +186,7 @@ text, names or data are sent. To turn it off, deploy with
 
 ## Removing it
 
-`databricks bundle destroy` removes the job, the warehouse and the dashboard.
+`databricks bundle destroy` (add `-t dev` for a dev copy) removes the job, the warehouse and the dashboard.
 Lakewatch content stays, so you don't lose detection history. To remove it,
 delete the `databricks_security_infra_*` rules and the `rpw_databricks_security_infra` folder in Lakewatch. If
 this bundle created the `rpw_lakewatch` catalog, you can drop that too.

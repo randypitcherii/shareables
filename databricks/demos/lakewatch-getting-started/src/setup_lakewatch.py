@@ -191,7 +191,7 @@ def main(argv=None):
               "Run again without --params dry_run=true to apply it.", flush=True)
         return result
     print("\nLakewatch is ready. Open it from the app switcher (top-left grid icon) > Lakewatch. "
-          + ("Rules are scheduled." if a.rules_enabled else
+          + ("The detection rules are ON and run on their schedules; tune or switch them off in Lakewatch." if a.rules_enabled else
              "The detection rules are registered DISABLED: review and tune each one, then enable it in Lakewatch "
              "or redeploy with --var rules_enabled=true."), flush=True)
     return result

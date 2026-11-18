@@ -54,10 +54,15 @@ variables:
     default: "90"
 
 targets:
-  dev:
-    mode: development
-    default: true
+  # prod: the recommended first run. One copy per workspace, real names, daily schedule and rules on.
   prod:
     mode: production
+    default: true
+    workspace:
+      # In the deployer's home folder (not /Workspace/Shared, which every user can write), since the job runs as admin.
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
-      rules_enabled: "true"
+      rules_enabled: "true"   # detection rules run on their schedules; dev keeps them off
+  # dev: per-developer copies ("[dev you]" prefix, schedule paused) once this lives in your own git repo.
+  dev:
+    mode: development
