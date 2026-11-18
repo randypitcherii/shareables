@@ -129,8 +129,8 @@ re-run the job.
 
 **Brand-new workspace, `Input/output error` reading `/Workspace/...`:** in a
 workspace's first minutes, serverless compute can briefly fail to read deployed
-files. The job retries twice, 45 seconds apart. If it keeps failing, delete the
-deployed files and redeploy:
+files (`CustomerEncryptionKeyIsIncorrect` or a 403 about encryption keys). Wait
+a minute and re-run. If it keeps failing, delete the deployed files and redeploy:
 `databricks workspace delete /Workspace/Users/<you>/.bundle/lakewatch-getting-started/dev/files --recursive && databricks bundle deploy`.
 
 | Code | Meaning |

@@ -23,3 +23,12 @@ def test_unexpected_wraps_step():
 
 def test_codes_are_well_formed():
     assert all(c.startswith("LWGS-E") and len(c) == 9 for c in CODES)
+
+
+def test_render_wraps_long_lines():
+    """The job run's error message cuts lines at ~200 chars; nothing in the block may be longer."""
+    from rpw_lakewatch.errors import SetupError
+    e = SetupError("LWGS-E201", what_happened="word " * 120, likely_cause="cause " * 80,
+                   next_steps=["step " * 60], context={})
+    assert max(len(line) for line in e.render().splitlines()) <= 165
+    assert ("word " * 120).split() == " ".join(e.render().split("What happened:")[1].split("Likely")[0].split()).split()

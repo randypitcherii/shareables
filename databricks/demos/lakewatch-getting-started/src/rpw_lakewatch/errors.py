@@ -9,6 +9,7 @@ the assistant needs.
 from __future__ import annotations
 
 import json
+import textwrap
 from dataclasses import dataclass, field
 
 BUNDLE = "lakewatch-getting-started"
@@ -52,7 +53,13 @@ class SetupError(Exception):
         return CODES[self.code]
 
     def render(self) -> str:
-        steps = "\n".join(f"  {i}. {s}" for i, s in enumerate(self.next_steps, 1))
+        # Wrap: some surfaces (the job run's error message) cut lines at ~200 characters.
+        def wrap(text: str, width: int, first: str, rest: str) -> str:
+            return textwrap.fill(text, width=width, initial_indent=first, subsequent_indent=rest,
+                                 break_long_words=False, break_on_hyphens=False)
+        steps = "\n".join(wrap(s, 160, f"  {i}. ", "     ") for i, s in enumerate(self.next_steps, 1))
+        what = wrap(self.what_happened, 100, "  ", "  ")
+        cause = wrap(self.likely_cause, 100, "  ", "  ")
         ctx = json.dumps(self.context, indent=2, default=str, sort_keys=True)
         return f"""
 {BEGIN}
@@ -61,10 +68,10 @@ I'm setting up Databricks Lakewatch (Beta) in my workspace with the open-source
 error {self.code}: {self.title}.
 
 What happened:
-  {self.what_happened}
+{what}
 
 Likely cause:
-  {self.likely_cause}
+{cause}
 
 Suggested next steps from the bundle:
 {steps}
