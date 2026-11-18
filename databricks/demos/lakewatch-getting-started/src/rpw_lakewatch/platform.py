@@ -6,6 +6,7 @@ call is idempotent: read first, create only what is missing.
 """
 from __future__ import annotations
 
+import json
 import time
 
 from databricks.sdk import WorkspaceClient
@@ -132,34 +133,57 @@ class Platform:
             return False if _absent(e) else None
         return bool(r and r.get("kind") == "WorkspaceConfig")
 
-    def ensure_catalog(self, catalog: str, ctx: dict) -> bool:
-        """Create the catalog on the metastore's default storage. Returns True if created."""
+    def external_locations(self, limit: int = 5) -> list[dict]:
+        """External locations the run-as identity can see (name + url), for E201 guidance. Best effort."""
+        try:
+            return [{"name": x.name, "url": x.url} for _, x in zip(range(limit), self.w.external_locations.list())]
+        except Exception:  # noqa: BLE001
+            return []
+
+    def ensure_catalog(self, catalog: str, ctx: dict, storage_root: str | None = None) -> bool:
+        """Create the catalog (on the metastore's default storage, or at storage_root). Returns True if created."""
         try:
             self.w.catalogs.get(catalog)
             return False
         except NotFound:
             pass
         try:
-            self.w.catalogs.create(name=catalog, comment="Lakewatch environment (lakewatch-getting-started bundle)")
+            self.w.catalogs.create(name=catalog, storage_root=storage_root,
+                                   comment="Lakewatch environment (lakewatch-getting-started bundle)")
             return True
         except ResourceAlreadyExists:
             return False
         except Exception as e:  # noqa: BLE001
             msg = str(e)
-            if any(k in msg.lower() for k in ("storage root", "managed location", "default storage", "storage location")):
+            if not storage_root and any(k in msg.lower() for k in ("storage root", "managed location", "default storage", "storage location")):
+                locs = self.external_locations()
+                example = (locs[0]["url"].rstrip("/") + f"/{catalog}") if locs else _storage_example(ctx.get("cloud"))
+                ctx = {**ctx, "external_locations": locs or "none visible to the run-as identity"}
                 raise SetupError(
                     "LWGS-E201",
-                    what_happened=f"CREATE CATALOG {catalog} failed: {msg[:300]}",
-                    likely_cause="The metastore has no storage root, so the API cannot create a catalog without an "
-                                 "explicit location. (If your account has Default Storage, only the UI can create a "
-                                 "catalog on it.) Lakewatch has not been turned on yet; nothing was changed.",
-                    next_steps=[f"Easiest: in Catalog Explorer click + > Create a catalog, name it '{catalog}', "
-                                "choose Default Storage (if offered), and create it.",
-                                f"Or with a location you own: databricks catalogs create {catalog} --storage-root "
-                                f"'{_storage_example(ctx.get('cloud'))}' (needs an external location with "
-                                "CREATE MANAGED STORAGE).",
-                                "Or ask a metastore admin to set a metastore storage root.",
-                                "Then re-run the job; it reuses an existing catalog with this name."],
+                    what_happened=f"CREATE CATALOG {catalog} failed: {msg[:400]}",
+                    likely_cause="The metastore has no storage root, so a new catalog needs an explicit storage "
+                                 "location. Lakewatch has not been turned on yet; nothing was changed.",
+                    next_steps=[("Pick a storage location under one of the external locations listed in the facts "
+                                 "below (or run: databricks external-locations list), then redeploy with it and "
+                                 "re-run: " if locs else
+                                 "Find a storage location you can use (databricks external-locations list; a metastore "
+                                 "admin can create one), then redeploy with it and re-run: ")
+                                + f"databricks bundle deploy --var catalog_storage_root='{example}' && "
+                                "databricks bundle run rpw_lakewatch_getting_started",
+                                f"Or create the catalog '{catalog}' yourself (Catalog Explorer > + > Create a "
+                                "catalog; pick Default Storage if it is offered) and re-run the job; it reuses it.",
+                                "Or ask a metastore admin to set a metastore storage root."],
+                    context=ctx) from e
+            if storage_root:
+                raise SetupError(
+                    "LWGS-E202",
+                    what_happened=f"CREATE CATALOG {catalog} at {storage_root} failed: {msg[:400]}",
+                    likely_cause="The storage location is not under an external location the run-as identity can "
+                                 "use (it needs CREATE MANAGED STORAGE on it), or the URL is mistyped.",
+                    next_steps=["Run databricks external-locations list and pick a URL under one of them.",
+                                "Grant: GRANT CREATE MANAGED STORAGE ON EXTERNAL LOCATION `LOCATION_NAME` TO "
+                                "`RUN_AS_IDENTITY`, then redeploy with --var catalog_storage_root=... and re-run."],
                     context=ctx) from e
             raise SetupError(
                 "LWGS-E202",
@@ -199,8 +223,11 @@ class Platform:
                     return
                 if "parent of environment does not exist" not in msg or time.time() > deadline:
                     break
-                if self._init_metastore(None, warehouse_id) != "SUCCEEDED":
-                    self._init_metastore(catalog, warehouse_id)
+                state = self._init_metastore(None, warehouse_id)
+                if state != "SUCCEEDED":
+                    state = self._init_metastore(catalog, warehouse_id)
+                print(json.dumps({"step": "environment", "retry": "environment parent not ready; initialized "
+                                  "the metastore for Lakewatch", "init_state": state, "next_try_s": delay}), flush=True)
                 time.sleep(delay)
                 delay = min(delay * 2, 60)
         not_ready = "parent of environment does not exist" in str(err).lower()

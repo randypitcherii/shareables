@@ -9,6 +9,7 @@ the assistant needs.
 from __future__ import annotations
 
 import json
+import re
 import textwrap
 from dataclasses import dataclass, field
 
@@ -58,7 +59,9 @@ class SetupError(Exception):
             return textwrap.fill(text, width=width, initial_indent=first, subsequent_indent=rest,
                                  break_long_words=False, break_on_hyphens=False)
         steps = "\n".join(wrap(s, 160, f"  {i}. ", "     ") for i, s in enumerate(self.next_steps, 1))
-        what = wrap(self.what_happened, 100, "  ", "  ")
+        # Platform messages contain <placeholders>, which some surfaces strip as markup.
+        what = wrap(re.sub(r"<([^<>]{1,40})>", lambda m: re.sub(r"\W+", "_", m.group(1)).upper(), self.what_happened),
+                    100, "  ", "  ")
         cause = wrap(self.likely_cause, 100, "  ", "  ")
         ctx = json.dumps(self.context, indent=2, default=str, sort_keys=True)
         return f"""

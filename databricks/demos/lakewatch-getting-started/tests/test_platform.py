@@ -63,7 +63,7 @@ class Catalogs:
         if not self.exists:
             raise NotFound("no")
 
-    def create(self, name, comment=None):
+    def create(self, name, comment=None, storage_root=None):
         if self.create_error:
             raise self.create_error
         self.created.append(name)
@@ -83,7 +83,7 @@ def test_no_default_storage_maps_to_e201():
     c = Catalogs(create_error=Exception("Metastore storage root URL does not exist. Please provide a storage location"))
     with pytest.raises(SetupError) as e:
         platform(catalogs=c).ensure_catalog("x", {})
-    assert e.value.code == "LWGS-E201" and "--storage-root" in e.value.render() and "Default Storage" in e.value.render()
+    assert e.value.code == "LWGS-E201" and "--var catalog_storage_root=" in e.value.render() and "Default Storage" in e.value.render()
 
 
 def test_permission_maps_to_e202():
@@ -145,3 +145,18 @@ def test_register_environment_not_ready_explains(monkeypatch):
     with pytest.raises(SetupError) as ei:
         p.register_environment("c", "wh", {}, timeout_s=0)
     assert ei.value.code == "LWGS-E203" and "not initialized" in ei.value.likely_cause
+
+
+def test_e201_suggests_a_visible_external_location():
+    c = Catalogs(create_error=Exception("Metastore storage root URL does not exist. Please provide a storage location"))
+    p = platform(catalogs=c)
+    p.w.external_locations = SimpleNamespace(list=lambda: iter([SimpleNamespace(name="ws_loc", url="abfss://c@a.dfs.core.windows.net/x/")]))
+    with pytest.raises(SetupError) as e:
+        p.ensure_catalog("rpw_lakewatch", {"cloud": "azure"})
+    assert "--var catalog_storage_root='abfss://c@a.dfs.core.windows.net/x/rpw_lakewatch'" in e.value.render()
+
+
+def test_platform_placeholders_survive_rendering():
+    e = SetupError("LWGS-E201", what_happened="use MANAGED LOCATION '<location-path>'", likely_cause="x",
+                   next_steps=["y"], context={})
+    assert "'LOCATION_PATH'" in e.render()

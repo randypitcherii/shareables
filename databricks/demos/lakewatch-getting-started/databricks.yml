@@ -33,6 +33,11 @@ variables:
       Set up the Beta even if an earlier Lakewatch preview configuration exists ("true"/"false").
       Preview resources are never modified either way.
     default: "false"
+  catalog_storage_root:
+    description: >
+      Only used if the job has to create the catalog and your metastore has no storage root: a cloud storage URL
+      under an external location you can use (e.g. from `databricks external-locations list`). Empty = metastore default.
+    default: ""
   dry_run:
     description: Only inspect and print the plan; change nothing ("true"/"false").
     default: "false"

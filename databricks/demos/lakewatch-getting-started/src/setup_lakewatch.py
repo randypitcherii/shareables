@@ -116,7 +116,7 @@ def run(a) -> dict:
         created = {}
         if plan.action is Action.CREATE_ENVIRONMENT:
             # Catalog first: if it can't be created (E201/E202), nothing has been turned on yet.
-            created["catalog"] = p.ensure_catalog(a.catalog, ctx)
+            created["catalog"] = p.ensure_catalog(a.catalog, ctx, a.catalog_storage_root or None)
             if plan.enable_beta:
                 p.enable_beta(ctx)
                 created["beta_preview"] = "turned on"
@@ -162,6 +162,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--catalog", required=True)
     ap.add_argument("--schema", required=True)
+    ap.add_argument("--catalog-storage-root", default="")
     ap.add_argument("--warehouse-id", required=True)
     ap.add_argument("--rules-dir", required=True)
     ap.add_argument("--rules-enabled", default="false")

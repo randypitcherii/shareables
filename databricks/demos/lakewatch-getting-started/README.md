@@ -76,7 +76,7 @@ cover every workspace in the account that the run-as identity can see in
 - **Workspace admin.** The job runs as the deployer in `dev`.
 - **Unity Catalog** enabled for the workspace.
 - **Serverless compute** for jobs and SQL. It is on by default for accounts created after 2024-12-16.
-- **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore storage root. Without one, create the catalog yourself first (see `LWGS-E201`).
+- **If Lakewatch is not set up yet,** `CREATE CATALOG` on the metastore and a metastore storage root. Without one, set `catalog_storage_root` (see `LWGS-E201`).
 - **For the account-wide checks,** read access to `system.access`, `system.billing` and `system.compute`.
 - **A recent Databricks CLI** (tested with v1.26), authenticated to the workspace.
 
@@ -112,6 +112,7 @@ Variables are set at deploy time (`databricks bundle deploy --var name=value`), 
 | `schema` | `rpw_databricks_security_infra` | The Lakewatch folder for this bundle's tables and rules. |
 | `rules_enabled` | `false` | Schedule the rules when they are registered. |
 | `allow_with_prior_preview` | `false` | Set up the Beta next to an earlier preview setup. |
+| `catalog_storage_root` | empty | Only if the job creates the catalog and your metastore has no storage root: a storage URL under an external location you can use. |
 | `dry_run` | `false` | Print the plan and change nothing. Also a job parameter, so you can set it per run: `bundle run ... --params dry_run=true`. |
 | `error_beacon` | `true` | Report only the outcome code. See [Telemetry](#telemetry). |
 | `long_running_days` / `max_token_days` | `30` / `90` | Check thresholds (cluster uptime, token lifetime). |
@@ -141,7 +142,7 @@ a minute and re-run. If it keeps failing, delete the deployed files and redeploy
 | `LWGS-E102` | The Beta preview could not be turned on. It may not be offered for this cloud, region or tier. |
 | `LWGS-E103` | The Beta is on, but the Lakewatch service is not reachable yet. |
 | `LWGS-E104` | Lakewatch is set up on a different catalog. The block prints the redeploy command for each existing environment. |
-| `LWGS-E201` | The API can't create a catalog on your metastore without a location. Create the catalog in Catalog Explorer (choose Default Storage if offered) or with `--storage-root`, then re-run. Nothing has been turned on yet. |
+| `LWGS-E201` | Your metastore has no storage root, so a new catalog needs a location. The block lists the external locations it can see and the exact redeploy command (`--var catalog_storage_root=...`). Nothing has been turned on yet. |
 | `LWGS-E202` | The catalog could not be created. This is usually a missing `CREATE CATALOG` permission. |
 | `LWGS-E203` | The catalog couldn't be registered as the Lakewatch environment. On a new Lakewatch workspace, wait 10 minutes and re-run. |
 | `LWGS-E204` / `E205` | Initialization or folder creation failed. |

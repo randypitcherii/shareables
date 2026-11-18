@@ -32,6 +32,7 @@ resources:
             parameters:
               - --catalog=${var.catalog}
               - --schema=${var.schema}
+              - --catalog-storage-root=${var.catalog_storage_root}
               - --warehouse-id=${resources.sql_warehouses.rpw_lakewatch_wh.id}
               - --rules-dir=${workspace.file_path}/rules
               - --rules-enabled=${var.rules_enabled}
