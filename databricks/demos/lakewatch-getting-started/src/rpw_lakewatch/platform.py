@@ -25,6 +25,20 @@ def _storage_example(cloud: str | None) -> str:
             "gcp": "gs://YOUR_BUCKET/rpw_lakewatch"}.get(cloud or "", "s3://YOUR_BUCKET/rpw_lakewatch")
 
 
+def _e201_steps(catalog: str, example: str, have_locations: bool, default_storage: bool) -> list[str]:
+    ui = (f"Create the catalog '{catalog}' yourself in Catalog Explorer (+ > Create a catalog; pick Default Storage "
+          "if it is offered), then re-run the job; it reuses the catalog.")
+    loc = (("Pick a storage location under one of the external locations listed in the facts below (or run: "
+            "databricks external-locations list), then redeploy with it and re-run: " if have_locations else
+            "Find a storage location you can use (databricks external-locations list; a metastore admin can create "
+            "one), then redeploy with it and re-run: ")
+           + f"databricks bundle deploy --var catalog_storage_root='{example}' && "
+           "databricks bundle run rpw_lakewatch_getting_started")
+    steps = [ui, loc] if default_storage else [loc, ui]
+    return [("Easiest: " if default_storage else "") + steps[0], "Or: " + steps[1],
+            "Or ask a metastore admin to set a metastore storage root."]
+
+
 def _absent(e: Exception) -> bool:
     return isinstance(e, NotFound) or any(m in str(e).lower() for m in _ABSENT_MARKERS)
 
@@ -136,7 +150,8 @@ class Platform:
     def external_locations(self, limit: int = 5) -> list[dict]:
         """External locations the run-as identity can see (name + url), for E201 guidance. Best effort."""
         try:
-            return [{"name": x.name, "url": x.url} for _, x in zip(range(limit), self.w.external_locations.list())]
+            locs = (x for x in self.w.external_locations.list() if not (x.name or "").startswith("__databricks"))
+            return [{"name": x.name, "url": x.url} for _, x in zip(range(limit), locs)]
         except Exception:  # noqa: BLE001
             return []
 
@@ -164,16 +179,7 @@ class Platform:
                     what_happened=f"CREATE CATALOG {catalog} failed: {msg[:400]}",
                     likely_cause="The metastore has no storage root, so a new catalog needs an explicit storage "
                                  "location. Lakewatch has not been turned on yet; nothing was changed.",
-                    next_steps=[("Pick a storage location under one of the external locations listed in the facts "
-                                 "below (or run: databricks external-locations list), then redeploy with it and "
-                                 "re-run: " if locs else
-                                 "Find a storage location you can use (databricks external-locations list; a metastore "
-                                 "admin can create one), then redeploy with it and re-run: ")
-                                + f"databricks bundle deploy --var catalog_storage_root='{example}' && "
-                                "databricks bundle run rpw_lakewatch_getting_started",
-                                f"Or create the catalog '{catalog}' yourself (Catalog Explorer > + > Create a "
-                                "catalog; pick Default Storage if it is offered) and re-run the job; it reuses it.",
-                                "Or ask a metastore admin to set a metastore storage root."],
+                    next_steps=_e201_steps(catalog, example, bool(locs), "default storage is enabled" in msg.lower()),
                     context=ctx) from e
             if storage_root:
                 raise SetupError(
@@ -183,7 +189,10 @@ class Platform:
                                  "use (it needs CREATE MANAGED STORAGE on it), or the URL is mistyped.",
                     next_steps=["Run databricks external-locations list and pick a URL under one of them.",
                                 "Grant: GRANT CREATE MANAGED STORAGE ON EXTERNAL LOCATION `LOCATION_NAME` TO "
-                                "`RUN_AS_IDENTITY`, then redeploy with --var catalog_storage_root=... and re-run."],
+                                "`RUN_AS_IDENTITY`, then redeploy with --var catalog_storage_root=... and re-run.",
+                                f"Or create the catalog '{catalog}' in Catalog Explorer (+ > Create a catalog; pick "
+                                "Default Storage if offered), then redeploy with --var catalog_storage_root='' and "
+                                "re-run; the job reuses the catalog."],
                     context=ctx) from e
             raise SetupError(
                 "LWGS-E202",

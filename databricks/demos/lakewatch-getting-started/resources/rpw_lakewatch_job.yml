@@ -27,6 +27,8 @@ resources:
           environment_key: default
           # No retries: known failures are deterministic stops with a fix-it message; retrying only repeats them.
           max_retries: 0
+          # Serverless otherwise retries failed tasks on its own, which repeats the stop and doubles its output.
+          disable_auto_optimization: true
           spark_python_task:
             python_file: ../src/setup_lakewatch.py
             parameters:

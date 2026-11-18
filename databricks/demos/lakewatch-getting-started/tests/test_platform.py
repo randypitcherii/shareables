@@ -160,3 +160,16 @@ def test_platform_placeholders_survive_rendering():
     e = SetupError("LWGS-E201", what_happened="use MANAGED LOCATION '<location-path>'", likely_cause="x",
                    next_steps=["y"], context={})
     assert "'LOCATION_PATH'" in e.render()
+
+
+def test_e201_skips_internal_locations_and_prefers_ui_with_default_storage():
+    c = Catalogs(create_error=Exception("Metastore storage root URL does not exist. Default Storage is enabled in your account."))
+    p = platform(catalogs=c)
+    p.w.external_locations = SimpleNamespace(list=lambda: iter([
+        SimpleNamespace(name="__databricks_managed_storage_location", url="gs://internal/x"),
+        SimpleNamespace(name="mine", url="gs://mine/y")]))
+    with pytest.raises(SetupError) as e:
+        p.ensure_catalog("rpw_lakewatch", {"cloud": "gcp"})
+    text = e.value.render()
+    assert "internal" not in text and "gs://mine/y/rpw_lakewatch" in text
+    assert e.value.next_steps[0].startswith("Easiest: Create the catalog")
