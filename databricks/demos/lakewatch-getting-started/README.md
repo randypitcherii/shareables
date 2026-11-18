@@ -129,10 +129,17 @@ the failed run's page in the Databricks UI shows it too. Fix the issue, then
 re-run the job.
 
 **Brand-new workspace, `Input/output error` reading `/Workspace/...`:** in a
-workspace's first minutes, serverless compute can briefly fail to read deployed
-files (`CustomerEncryptionKeyIsIncorrect` or a 403 about encryption keys). Wait
-a minute and re-run. If it keeps failing, delete the deployed files and redeploy:
-`databricks workspace delete /Workspace/Users/<you>/.bundle/lakewatch-getting-started/dev/files --recursive && databricks bundle deploy`.
+workspace's first minutes, serverless compute can fail to read deployed files
+(`CustomerEncryptionKeyIsIncorrect`, or a 403 about encryption keys). This has
+lasted 15 minutes or more on new workspaces. Wait, then re-run. If it still
+fails, re-upload the files. Deploy only uploads what changed locally, so clear
+the local sync record too:
+
+```bash
+databricks workspace delete /Workspace/Users/YOUR_USER/.bundle/lakewatch-getting-started/dev/files --recursive
+rm -rf .databricks/bundle/dev/sync-snapshots
+databricks bundle deploy
+```
 
 | Code | Meaning |
 | --- | --- |
